@@ -1,0 +1,42 @@
+{
+  "name": "cloudflare-starlight-cms",
+  "description": "A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "astro build && esbuild src/admin/client.ts --bundle --format=esm --outfile=dist/admin/app.js",
+    "build:empty": "CMS_INITIAL_EMPTY=1 npm run build",
+    "dev": "npm run build:empty && wrangler dev --local",
+    "dev:docs": "astro dev",
+    "check": "CMS_INITIAL_EMPTY=1 astro check && tsc --noEmit",
+    "test": "vitest run",
+    "migrate:local": "wrangler d1 migrations apply starlight-cms-local --local",
+    "typegen": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings",
+    "dry-run": "wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "@astrojs/check": "0.9.10",
+    "@astrojs/starlight": "0.42.0",
+    "@tiptap/core": "3.31.3",
+    "@tiptap/extension-image": "3.31.3",
+    "@tiptap/extension-table": "3.31.3",
+    "@tiptap/extension-table-cell": "3.31.3",
+    "@tiptap/extension-table-header": "3.31.3",
+    "@tiptap/extension-table-row": "3.31.3",
+    "@tiptap/starter-kit": "3.31.3",
+    "astro": "7.3.2",
+    "drizzle-orm": "0.45.2",
+    "hono": "4.11.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.0",
+    "wrangler": "4.130.0"
+  }
+}

@@ -1,0 +1,76 @@
+# cloudflare-starlight-cms
+
+A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.
+
+Cloudflare / Astroの公式プロジェクトではありません。独自コードはMIT Licenseです。
+
+## 現在の実装
+
+単一Worker構成です。公開DocsはAstro StarlightとPagefindをStatic Assetsへ出力し、
+`/admin` と `/admin/api/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
+利用者が管理者です。
+
+- Tiptap JSONを正本にしたDocs CRUD
+- Draft revisionとPublished revisionの分離、revision履歴とRestore
+- D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
+- Cloudflare Access Applicationによる`/admin/*`とbuild exportのedge保護
+- build専用のexport endpoint、D1のPublished snapshot → Starlight SSG + Pagefind
+- Workers Static Assetsの`run_worker_first`で`/admin/*`だけを動的に処理
+
+PublishからDeploy Hookを送る配送記録・再試行と、実Cloudflare Access / Workers Builds
+の接続はP3/P4です。deployは実施していません。
+
+## ローカル開発
+
+Node.js 22.22.2以上を推奨します。以下はCloudflareアカウントなしでD1/R2を
+Miniflareに作成して検証します。
+
+```sh
+npm ci
+npm run migrate:local
+npm run dev
+```
+
+開発Workerはlocalhostだけで動くため、Accessや代替tokenは使いません。起動後は
+`http://localhost:8787/admin` をそのまま開けます。productionではCloudflare Access
+Applicationが`/admin/*`への到達をedgeで制限します。
+
+`npm run dev` は、明示的な空のStarlightサイトを生成してからWorkerを起動します。
+これはCMSデータのfallbackではありません。Worker起動後にDocumentをPublishしたら、
+別のterminalで次を実行してPublished snapshotから静的Docsを更新します。
+
+```sh
+CMS_EXPORT_URL=http://127.0.0.1:8787/admin/export/snapshot \
+npm run build
+```
+
+`npm run build:empty` は初回deploy用の空サイトだけを作る明示的なコマンドです。
+テストデータは必要なテストだけが`tests/fixtures/`から読むようにします。実行時fixtureや
+デモ用content fallbackは持ちません。
+
+```sh
+npm run check
+npm test
+npm run dry-run
+```
+
+`dry-run`はWorker bundleとStatic Assets設定を検査しますがdeployしません。
+
+## Production setup
+
+1. D1/R2を作成し、`wrangler.jsonc`へ実ID・bucket名を設定する。
+2. Cloudflare Accessで、同じhuman policyを持つ`/admin`と`/admin/*`の2つのApplicationを作成する。
+   wildcard pathは親pathを含まないため、両方が必要である。
+3. より具体的な`/admin/export/*` Applicationを作成し、Workers Builds用Service Tokenだけを許可する。
+   Access policyがURL単位で保護するため、WorkerへAccess secretやJWT verifierは設定しない。
+4. `MEDIA_PUBLIC_URL`をR2 public/custom domain（例: `https://media.example.com`）としてWorker secret/varsへ設定する。
+   未設定時のMediaはAdmin専用URLとなり、Published snapshotのbuildは意図的に失敗する。
+5. migrationをremote D1へ適用し、空のStatic Docsを初回deployする。
+6. Workers Buildsにこのrepoを接続し、`CMS_EXPORT_URL`、`CF_ACCESS_CLIENT_ID`、
+   `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。後者2つはexport用Access
+   Applicationだけを通過できるService Tokenの値にする。
+7. P3のDeploy Hook配送記録が実装された後、Hook URLをsecretとして設定する。
+
+実アカウントで検証するまで、上記は手順の設計であり完成したdeployガイドではありません。
+詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、
+[Roadmap](docs/ROADMAP.md)を参照してください。

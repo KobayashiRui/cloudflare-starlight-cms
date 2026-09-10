@@ -39,6 +39,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-count { display: grid; min-width: 22px; height: 22px; place-items: center; color: #6941c6; background: #f4f3ff; border-radius: 999px; font-size: .72rem; }
 .cms-new-document { width: 100%; padding: .62rem .72rem; color: #fff; background: #5b45d6; border: 1px solid #5b45d6; border-radius: 7px; box-shadow: 0 1px 2px rgba(16, 24, 40, .08); font-size: .82rem; font-weight: 700; text-align: left; }
 .cms-new-document::before { margin-right: .45rem; content: "+"; font-size: 1rem; }
+.cms-navigation-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem; }
+.cms-new-folder { padding: .62rem .72rem; color: #475467; background: #fff; border: 1px solid #d0d5dd; border-radius: 7px; font-size: .78rem; font-weight: 700; }
+.cms-new-folder:hover { background: #f9fafb; }
 .cms-search input { width: 100%; padding: .56rem .65rem; color: #344054; background: #f9fafb; border: 1px solid #eaecf0; border-radius: 7px; font-size: .78rem; outline: 0; }
 .cms-search input:focus { background: #fff; border-color: #9e77ed; box-shadow: 0 0 0 3px #f4ebff; }
 .cms-document-list { display: grid; gap: .95rem; overflow: auto; padding: .15rem .15rem 1.5rem; }
@@ -51,10 +54,23 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-document-item span { color: #98a2b3; font-size: .68rem; }
 .cms-document-item.is-active span { color: #7f56d9; }
 .cms-empty-search { margin: 0; padding: .35rem; color: #98a2b3; font-size: .78rem; }
-.cms-tree { display: grid; gap: .12rem; overflow: auto; padding: .15rem 0 1.5rem; }
-.cms-tree-item { display: flex; align-items: center; gap: .38rem; width: 100%; min-height: 30px; color: #475467; background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: .8rem; text-align: left; }
-.cms-tree-item:hover { background: #f9fafb; }
-.cms-tree-item.is-active { color: #42307d; background: #f4f3ff; border-color: #d9d6fe; }
+/* The tree classes below are adapted verbatim from Headless Tree's Comprehensive
+   DnD story (MIT); only the parent selector reserves the Admin sidebar space. */
+.navigation-tree-scroll { flex: 1 1 0; min-height: 12rem; overflow: auto; padding: 8px; }
+.cms-sidebar .tree { position: relative; display: block; min-height: 100%; max-width: none; }
+.cms-sidebar .tree button[role="treeitem"] { display: flex; width: 100%; padding: 0 0 2px; background: transparent; border: none; }
+.cms-sidebar .tree .treeitem { position: relative; width: 100%; padding: 6px 10px; color: #475467; background-color: white; border-radius: 8px; font-size: .8rem; text-align: left; transition: background-color .2s ease; cursor: pointer; }
+.cms-sidebar .tree .treeitem:hover { background-color: #f0f2f5; }
+.cms-sidebar .tree button[role="treeitem"]:focus { outline: none; }
+.cms-sidebar .tree .treeitem.selected { background-color: #eee; }
+.cms-sidebar .tree button:focus-visible .treeitem.focused { outline: 2px solid black; }
+.cms-sidebar .tree .treeitem.drop { background-color: #e1f1f8; }
+.cms-sidebar .tree .treeitem.folder::before { display: inline-block; z-index: 1; width: 10px; margin-right: 4px; content: "›"; color: #475467; font-size: .95rem; transition: transform .1s ease-in-out; }
+.cms-sidebar .tree .treeitem.folder.expanded::before { transform: rotate(90deg); }
+.cms-sidebar .tree .treeitem:not(.folder) { padding-left: 24px; }
+.cms-sidebar .tree .treeitem.selected::after { position: absolute; top: 5px; left: -2px; width: 4px; height: 16px; content: " "; background-color: #0366d6; border-radius: 99px; }
+.cms-sidebar .tree .dragline { height: 2px; margin-top: -1px; background-color: #0366d6; }
+.cms-sidebar .tree .dragline::before { box-sizing: content-box; position: absolute; top: -3px; left: 0; width: 4px; height: 4px; content: ""; background: #fff; border: 2px solid #0366d6; border-radius: 99px; }
 
 .cms-main { min-width: 0; padding: 1.35rem clamp(1rem, 3vw, 3.5rem) 3rem; }
 .cms-breadcrumb { display: flex; gap: .4rem; margin: 0 0 1rem; color: #667085; font-size: .76rem; }
@@ -104,6 +120,20 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-empty-state .cms-empty-icon { width: 42px; height: 42px; font-size: 1.1rem; }
 .cms-empty-state h1 { margin: .35rem 0 0; color: #101828; font-size: 1.35rem; }
 .cms-empty-state p { margin: 0; font-size: .9rem; }
+.cms-empty-actions, .cms-folder-panel-actions { display: flex; flex-wrap: wrap; gap: .55rem; }
+.cms-folder-panel { display: grid; gap: 1.35rem; width: min(100%, 54rem); margin: 1.25rem auto; }
+.cms-folder-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.cms-folder-panel header p { margin: 0 0 .35rem; color: #667085; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.cms-folder-panel h1 { margin: 0; color: #101828; font-size: 1.75rem; letter-spacing: -.03em; }
+.cms-folder-panel header span { display: block; margin-top: .45rem; color: #667085; font-size: .86rem; }
+.cms-folder-fields { display: grid; gap: .85rem; }
+.cms-folder-fields input, .cms-folder-dialog input { width: 100%; padding: .72rem .82rem; color: #101828; background: #fff; border: 1px solid #d0d5dd; border-radius: 8px; outline: 0; }
+.cms-folder-fields input:focus, .cms-folder-dialog input:focus { border-color: #9e77ed; box-shadow: 0 0 0 3px #f4ebff; }
+.cms-folder-panel > footer, .cms-folder-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding-top: 1rem; border-top: 1px solid #e4e7ec; }
+.cms-folder-dialog { display: grid; gap: 1rem; width: min(440px, 100%); padding: 1.25rem; color: #182230; background: #fff; border-radius: 12px; box-shadow: 0 24px 48px rgba(16, 24, 40, .22); }
+.cms-folder-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.cms-folder-dialog h1 { margin: 0; color: #101828; font-size: 1rem; }
+.cms-folder-dialog p { margin: .3rem 0 0; color: #667085; font-size: .78rem; }
 
 .cms-media-backdrop { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgba(16, 24, 40, .46); }
 .cms-media-dialog { width: min(760px, 100%); max-height: min(700px, 90vh); overflow: auto; padding: 1.25rem; background: #fff; border-radius: 12px; box-shadow: 0 24px 48px rgba(16, 24, 40, .22); }
@@ -132,15 +162,20 @@ html.dark .cms-sidebar { background: #191c22; border-color: #30343d; }
 html.dark .cms-sidebar-heading, html.dark .cms-document-item, html.dark .cms-document-item strong { color: #d0d5dd; }
 html.dark .cms-count { color: #d9d6fe; background: #302859; }
 html.dark .cms-new-document { background: #7657dd; border-color: #7657dd; }
+html.dark .cms-new-folder { color: #d0d5dd; background: #1d2027; border-color: #3a404b; }
+html.dark .cms-new-folder:hover { background: #282d36; }
 html.dark .cms-search input { color: #e4e7ec; background: #22262e; border-color: #3a404b; }
 html.dark .cms-search input:focus { background: #22262e; border-color: #a48afb; box-shadow: 0 0 0 3px #352c5c; }
 html.dark .cms-document-group h2, html.dark .cms-document-item span, html.dark .cms-breadcrumb, html.dark .cms-notice, html.dark .cms-empty-state { color: #98a2b3; }
 html.dark .cms-document-item:hover { background: #242831; }
 html.dark .cms-document-item.is-active { color: #e0d7ff; background: #2b2544; border-color: #514780; }
 html.dark .cms-document-item.is-active span { color: #c3b5fd; }
-html.dark .cms-tree-item { color: #d0d5dd; }
-html.dark .cms-tree-item:hover { background: #242831; }
-html.dark .cms-tree-item.is-active { color: #e0d7ff; background: #2b2544; border-color: #514780; }
+html.dark .cms-sidebar .tree .treeitem { color: #d0d5dd; background: #191c22; }
+html.dark .cms-sidebar .tree .treeitem:hover { background: #242831; }
+html.dark .cms-sidebar .tree .treeitem.selected { color: #e0d7ff; background: #2b2544; }
+html.dark .cms-sidebar .tree .treeitem.drop { color: #e0d7ff; background: #243545; }
+html.dark .cms-sidebar .tree .treeitem.folder::before { color: #98a2b3; }
+html.dark .cms-sidebar .tree button:focus-visible .treeitem.focused { outline-color: #a48afb; }
 html.dark .cms-breadcrumb span:last-child { color: #d0d5dd; }
 html.dark .cms-meta-field > span, html.dark .cms-editor-field-header > span { color: #98a2b3; }
 html.dark .cms-title-input, html.dark .cms-description-input { color: #e4e7ec; background: #191c22; border-color: #3a404b; box-shadow: none; }
@@ -170,6 +205,11 @@ html.dark .cms-media-dialog p, html.dark .cms-media-card { color: #98a2b3; }
 html.dark .cms-media-card { background: #1d2027; border-color: #3a404b; }
 html.dark .cms-media-card:hover { border-color: #a48afb; box-shadow: 0 2px 7px rgba(164, 138, 251, .2); }
 html.dark .cms-media-preview { background: #282d36; }
+html.dark .cms-folder-panel h1, html.dark .cms-folder-dialog h1 { color: #f9fafb; }
+html.dark .cms-folder-panel header span, html.dark .cms-folder-panel header p, html.dark .cms-folder-dialog p { color: #98a2b3; }
+html.dark .cms-folder-fields input, html.dark .cms-folder-dialog input { color: #e4e7ec; background: #191c22; border-color: #3a404b; }
+html.dark .cms-folder-panel > footer, html.dark .cms-folder-dialog footer { border-color: #30343d; }
+html.dark .cms-folder-dialog { color: #eaecf0; background: #191c22; box-shadow: 0 24px 48px rgba(0, 0, 0, .45); }
 
 @media (max-width: 720px) {
   .cms-topbar { min-height: 58px; padding: 0 .85rem; }

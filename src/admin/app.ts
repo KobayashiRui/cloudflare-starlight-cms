@@ -6,7 +6,7 @@ import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale } from '../locales.ts';
 import { renderDocumentContent } from '../starlight/render.ts';
 import { adminHtml } from './html.ts';
-import { createFolder, deleteFolder, FolderNotFoundError, listTree, moveTreeItem, NavigationConflictError, updateFolder } from '../navigation/service.ts';
+import { createFolder, deleteFolder, FolderNotFoundError, listTree, NavigationConflictError, replaceTreeChildren, updateFolder } from '../navigation/service.ts';
 
 type AdminEnv = { Bindings: RuntimeEnv };
 const app = new Hono<AdminEnv>();
@@ -75,7 +75,7 @@ app.get('/admin/api/tree', async (c) => c.json(await listTree(c.env), 200, jsonH
 app.post('/admin/api/folders', async (c) => c.json(await createFolder(c.env, await c.req.json()), 201, jsonHeaders));
 app.put('/admin/api/folders/:id', async (c) => c.json(await updateFolder(c.env, c.req.param('id'), await c.req.json()), 200, jsonHeaders));
 app.delete('/admin/api/folders/:id', async (c) => { await deleteFolder(c.env, c.req.param('id')); return new Response(null, { status: 204, headers: noStore }); });
-app.post('/admin/api/tree/move', async (c) => c.json(await moveTreeItem(c.env, await c.req.json()), 200, jsonHeaders));
+app.put('/admin/api/tree/children', async (c) => c.json(await replaceTreeChildren(c.env, await c.req.json()), 200, jsonHeaders));
 app.get('/admin/api/documents', async (c) => c.json(await listDocuments(c.env), 200, jsonHeaders));
 app.post('/admin/api/documents', async (c) => c.json(await createDocument(c.env, await c.req.json()), 201, jsonHeaders));
 app.get('/admin/api/documents/:id', async (c) => c.json(await getDocument(c.env, c.req.param('id')), 200, jsonHeaders));

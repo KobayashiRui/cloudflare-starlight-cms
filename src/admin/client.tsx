@@ -22,6 +22,7 @@ type DocumentRecord = {
 };
 type Media = { id: string; fileName: string; contentType: string; url: string };
 type Revision = { id: string; revision: number; createdAt: number };
+type Folder = { id: string; name: string; slug: string; parentId: string | null; order: number };
 type DocumentFields = Pick<DocumentRecord, 'title' | 'slug' | 'description' | 'folderId' | 'order'>;
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -86,7 +87,11 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (response.status === 204) return undefined as T;
-  const payload = await response.json() as T & { error?: string };
+  const text = await response.text();
+  if (!text || !response.headers.get('content-type')?.includes('application/json')) {
+    throw new Error(`API ${path} returned an invalid response (${response.status}). Restart the local dev server and reload.`);
+  }
+  const payload = JSON.parse(text) as T & { error?: string };
   if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
   return payload;
 }
@@ -105,6 +110,11 @@ function App() {
   const [treeItems, setTreeItems] = useState<NavigationItem[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
   const [current, setCurrent] = useState<DocumentRecord | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [folderName, setFolderName] = useState('');
+  const [folderSlug, setFolderSlug] = useState('');
+  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
+  const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [notice, setNotice] = useState('Loading documents…');
@@ -131,6 +141,8 @@ function App() {
     setMedia(await api<Media[]>('/media'));
   }, []);
   const refreshTree = useCallback(async () => { setTreeItems(await api<NavigationItem[]>('/tree')); }, []);
+
+  const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
 
   useEffect(() => {
     Promise.all([refreshDocuments(), refreshMedia(), refreshTree()])
@@ -161,6 +173,7 @@ function App() {
     try {
       const loaded = document.id ? await api<DocumentRecord>(`/documents/${encodeURIComponent(document.id)}`) : document;
       setCurrent(loaded);
+      setSelectedFolderId(null);
       setFields(documentFields(loaded));
       setRevisions([]);
       setIsRevisionOpen(false);
@@ -171,6 +184,71 @@ function App() {
       showNotice(String(error), true);
     }
   }, [editor, isDirty, showNotice]);
+
+  const selectFolder = useCallback((folderId: string) => {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    const folder = treeItems.find((item) => item.id === `folder:${folderId}`);
+    if (!folder) return;
+    setCurrent(null);
+    setSelectedFolderId(folderId);
+    setFolderName(folder.name);
+    setFolderSlug(folder.slug);
+    setIsDirty(false);
+    showNotice(`Folder selected: ${folder.name}`);
+  }, [isDirty, showNotice, treeItems]);
+
+  const nextOrder = useCallback((parentId: string | null) => Math.max(-1, ...treeItems.filter((item) => item.parentId === (parentId ? `folder:${parentId}` : null)).map((item) => item.order)) + 1, [treeItems]);
+  const startNewDocument = useCallback((folderId = selectedFolderId) => {
+    void selectDocument({ ...emptyDocument, folderId, order: nextOrder(folderId) });
+  }, [nextOrder, selectDocument, selectedFolderId]);
+  const openNewFolder = useCallback((parentId = selectedFolderId) => {
+    setSelectedFolderId(parentId);
+    setFolderDraft({ name: '', slug: '' });
+    setIsFolderDialogOpen(true);
+  }, [selectedFolderId]);
+  const createFolder = async () => {
+    const name = folderDraft.name.trim();
+    const slug = folderDraft.slug || slugify(name);
+    if (!name || !slug) return showNotice('Folder name is required.', true);
+    setIsSaving(true);
+    try {
+      const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: selectedFolderId, order: nextOrder(selectedFolderId) }) });
+      await refreshTree();
+      setIsFolderDialogOpen(false);
+      setCurrent(null);
+      setSelectedFolderId(created.id);
+      setFolderName(created.name);
+      setFolderSlug(created.slug);
+      showNotice('Folder created.');
+    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+  };
+  const saveFolder = async () => {
+    if (!selectedFolder) return;
+    const name = folderName.trim(); const slug = folderSlug || slugify(name);
+    if (!name || !slug) return showNotice('Folder name is required.', true);
+    setIsSaving(true);
+    try {
+      await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) });
+      await refreshTree(); showNotice('Folder saved.');
+    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+  };
+  const deleteFolder = async () => {
+    if (!selectedFolderId || !selectedFolder || !window.confirm(`Delete empty folder “${selectedFolder.name}”?`)) return;
+    setIsSaving(true);
+    try {
+      await api<void>(`/folders/${encodeURIComponent(selectedFolderId)}`, { method: 'DELETE' });
+      setSelectedFolderId(null); await refreshTree(); showNotice('Folder deleted.');
+    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+  };
+  const replaceTreeChildren = async (parentId: string | null, childIds: string[]) => {
+    try {
+      await api('/tree/children', { method: 'PUT', body: JSON.stringify({ parentId, childIds }) });
+    } catch (error) { showNotice(String(error), true); throw error; }
+  };
+  const treeChanged = async () => {
+    await Promise.all([refreshTree(), refreshDocuments()]);
+    showNotice('Navigation updated.');
+  };
 
   const updateField = (field: keyof DocumentFields, value: string | number | null) => {
     setFields((currentFields) => ({ ...currentFields, [field]: value }));
@@ -323,12 +401,12 @@ function App() {
       <aside className="cms-sidebar">
         <div className="cms-sidebar-heading"><span>Documents</span><span className="cms-count">{documents.length}</span></div>
         <label className="cms-search"><span className="sr-only">Search documents</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search documents" /></label>
-        <button className="cms-new-document" type="button" onClick={() => void selectDocument(emptyDocument)}>New document</button>
-        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedId={current?.id} onSelect={(id) => { const document = documents.find((item) => item.id === id); if (document) void selectDocument(document); }} />
+        <div className="cms-navigation-actions"><button className="cms-new-document" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-new-folder" type="button" onClick={() => openNewFolder()}>New folder</button></div>
+        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id} selectedFolderId={selectedFolderId} onSelectDocument={(id) => { const document = documents.find((item) => item.id === id); if (document) void selectDocument(document); }} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
       </aside>
 
       <main className="cms-main">
-        {!current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a draft or choose a document from the sidebar.</p><button className="cms-button cms-button-primary" type="button" onClick={() => void selectDocument(emptyDocument)}>New document</button></section> : <>
+        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings"><div className="cms-breadcrumb"><span>Navigation</span><span>/</span><span>{selectedFolder.slug}</span></div><header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
           <div className="cms-breadcrumb"><span>Navigation</span><span>/</span><span>{fields.slug || 'new-document'}</span></div>
           <section className="cms-editor-surface" aria-label="Document editor">
             <div className="cms-document-fields">
@@ -362,6 +440,7 @@ function App() {
         <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">No media uploaded yet.</p> : media.map((item) => <button key={item.id} type="button" className="cms-media-card" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? 'Image' : 'Video'}</span></button>)}</div>
       </section>
     </div>}
+    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: slugify(event.target.value) }))} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
   </div>;
 }
 

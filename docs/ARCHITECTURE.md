@@ -27,8 +27,10 @@ Navigationは復元しない。
 
 DocumentとFolderの`slug`は一階層のURL segmentであり、全translationで共有する。exportはTreeをたどり完全なpathを作り、
 そのpathをStarlight loaderのfilePathに渡す。Treeがそのまま公開URLとStarlight sidebarの階層となる。
-AdminのTree UIは`@headless-tree/core`と`@headless-tree/react`を使う。現時点では展開と選択を実装済みで、
-D&Dとキーボード操作はP2.5の残作業である。独自Tree engineは作らない。
+AdminのTree UIは`@headless-tree/core`と`@headless-tree/react`を使う。展開、Folder/Page選択、
+Folder作成・rename・削除、Page作成、pointer D&Dとkeyboard D&Dを実装済みである。D&Dは公式の
+`dragAndDropFeature`／`keyboardDragAndDropFeature`のtarget semanticsを使い、Workerが移動先の
+slug衝突、循環、同階層の順序再採番を検査する。独自Tree engineは作らない。
 Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs、
 Video→静的videoの不足だけを実装する。Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
 未知nodeの黙殺や本文のMDX/JS実行は禁止。

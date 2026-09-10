@@ -8,10 +8,10 @@ export class FolderNotFoundError extends Error {}
 export class NavigationConflictError extends Error {}
 export type TreeItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; documentId?: string };
 
-async function assertAvailable(env: RuntimeEnv, parentId: string | null, slugValue: string, ignoreFolder = '') {
+async function assertAvailable(env: RuntimeEnv, parentId: string | null, slugValue: string, ignoreFolder = '', ignoreDocument = '') {
   const [folderMatch, documentMatch] = await Promise.all([
     env.DB.prepare('SELECT id FROM folder WHERE parent_id IS ? AND slug=? AND id<>? LIMIT 1').bind(parentId, slugValue, ignoreFolder).first(),
-    env.DB.prepare('SELECT id FROM document WHERE folder_id IS ? AND slug=? LIMIT 1').bind(parentId, slugValue).first(),
+    env.DB.prepare('SELECT id FROM document WHERE folder_id IS ? AND slug=? AND id<>? LIMIT 1').bind(parentId, slugValue, ignoreDocument).first(),
   ]);
   if (folderMatch || documentMatch) throw new NavigationConflictError('A folder or page already uses this URL segment');
 }
@@ -75,19 +75,48 @@ export async function deleteFolder(env: RuntimeEnv, id: string) {
   if (!deleted) throw new FolderNotFoundError();
 }
 
-const moveInput = z.object({ kind: z.enum(['folder', 'document']), id: z.string().uuid(), parentId: z.string().uuid().nullable(), order: z.number().int().min(0).max(100000), version: z.number().int().positive().optional() });
-export async function moveTreeItem(env: RuntimeEnv, raw: unknown) {
-  const input = moveInput.parse(raw);
-  if (input.kind === 'folder') {
-    const existing = await env.DB.prepare('SELECT f.slug,t.name FROM folder f JOIN folder_translation t ON t.folder_id=f.id WHERE f.id=? AND t.locale=?').bind(input.id, defaultLocale).first<{ name: string; slug: string }>();
-    if (!existing) throw new FolderNotFoundError();
-    return updateFolder(env, input.id, { ...existing, parentId: input.parentId, order: input.order });
-  }
+const treeChildId = z.string().regex(/^(folder|document):[0-9a-f-]{36}$/i);
+const childrenInput = z.object({ parentId: z.string().uuid().nullable(), childIds: z.array(treeChildId).max(10_000) });
+type NavigationRow = { id: string; kind: 'folder' | 'document'; slug: string; order: number };
+
+async function siblings(env: RuntimeEnv, parentId: string | null, excluded: NavigationRow | null = null): Promise<NavigationRow[]> {
+  const [folders, documents] = await Promise.all([
+    env.DB.prepare('SELECT id,slug,sort_order FROM folder WHERE parent_id IS ?').bind(parentId).all<{ id: string; slug: string; sort_order: number }>(),
+    env.DB.prepare('SELECT id,slug,sort_order FROM document WHERE folder_id IS ?').bind(parentId).all<{ id: string; slug: string; sort_order: number }>(),
+  ]);
+  return [
+    ...folders.results.map((row) => ({ id: row.id, kind: 'folder' as const, slug: row.slug, order: row.sort_order })),
+    ...documents.results.map((row) => ({ id: row.id, kind: 'document' as const, slug: row.slug, order: row.sort_order })),
+  ].filter((row) => !excluded || row.kind !== excluded.kind || row.id !== excluded.id)
+    .sort((a, b) => a.order - b.order || a.slug.localeCompare(b.slug));
+}
+
+function reorderStatements(env: RuntimeEnv, entries: NavigationRow[], parentId: string | null, now: number) {
+  return entries.map((entry, order) => env.DB.prepare(entry.kind === 'folder'
+    ? 'UPDATE folder SET parent_id=?,sort_order=?,updated_at=? WHERE id=?'
+    : 'UPDATE document SET folder_id=?,sort_order=?,updated_at=? WHERE id=?')
+    .bind(parentId, order, now, entry.id));
+}
+
+export async function replaceTreeChildren(env: RuntimeEnv, raw: unknown) {
+  const input = childrenInput.parse(raw);
+  if (new Set(input.childIds).size !== input.childIds.length) throw new NavigationConflictError('A navigation item was included more than once');
   await assertParentFolder(env, input.parentId);
-  const translation = await env.DB.prepare('SELECT version FROM document_translation WHERE document_id=? AND locale=?').bind(input.id, defaultLocale).first<{ version: number }>();
-  if (!translation) throw new FolderNotFoundError();
-  if (input.version !== undefined && input.version !== translation.version) throw new NavigationConflictError('The page changed. Reload the tree.');
-  const result = await env.DB.prepare('UPDATE document SET folder_id=?,sort_order=?,updated_at=? WHERE id=?').bind(input.parentId, input.order, Date.now(), input.id).run();
-  if (result.meta.changes !== 1) throw new NavigationConflictError('The page changed. Reload the tree.');
-  return result;
+  const entries = await Promise.all(input.childIds.map(async (childId) => {
+    const [kind, id] = childId.split(':') as ['folder' | 'document', string];
+    const row = await env.DB.prepare(`SELECT slug FROM ${kind} WHERE id=?`).bind(id).first<{ slug: string }>();
+    if (!row) throw new FolderNotFoundError();
+    if (kind === 'folder') await assertNoFolderCycle(env, id, input.parentId);
+    return { id, kind, slug: row.slug, order: 0 } as NavigationRow;
+  }));
+
+  const movedIds = new Set(entries.map((entry) => `${entry.kind}:${entry.id}`));
+  const existing = await siblings(env, input.parentId);
+  const usedSlugs = new Set(existing.filter((entry) => !movedIds.has(`${entry.kind}:${entry.id}`)).map((entry) => entry.slug));
+  for (const entry of entries) {
+    if (usedSlugs.has(entry.slug)) throw new NavigationConflictError('A folder or page already uses this URL segment');
+    usedSlugs.add(entry.slug);
+  }
+  if (entries.length > 0) await env.DB.batch(reorderStatements(env, entries, input.parentId, Date.now()));
+  return { parentId: input.parentId, childIds: input.childIds };
 }

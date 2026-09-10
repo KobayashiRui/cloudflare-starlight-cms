@@ -70,8 +70,9 @@ Publish、`/admin/export/snapshot`からPublished revisionのみを生成する�
 Folder作成、Folder配下のDocument作成、`/admin/export/snapshot`の`guides/install`生成、Astro/Starlightの`/guides/install/`静的生成を
 確認済み。`@headless-tree/react`によるFolder/PageのTree表示とページ選択をAdminへ接続済み。
 旧Section UIを削除し、Document APIの`folderId`へ統一した。Folder update/move/deleteとDocument moveの
-Hono APIは実装済みで、親Folderの存在確認とTree循環を拒否する。Admin UIからのFolder操作、D&D、
-キーボード操作は未実装。
+Hono APIは実装済みで、親Folderの存在確認、slug衝突、Tree循環を拒否し、移動後の同階層順序を再採番する。
+Admin UIからFolder作成・rename・削除、選択Folder配下のPage／Folder作成、pointer D&D、
+keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み。
 
 ## P2.6: Locale UI / Starlight i18n
 
@@ -97,6 +98,15 @@ Hono APIは実装済みで、親Folderの存在確認とTree循環を拒否す�
 5. workers.dev/preview/管理assetsの迂回を検証する。Deploy to Cloudflareボタンと薄いテンプレートはその後。
 
 ## terraへの引き継ぎプロンプト
+
+### Navigation D&D修正（2026-09-10）
+
+- `syncDataLoader`が読むchildrenを公式`createOnDropHandler`のcallbackで同期更新する。
+  元の親から削除した配列を更新しなかったことが、同階層移動時の重複の原因だった。
+- 中間状態をHTTP送信せず、完成した移動先childrenだけを保存する。保存中の追加ドラッグを抑止し、失敗時は配列を戻す。
+- Tree本体とスクロール領域を分離し、左に伸びるdraglineのクリップと丸のbox-sizingを修正。
+- 実Headless Treeで同階層移動・root移動を検証。ローカルD1でも並べ替え・root移動・GETでの永続化を確認。
+  マウスポインタによる全ドロップ境界の視覚検証は未完了。
 
 > AGENTS.md、README.md、docs/ARCHITECTURE.md、docs/ROADMAP.mdを読んでください。
 > P2.5のNavigation Treeを完成させます。Folder作成・rename・削除、Documentの移動・並べ替え、

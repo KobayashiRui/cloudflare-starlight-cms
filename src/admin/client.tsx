@@ -33,6 +33,7 @@ const emptyDocument: DocumentRecord = {
   contentJson: emptyContent, status: 'draft', version: 0,
 };
 const mediaTypes = 'image/png,image/jpeg,image/webp,image/avif,video/mp4,video/webm';
+const validSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function slugify(value: string) {
   return value
@@ -41,6 +42,10 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function normalizeSlugInput(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').slice(0, 120);
 }
 
 const Callout = Node.create({
@@ -209,6 +214,11 @@ function App() {
     setIsDirty(false);
     showNotice(`Folder selected: ${folder.name}`);
   }, [isDirty, showNotice, treeItems]);
+  const selectNavigationRoot = () => {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(null); setMissingTranslationSource(null);
+    setLocale(defaultLocale); setIsDirty(false); showNotice('Navigation selected.');
+  };
 
   const selectTreeDocument = (id: string) => {
     const treeItem = treeItems.find((item) => item.documentId === id);
@@ -311,18 +321,26 @@ function App() {
     setIsDirty(true);
   };
   const updateTitle = (title: string) => {
+    const suggestedSlug = slugify(title);
     setFields((currentFields) => ({
       ...currentFields,
       title,
-      slug: current?.id
-        ? currentFields.slug
-        : slugify(title) || currentFields.slug || `document-${crypto.randomUUID().slice(0, 8)}`,
+      // A title only suggests the initial URL segment. It never overwrites a
+      // value chosen by the editor, and non-Latin titles leave it blank.
+      slug: current?.id || currentFields.slug || !suggestedSlug ? currentFields.slug : suggestedSlug,
     }));
     setIsDirty(true);
+  };
+  const updateSlug = (slug: string) => {
+    updateField('slug', normalizeSlugInput(slug));
   };
 
   const save = async (): Promise<DocumentRecord | undefined> => {
     if (!editor || !current) return undefined;
+    if (!validSlug.test(fields.slug)) {
+      showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
+      return undefined;
+    }
     setIsSaving(true);
     try {
       const body = { ...fields, contentJson: editor.getJSON(), version: current.version };
@@ -438,6 +456,24 @@ function App() {
     showNotice(`${item.fileName} inserted.`);
   };
 
+  const breadcrumbItems = (folderId: string | null, leaf?: string) => {
+    const folders: { id: string; name: string }[] = [];
+    const seen = new Set<string>();
+    let cursor = folderId;
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      const folder = treeItems.find((item) => item.id === `folder:${cursor}`);
+      if (!folder) break;
+      folders.unshift({ id: cursor, name: folder.name });
+      cursor = folder.parentId?.slice('folder:'.length) ?? null;
+    }
+    return leaf ? [...folders, { id: '', name: leaf }] : folders;
+  };
+  const renderBreadcrumb = (folderId: string | null, leaf?: string) => <nav className="cms-breadcrumb" aria-label="Navigation path">
+    <button className="cms-breadcrumb-root" type="button" onClick={selectNavigationRoot} aria-label="Top level">/</button>
+    {breadcrumbItems(folderId, leaf).map((item) => <span key={`${item.id}:${item.name}`}><b>/</b>{item.id ? <button type="button" onClick={() => selectFolder(item.id)}>{item.name}</button> : <strong>{item.name}</strong>}</span>)}
+  </nav>;
+
   return <div className="cms-shell">
     <header className="cms-topbar">
       <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>Docs CMS</span></a>
@@ -462,10 +498,15 @@ function App() {
       </aside>
 
       <main className="cms-main">
-        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings"><div className="cms-breadcrumb"><span>Navigation</span><span>/</span><span>{selectedFolder.slug}</span></div><header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
-          <div className="cms-breadcrumb"><span>Navigation</span><span>/</span><span>{fields.slug || 'new-document'}</span></div>
+        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings">{renderBreadcrumb(selectedFolderId)}<header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
+          {renderBreadcrumb(fields.folderId, fields.slug || 'new-document')}
           <section className="cms-editor-surface" aria-label="Document editor">
             <div className="cms-document-fields">
+              <label className="cms-meta-field">
+                <span>URL segment</span>
+                <input className="cms-slug-input" value={fields.slug} onChange={(event) => updateSlug(event.target.value)} onBlur={() => updateField('slug', slugify(fields.slug))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} aria-invalid={Boolean(fields.slug) && !validSlug.test(fields.slug)} placeholder="getting-started" />
+                <small className="cms-field-help">Required. Lowercase letters, numbers, and hyphens. English titles suggest a value while this field is empty.</small>
+              </label>
               {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label>}
               <label className="cms-meta-field">
                 <span>Title</span>

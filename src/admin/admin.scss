@@ -74,19 +74,24 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .cms-main { min-width: 0; padding: 1.35rem clamp(1rem, 3vw, 3.5rem) 3rem; }
 .cms-breadcrumb { display: flex; gap: .4rem; margin: 0 0 1rem; color: #667085; font-size: .76rem; }
-.cms-breadcrumb span:last-child { overflow: hidden; color: #475467; text-overflow: ellipsis; white-space: nowrap; }
+.cms-breadcrumb span { display: inline-flex; min-width: 0; gap: .4rem; }
+.cms-breadcrumb button { padding: 0; color: #667085; background: transparent; border: 0; font: inherit; }
+.cms-breadcrumb button:hover { color: #6941c6; text-decoration: underline; }
+.cms-breadcrumb strong { overflow: hidden; color: #475467; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .cms-editor-surface { width: 100%; min-width: 0; overflow: visible; }
 .cms-document-fields { display: grid; gap: .85rem; }
 .cms-content-locale { display: flex; width: fit-content; align-items: center; gap: .5rem; color: #667085; font-size: .72rem; font-weight: 700; }
 .cms-content-locale select { height: 30px; padding: 0 .45rem; color: #475467; background: #fff; border: 1px solid #d0d5dd; border-radius: 6px; font-size: .74rem; font-weight: 650; }
 .cms-meta-field { display: grid; gap: .55rem; }
 .cms-meta-field > span, .cms-editor-field-header > span { color: #667085; font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
-.cms-title-input, .cms-description-input { width: 100%; color: #101828; background: #fff; border: 1px solid #d0d5dd; border-radius: 8px; outline: 0; box-shadow: 0 1px 2px rgba(16, 24, 40, .03); }
+.cms-title-input, .cms-description-input, .cms-slug-input { width: 100%; color: #101828; background: #fff; border: 1px solid #d0d5dd; border-radius: 8px; outline: 0; box-shadow: 0 1px 2px rgba(16, 24, 40, .03); }
 .cms-title-input { padding: .85rem .95rem; font-size: clamp(1.45rem, 3vw, 2rem); font-weight: 750; line-height: 1.2; }
 .cms-title-input::placeholder { color: #d0d5dd; }
 .cms-description-input { display: block; min-height: 5rem; padding: .75rem .95rem; resize: vertical; font: inherit; font-size: .95rem; line-height: 1.5; }
 .cms-description-input::placeholder { color: #98a2b3; }
-.cms-title-input:focus, .cms-description-input:focus { border-color: #9e77ed; box-shadow: 0 0 0 3px #f4ebff; }
+.cms-slug-input { padding: .65rem .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; }
+.cms-field-help { color: #98a2b3; font-size: .72rem; line-height: 1.4; }
+.cms-title-input:focus, .cms-description-input:focus, .cms-slug-input:focus { border-color: #9e77ed; box-shadow: 0 0 0 3px #f4ebff; }
 .cms-editor-field { display: grid; gap: .55rem; margin-top: 1.35rem; }
 .cms-editor-field-header { display: flex; align-items: center; justify-content: space-between; }
 .cms-history-button { padding: 0; color: #667085; background: transparent; border: 0; font-size: .75rem; font-weight: 650; }
@@ -178,12 +183,12 @@ html.dark .cms-sidebar .tree .treeitem.selected { color: #e0d7ff; background: #2
 html.dark .cms-sidebar .tree .treeitem.drop { color: #e0d7ff; background: #243545; }
 html.dark .cms-sidebar .tree .treeitem.folder::before { color: #98a2b3; }
 html.dark .cms-sidebar .tree button:focus-visible .treeitem.focused { outline-color: #a48afb; }
-html.dark .cms-breadcrumb span:last-child { color: #d0d5dd; }
+html.dark .cms-breadcrumb strong { color: #d0d5dd; }
 html.dark .cms-meta-field > span, html.dark .cms-editor-field-header > span { color: #98a2b3; }
 html.dark .cms-content-locale { color: #98a2b3; }
 html.dark .cms-content-locale select { color: #d0d5dd; background: #1d2027; border-color: #3a404b; }
-html.dark .cms-title-input, html.dark .cms-description-input { color: #e4e7ec; background: #191c22; border-color: #3a404b; box-shadow: none; }
-html.dark .cms-title-input:focus, html.dark .cms-description-input:focus { border-color: #a48afb; box-shadow: 0 0 0 3px #352c5c; }
+html.dark .cms-title-input, html.dark .cms-description-input, html.dark .cms-slug-input { color: #e4e7ec; background: #191c22; border-color: #3a404b; box-shadow: none; }
+html.dark .cms-title-input:focus, html.dark .cms-description-input:focus, html.dark .cms-slug-input:focus { border-color: #a48afb; box-shadow: 0 0 0 3px #352c5c; }
 html.dark .cms-title-input::placeholder { color: #667085; }
 html.dark .cms-button-danger { color: #fda29b; background: #321b1b; border-color: #7a271a; }
 html.dark .cms-button-danger:hover:not(:disabled) { background: #47211f; }

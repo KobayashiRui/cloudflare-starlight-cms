@@ -7,9 +7,10 @@ Admin UIのレイアウト修正を完了した。公式Simple Editorの単体�
 再構成している。中央の編集領域はサイドバー以外の横幅を使う。Contentは外側のカードを持たず、公式Simple Editorの背景色・toolbar・本文スタイルを
 使い、wrapperの縁だけを角丸にする。CMS側は全画面wrapperを編集領域へ収め、公式の本文列をDocs向けに54remへ広げるだけを上書きする。Descriptionはタイトル直下で編集し、
 Page settings panelと手動slug入力は置かない。
-テーマはAuto（OS追従）/ Light / Darkを選択でき、選択値をbrowser local storageに保存する。
+テーマはSystem（OS追従）を初期値とし、右端の太陽／月ボタンで必要時だけ明暗を直接切り替える。選択値をbrowser local storageに保存する。
 `npm run check:admin`を追加し、Worker側とは別にReact/Tiptap sourceも型検査する。
-次の実装優先度はP3のPublish → Workers Builds配送である。
+P3のPublish → Workers Builds配送のローカル実装まで完了した。次はP4の実Cloudflare Access /
+Workers Builds接続と、unpublish/delete/navigation変更に対する配送の運用設計である。
 
 `0001_schema.sql`はi18n-readyへ更新済み。`folder` / `document`は言語非依存のTree identity、
 `folder_translation` / `document_translation`はlocaleごとの表示・編集状態、`document_revision`は
@@ -20,7 +21,8 @@ P0〜P2の基盤はローカルMVPとして実装したが、Navigation Tree導�
 作り直す。旧local D1は削除し、migrationは新しい単一の`0001`のみへ統合する。
 SonicJS、workspaces、内部user/RBAC/KVは撤去済み。
 rootの`src/`、`migrations/`、`astro.config.mjs`、`wrangler.jsonc`だけを実行対象とする。
-本番deploy、実Access、Workers Builds、Deploy Hook配送記録は未実装・未検証。
+本番deploy、実Access、Workers Buildsは未実装・未検証。Deploy Hook配送記録と手動retryは
+local実装・検証済みである。
 
 ## 完了した範囲
 
@@ -83,10 +85,11 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 
 ## P3: Publish → Workers Builds
 
-1. `publish_deliveries`を追加。Publish/unpublish/delete/slug変更後に配送対象を記録する。
-2. `WORKERS_DEPLOY_HOOK_URL`がある場合にPOSTし、失敗回数・次回retry・最後のエラーを保存する。
-3. Adminで「build要求済み」と表示する。Hook 2xxを公開完了と表示しない。
-4. build中の追加変更、失敗時再試行、削除・非公開後に古いroute/searchが残らないことを検証する。
+1. `publish_delivery`を追加。Document Publishでは公開revision pointerと同じD1 batchでpending配送を保存する。site rebuildは単独の配送を保存する。完了。
+2. `WORKERS_DEPLOY_HOOK_URL`がある場合にPOSTし、失敗回数・次回retry・最後のエラーを保存する。URL未設定のlocalは`skipped`。完了。
+3. Adminで「Build requested」と表示する。Hook 2xxを公開完了と表示しない。failedはheaderからretryできる。完了。
+4. TreeではtranslationごとにDraft／Changesを集約表示する。下書き保存は本文の操作、Publish & rebuildはheaderに分離した。完了。
+5. build中の追加変更、unpublish/delete/slug/navigation変更による古いroute/searchの消去と、実Deploy Hookの受理はP4の実Cloudflare環境で検証する。
 
 ## P4: Self-host / Cloudflare Access
 

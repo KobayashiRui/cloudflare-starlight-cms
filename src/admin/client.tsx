@@ -24,6 +24,19 @@ type DocumentRecord = {
 type Media = { id: string; fileName: string; contentType: string; url: string };
 type Revision = { id: string; revision: number; createdAt: number };
 type Folder = { id: string; name: string; slug: string; parentId: string | null; order: number };
+type PublishDelivery = {
+  id: string;
+  status: 'pending' | 'accepted' | 'failed' | 'skipped';
+  attempts: number;
+  buildId: string | null;
+  alreadyExists: boolean;
+  lastError: string | null;
+  requestedAt: number;
+  acceptedAt: number | null;
+  nextRetryAt: number | null;
+};
+type PublishDocumentResponse = { document: DocumentRecord; delivery: PublishDelivery };
+type PublishSiteResponse = { delivery: PublishDelivery };
 type DocumentFields = Pick<DocumentRecord, 'title' | 'slug' | 'description' | 'folderId' | 'order'>;
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -34,6 +47,14 @@ const emptyDocument: DocumentRecord = {
 };
 const mediaTypes = 'image/png,image/jpeg,image/webp,image/avif,video/mp4,video/webm';
 const validSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function SunIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>;
+}
+
+function MoonIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" /></svg>;
+}
 
 function slugify(value: string) {
   return value
@@ -137,10 +158,12 @@ function App() {
   const [locale, setLocale] = useState<SupportedLocale>(defaultLocale);
   const [missingDocumentId, setMissingDocumentId] = useState<string | null>(null);
   const [missingTranslationSource, setMissingTranslationSource] = useState<SupportedLocale | null>(null);
+  const [latestDelivery, setLatestDelivery] = useState<PublishDelivery | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const saved = window.localStorage.getItem('docs-cms-theme');
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
   });
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const showNotice = useCallback((message: string, error = false) => {
     setNotice(message);
@@ -153,19 +176,24 @@ function App() {
     setMedia(await api<Media[]>('/media'));
   }, []);
   const refreshTree = useCallback(async () => { setTreeItems(await api<NavigationItem[]>('/tree')); }, []);
+  const refreshDeliveries = useCallback(async () => {
+    const deliveries = await api<PublishDelivery[]>('/publish/deliveries');
+    setLatestDelivery(deliveries[0] ?? null);
+  }, []);
 
   const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
 
   useEffect(() => {
-    Promise.all([refreshDocuments(), refreshMedia(), refreshTree()])
+    Promise.all([refreshDocuments(), refreshMedia(), refreshTree(), refreshDeliveries()])
       .then(() => showNotice('Ready.'))
       .catch((error: unknown) => showNotice(String(error), true));
-  }, [refreshDocuments, refreshMedia, refreshTree, showNotice]);
+  }, [refreshDeliveries, refreshDocuments, refreshMedia, refreshTree, showNotice]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const applyTheme = () => {
       const isDark = theme === 'dark' || (theme === 'system' && mediaQuery.matches);
+      setSystemPrefersDark(mediaQuery.matches);
       document.documentElement.classList.toggle('dark', isDark);
       document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
     };
@@ -174,6 +202,8 @@ function App() {
     window.localStorage.setItem('docs-cms-theme', theme);
     return () => mediaQuery.removeEventListener('change', applyTheme);
   }, [theme]);
+
+  const displayedTheme = theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : theme;
 
   useEffect(() => {
     if (!current || !editor) return;
@@ -360,6 +390,13 @@ function App() {
     }
   };
 
+  const describeDelivery = (delivery: PublishDelivery) => {
+    if (delivery.status === 'accepted') return delivery.alreadyExists ? 'Build already requested.' : 'Build requested.';
+    if (delivery.status === 'skipped') return 'Published, but Deploy Hook is not configured.';
+    if (delivery.status === 'failed') return 'Published, but the build request failed. Retry it from the header.';
+    return 'Build request is pending.';
+  };
+
   const publish = async () => {
     if (!current?.id) return showNotice('Save the document before publishing.', true);
     let documentToPublish = current;
@@ -370,13 +407,41 @@ function App() {
     }
     setIsSaving(true);
     try {
-      const saved = await api<DocumentRecord>(`/documents/${encodeURIComponent(documentToPublish.id)}/publish`, {
+      const result = await api<PublishDocumentResponse>(`/documents/${encodeURIComponent(documentToPublish.id)}/publish`, {
         method: 'POST', body: JSON.stringify({ version: documentToPublish.version }),
       }, documentToPublish.locale);
-      setCurrent(saved);
-      setFields(documentFields(saved));
+      setCurrent(result.document);
+      setFields(documentFields(result.document));
+      setLatestDelivery(result.delivery);
       await Promise.all([refreshDocuments(), refreshTree()]);
-      showNotice('Published. A Workers Build can now publish this version.');
+      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
+    } catch (error) {
+      showNotice(String(error), true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const rebuildPublishedSite = async () => {
+    setIsSaving(true);
+    try {
+      const result = await api<PublishSiteResponse>('/publish/site', { method: 'POST' });
+      setLatestDelivery(result.delivery);
+      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
+    } catch (error) {
+      showNotice(String(error), true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const retryBuild = async () => {
+    if (!latestDelivery || latestDelivery.status !== 'failed') return;
+    setIsSaving(true);
+    try {
+      const result = await api<PublishSiteResponse>(`/publish/deliveries/${encodeURIComponent(latestDelivery.id)}/retry`, { method: 'POST' });
+      setLatestDelivery(result.delivery);
+      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
     } catch (error) {
       showNotice(String(error), true);
     } finally {
@@ -478,14 +543,16 @@ function App() {
     <header className="cms-topbar">
       <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>Docs CMS</span></a>
       <div className="cms-topbar-controls">
-        <label className="cms-theme-select"><span className="sr-only">Theme</span><select value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)} aria-label="Theme"><option value="system">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-      {current && <div className="cms-actions">
-        <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved' : current.status}</span>
+        <div className="cms-actions">
+        {current && <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved' : current.status}</span>}
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
-        <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
-        <button className="cms-button cms-button-publish" type="button" disabled={isSaving || !current.id} onClick={() => void publish()}>Publish</button>
-        <button className="cms-button cms-button-danger" type="button" disabled={!current.id} onClick={() => void remove()}>Delete</button>
-      </div>}
+        {latestDelivery?.status === 'failed' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
+        {current?.id ? <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
+        {current?.id && <button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void remove()}>Delete</button>}
+        </div>
+        <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
+          {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </button>
       </div>
     </header>
 
@@ -525,6 +592,7 @@ function App() {
                 return uploaded.url;
               }} /></div>
             </section>
+            <footer className="cms-draft-actions"><span>{isDirty ? 'Draft changes are not saved.' : 'Save changes as a draft before publishing.'}</span><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button></footer>
             {isRevisionOpen && <section className="cms-revision-history" aria-label="Revision history"><header><h2>Revision history</h2><button type="button" onClick={() => setIsRevisionOpen(false)}>Close</button></header>{revisions.length === 0 ? <p>No saved revisions yet.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" onClick={() => void restore(revision)}>Restore</button></div>)}</div>}</section>}
           </section>
         </>}

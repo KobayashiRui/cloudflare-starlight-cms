@@ -23,8 +23,10 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 既存translationからDraftとして明示的に複製します。公開buildは`en`をルートURL、`ja`を`/ja/`へ
 出力し、Draft translationは公開しません。
 
-PublishからDeploy Hookを送る配送記録・再試行と、実Cloudflare Access / Workers Builds
-の接続はP3/P4です。deployは実施していません。
+Publishは公開revisionを確定し、D1の`publish_delivery`へ配送記録を保存してから
+Workers Deploy HookをPOSTします。Hookの2xxはBuildの要求受理であり、公開完了ではありません。
+失敗したHook要求はAdminから再試行できます。`WORKERS_DEPLOY_HOOK_URL`がないlocal開発では
+`skipped`として記録され、外部へは送信しません。実Cloudflare Access / Workers Buildsの接続はP4です。deployは実施していません。
 
 ## ローカル開発
 
@@ -75,7 +77,11 @@ npm run dry-run
 6. Workers Buildsにこのrepoを接続し、`CMS_EXPORT_URL`、`CF_ACCESS_CLIENT_ID`、
    `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。後者2つはexport用Access
    Applicationだけを通過できるService Tokenの値にする。
-7. P3のDeploy Hook配送記録が実装された後、Hook URLをsecretとして設定する。
+7. Workers Buildsで作成したDeploy Hook URLをsecretとして設定する。URL自体が認証情報なのでGitやログへ残さない。
+
+   ```sh
+   npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
+   ```
 
 実アカウントで検証するまで、上記は手順の設計であり完成したdeployガイドではありません。
 詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、

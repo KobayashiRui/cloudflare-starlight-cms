@@ -3,8 +3,8 @@ import { AssistiveTreeDescription, useTree } from '@headless-tree/react';
 import clsx from 'clsx';
 import { useEffect, useMemo, useRef } from 'react';
 
-export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; documentId?: string };
-const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0, hasTranslation: true, translationLocales: [] };
+export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; translationStates: { locale: string; state: 'draft' | 'changes' | 'published' }[]; documentId?: string };
+const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0, hasTranslation: true, translationLocales: [], translationStates: [] };
 
 export function NavigationTree({ items, selectedDocumentId, selectedFolderId, onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
   items: NavigationItem[]; selectedDocumentId?: string; selectedFolderId: string | null;
@@ -63,6 +63,10 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, on
     {tree.getItems().filter((item) => item.getId() !== 'root').map((item) => {
       const data = item.getItemData();
       const isSelected = data.documentId ? selectedDocumentId === data.documentId : selectedFolderId === data.id.slice('folder:'.length);
+      const hasChanges = data.translationStates.some((entry) => entry.state === 'changes');
+      const hasDraft = data.translationStates.some((entry) => entry.state === 'draft');
+      const publicationLabel = hasChanges ? 'Changes' : hasDraft ? 'Draft' : null;
+      const publicationTitle = data.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${entry.locale}: ${entry.state === 'changes' ? 'Changes' : 'Draft'}`).join(', ');
       return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
         <div className={clsx('treeitem', {
           focused: item.isFocused(),
@@ -70,7 +74,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, on
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{data.name}</div>
+        })}><span className="treeitem-name">{data.name}</span>{publicationLabel && <span className={clsx('treeitem-status', hasChanges ? 'changes' : 'draft')} title={publicationTitle}>{publicationLabel}</span>}</div>
       </button>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />

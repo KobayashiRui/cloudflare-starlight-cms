@@ -29,3 +29,17 @@ export const media = sqliteTable('media', {
   id: text('id').primaryKey(), objectKey: text('object_key').notNull().unique(), fileName: text('file_name').notNull(),
   contentType: text('content_type').notNull(), size: integer('size').notNull(), createdAt: integer('created_at').notNull(),
 });
+
+export const publishDelivery = sqliteTable('publish_delivery', {
+  id: text('id').primaryKey(),
+  triggerKind: text('trigger_kind').notNull(),
+  documentTranslationId: text('document_translation_id'),
+  status: text('status').notNull(),
+  attempts: integer('attempts').notNull(),
+  buildId: text('build_id'),
+  alreadyExists: integer('already_exists').notNull(),
+  lastError: text('last_error'),
+  requestedAt: integer('requested_at').notNull(),
+  acceptedAt: integer('accepted_at'),
+  nextRetryAt: integer('next_retry_at'),
+});

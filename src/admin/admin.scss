@@ -16,7 +16,9 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-brand { display: inline-flex; align-items: center; gap: .65rem; color: #101828; font-size: .98rem; font-weight: 750; letter-spacing: -.02em; text-decoration: none; }
 .cms-brand-mark, .cms-empty-icon { display: grid; width: 30px; height: 30px; place-items: center; color: white; background: linear-gradient(135deg, #7f56d9, #4f46e5); border-radius: 9px; box-shadow: 0 4px 10px rgba(79, 70, 229, .24); }
 .cms-topbar-controls { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; }
-.cms-theme-select select { height: 32px; padding: 0 .55rem; color: #475467; background: transparent; border: 1px solid #d0d5dd; border-radius: 6px; font-size: .76rem; font-weight: 650; }
+.cms-theme-trigger { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; color: #475467; background: transparent; border: 1px solid #d0d5dd; border-radius: 7px; }
+.cms-theme-trigger:hover { color: #344054; background: #f9fafb; }
+.cms-theme-trigger svg { width: 1rem; height: 1rem; }
 .cms-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: .5rem; }
 .cms-status { padding: .25rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 700; line-height: 1.2; text-transform: capitalize; }
 .cms-status-draft, .cms-status-unsaved { color: #8a5100; background: #fff7dd; }
@@ -59,7 +61,11 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .navigation-tree-scroll { flex: 1 1 0; min-height: 12rem; overflow: auto; padding: 8px; }
 .cms-sidebar .tree { position: relative; display: block; min-height: 100%; max-width: none; }
 .cms-sidebar .tree button[role="treeitem"] { display: flex; width: 100%; padding: 0 0 2px; background: transparent; border: none; }
-.cms-sidebar .tree .treeitem { position: relative; width: 100%; padding: 6px 10px; color: #475467; background-color: white; border-radius: 8px; font-size: .8rem; text-align: left; transition: background-color .2s ease; cursor: pointer; }
+.cms-sidebar .tree .treeitem { position: relative; display: flex; width: 100%; align-items: center; gap: .4rem; padding: 6px 10px; color: #475467; background-color: white; border-radius: 8px; font-size: .8rem; text-align: left; transition: background-color .2s ease; cursor: pointer; }
+.cms-sidebar .tree .treeitem-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-sidebar .tree .treeitem-status { margin-left: auto; padding: .12rem .34rem; border-radius: 999px; font-size: .6rem; font-weight: 750; line-height: 1.2; }
+.cms-sidebar .tree .treeitem-status.draft { color: #8a5100; background: #fff2cc; }
+.cms-sidebar .tree .treeitem-status.changes { color: #9a3412; background: #ffedd5; }
 .cms-sidebar .tree .treeitem:hover { background-color: #f0f2f5; }
 .cms-sidebar .tree button[role="treeitem"]:focus { outline: none; }
 .cms-sidebar .tree .treeitem.selected { background-color: #eee; }
@@ -109,6 +115,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-simple-editor .tiptap.ProseMirror.simple-editor ol[data-steps] { padding: 1rem 1rem 1rem 2.25rem; background: #f9fafb; border-radius: 8px; }
 .cms-simple-editor .tiptap.ProseMirror.simple-editor section[data-tabs] { padding: 1rem; border: 1px solid #e4e7ec; border-radius: 8px; }
 .cms-simple-editor .tiptap.ProseMirror.simple-editor section[data-tab] + section[data-tab] { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid #e4e7ec; }
+.cms-draft-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding-top: 1rem; color: #667085; border-top: 1px solid #e4e7ec; font-size: .76rem; }
 
 .cms-close-settings { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; color: #667085; background: transparent; border: 0; border-radius: 5px; font-size: 1.2rem; }
 .cms-close-settings:hover { background: #f2f4f7; }
@@ -163,7 +170,8 @@ html.dark, html.dark body, html.dark #admin-root { color: #eaecf0; background: #
 html.dark .cms-shell, html.dark .cms-main { color: #eaecf0; background: #111318; }
 html.dark .cms-topbar { background: rgba(24, 27, 34, .94); border-color: #30343d; }
 html.dark .cms-brand, html.dark .cms-title-input, html.dark .cms-empty-state h1 { color: #f9fafb; }
-html.dark .cms-theme-select select, html.dark .cms-button:not(.cms-button-primary):not(.cms-button-publish) { color: #d0d5dd; background: #1d2027; border-color: #3a404b; }
+html.dark .cms-theme-trigger, html.dark .cms-button:not(.cms-button-primary):not(.cms-button-publish) { color: #d0d5dd; background: #1d2027; border-color: #3a404b; }
+html.dark .cms-theme-trigger:hover { background: #282d36; }
 html.dark .cms-button:hover:not(:disabled), html.dark .cms-button-quiet:hover:not(:disabled) { background: #282d36; }
 html.dark .cms-sidebar { background: #191c22; border-color: #30343d; }
 html.dark .cms-sidebar-heading, html.dark .cms-document-item, html.dark .cms-document-item strong { color: #d0d5dd; }
@@ -181,6 +189,8 @@ html.dark .cms-sidebar .tree .treeitem { color: #d0d5dd; background: #191c22; }
 html.dark .cms-sidebar .tree .treeitem:hover { background: #242831; }
 html.dark .cms-sidebar .tree .treeitem.selected { color: #e0d7ff; background: #2b2544; }
 html.dark .cms-sidebar .tree .treeitem.drop { color: #e0d7ff; background: #243545; }
+html.dark .cms-sidebar .tree .treeitem-status.draft { color: #fedf89; background: #4d3b15; }
+html.dark .cms-sidebar .tree .treeitem-status.changes { color: #fdba74; background: #4a2714; }
 html.dark .cms-sidebar .tree .treeitem.folder::before { color: #98a2b3; }
 html.dark .cms-sidebar .tree button:focus-visible .treeitem.focused { outline-color: #a48afb; }
 html.dark .cms-breadcrumb strong { color: #d0d5dd; }
@@ -197,6 +207,7 @@ html.dark .cms-simple-editor .tiptap.ProseMirror.simple-editor ol[data-steps] { 
 html.dark .cms-simple-editor .tiptap.ProseMirror.simple-editor section[data-tabs] { border-color: #3a404b; }
 html.dark .cms-simple-editor .tiptap.ProseMirror.simple-editor section[data-tab] + section[data-tab] { border-color: #3a404b; }
 html.dark .cms-revision-history { border-color: #30343d; }
+html.dark .cms-draft-actions { color: #98a2b3; border-color: #30343d; }
 html.dark .cms-revision-history h2, html.dark .cms-revision span { color: #d0d5dd; }
 html.dark .cms-close-settings { color: #b8c0cc; }
 html.dark .cms-close-settings:hover { background: #282d36; }

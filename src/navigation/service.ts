@@ -6,7 +6,12 @@ import { defaultLocale, type SupportedLocale } from '../locales.ts';
 const folderInput = z.object({ name: z.string().trim().min(1).max(120), slug, parentId: z.string().uuid().nullable().default(null), order: z.number().int().min(0).max(100000).default(0) });
 export class FolderNotFoundError extends Error {}
 export class NavigationConflictError extends Error {}
-export type TreeItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: SupportedLocale[]; documentId?: string };
+export type PublicationState = 'draft' | 'changes' | 'published';
+export type TreeItem = {
+  id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number;
+  hasTranslation: boolean; translationLocales: SupportedLocale[]; translationStates: { locale: SupportedLocale; state: PublicationState }[];
+  documentId?: string;
+};
 
 async function assertAvailable(env: RuntimeEnv, parentId: string | null, slugValue: string, ignoreFolder = '', ignoreDocument = '') {
   const [folderMatch, documentMatch] = await Promise.all([
@@ -32,14 +37,29 @@ async function assertNoFolderCycle(env: RuntimeEnv, folderId: string, parentId: 
 }
 
 export async function listTree(env: RuntimeEnv, locale: SupportedLocale = defaultLocale): Promise<TreeItem[]> {
-  const [folders, documents] = await Promise.all([
+  const [folders, documents, states] = await Promise.all([
     env.DB.prepare("SELECT f.id,f.parent_id,COALESCE(t.name,fallback.name,f.slug) AS name,f.slug,f.sort_order,t.folder_id IS NOT NULL AS has_translation,(SELECT group_concat(locale, ',') FROM folder_translation WHERE folder_id=f.id) AS translation_locales FROM folder f LEFT JOIN folder_translation t ON t.folder_id=f.id AND t.locale=? LEFT JOIN folder_translation fallback ON fallback.folder_id=f.id AND fallback.locale=? WHERE EXISTS (SELECT 1 FROM folder_translation WHERE folder_id=f.id) ORDER BY f.sort_order,f.slug").bind(locale, defaultLocale).all<{ id:string; parent_id:string|null; name:string; slug:string; sort_order:number; has_translation:number; translation_locales:string|null }>(),
     env.DB.prepare("SELECT d.id,d.folder_id,COALESCE(t.title,fallback.title,d.slug) AS title,d.slug,d.sort_order,t.document_id IS NOT NULL AS has_translation,(SELECT group_concat(locale, ',') FROM document_translation WHERE document_id=d.id) AS translation_locales FROM document d LEFT JOIN document_translation t ON t.document_id=d.id AND t.locale=? LEFT JOIN document_translation fallback ON fallback.document_id=d.id AND fallback.locale=? WHERE EXISTS (SELECT 1 FROM document_translation WHERE document_id=d.id) ORDER BY d.sort_order,d.slug").bind(locale, defaultLocale).all<{ id:string; folder_id:string|null; title:string; slug:string; sort_order:number; has_translation:number; translation_locales:string|null }>(),
+    env.DB.prepare(`
+      SELECT t.document_id,t.locale,
+        CASE
+          WHEN t.published_revision_id IS NULL THEN 'draft'
+          WHEN r.title <> t.title OR r.description <> t.description OR r.content_json <> t.content_json THEN 'changes'
+          ELSE 'published'
+        END AS state
+      FROM document_translation t
+      LEFT JOIN document_revision r ON r.id=t.published_revision_id`).all<{ document_id: string; locale: SupportedLocale; state: PublicationState }>(),
   ]);
   const locales = (value: string | null) => value?.split(',').filter((item): item is SupportedLocale => item === 'en' || item === 'ja') ?? [];
+  const statesByDocument = new Map<string, { locale: SupportedLocale; state: PublicationState }[]>();
+  for (const state of states.results) {
+    const values = statesByDocument.get(state.document_id) ?? [];
+    values.push({ locale: state.locale, state: state.state });
+    statesByDocument.set(state.document_id, values);
+  }
   return [
-    ...folders.results.map((row) => ({ id: `folder:${row.id}`, parentId: row.parent_id ? `folder:${row.parent_id}` : null, kind: 'folder' as const, name: row.name, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales) })),
-    ...documents.results.map((row) => ({ id: `document:${row.id}`, parentId: row.folder_id ? `folder:${row.folder_id}` : null, kind: 'document' as const, name: row.title, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales), documentId: row.id })),
+    ...folders.results.map((row) => ({ id: `folder:${row.id}`, parentId: row.parent_id ? `folder:${row.parent_id}` : null, kind: 'folder' as const, name: row.name, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales), translationStates: [] })),
+    ...documents.results.map((row) => ({ id: `document:${row.id}`, parentId: row.folder_id ? `folder:${row.folder_id}` : null, kind: 'document' as const, name: row.title, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales), translationStates: statesByDocument.get(row.id) ?? [], documentId: row.id })),
   ];
 }
 

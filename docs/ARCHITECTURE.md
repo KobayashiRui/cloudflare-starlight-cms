@@ -48,8 +48,11 @@ Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回dep
 通信失敗時のfallbackとして初回モードを使わない。
 
 ## Hook / Media / Setup
-公開revision確定と小さな配送記録の保存後、Deploy Hook→Workers Builds→同Workerを更新。
-Hook受理は公開完了ではない。retryを用意し、Unpublish/delete/slug変更も反映。
+公開revision確定と`publish_delivery`の保存を同じD1 batchで行った後、Deploy Hook→Workers Builds→
+同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
+最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。failedだけをAdminからretryできる。
+Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。Unpublish/delete/slug変更を実運用で
+反映するには、ヘッダーのRebuild public siteを要求する。自動配送の対象拡張はP4で実Accessとともに検証する。
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、

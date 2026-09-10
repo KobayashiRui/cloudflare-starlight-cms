@@ -7,6 +7,10 @@ it('POSTs a hook without following redirects', async () => {
   await triggerDeployHook(url, request);
   expect(request).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'POST', redirect: 'error' }));
 });
+it('returns the build identifier when the hook accepts the request', async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ result: { build_uuid: 'build-123', already_exists: true } }, { status: 202 }));
+  await expect(triggerDeployHook(url, request)).resolves.toEqual({ buildId: 'build-123', alreadyExists: true });
+});
 it('reports rejected hooks', async () => {
   const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 429 }));
   await expect(triggerDeployHook(url, request)).rejects.toThrow('429');

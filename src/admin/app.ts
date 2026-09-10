@@ -1,12 +1,13 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import { DocumentConflictError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, publishDocument, restoreRevision, updateDocument } from '../documents/service.ts';
+import { DocumentConflictError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
 import { InvalidMediaError, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
 import { renderDocumentContent } from '../starlight/render.ts';
 import { adminHtml } from './html.ts';
 import { createFolder, createFolderTranslation, deleteFolder, FolderNotFoundError, listTree, NavigationConflictError, replaceTreeChildren, updateFolder } from '../navigation/service.ts';
+import { PublishDeliveryConflictError, PublishDeliveryNotFoundError, listPublishDeliveries, publishDocumentAndRequest, requestPublish, retryPublish } from '../publish/service.ts';
 
 type AdminEnv = { Bindings: RuntimeEnv };
 const app = new Hono<AdminEnv>();
@@ -63,6 +64,8 @@ app.onError((error, c) => {
   if (error instanceof InvalidMediaError) return c.json({ error: error.message }, 400, jsonHeaders);
   if (error instanceof FolderNotFoundError) return c.json({ error: 'Folder not found' }, 404, jsonHeaders);
   if (error instanceof NavigationConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
+  if (error instanceof PublishDeliveryNotFoundError) return c.json({ error: 'Build request not found' }, 404, jsonHeaders);
+  if (error instanceof PublishDeliveryConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof z.ZodError) return c.json({ error: 'Invalid request', details: error.issues }, 400, jsonHeaders);
   console.error('Admin API error', error);
   return c.json({ error: 'Request failed' }, 500, jsonHeaders);
@@ -97,8 +100,12 @@ app.delete('/admin/api/documents/:id', async (c) => {
 app.post('/admin/api/documents/:id/publish', async (c) => {
   const { version } = await c.req.json<{ version?: number }>();
   if (!Number.isInteger(version)) return c.json({ error: 'version is required' }, 400, jsonHeaders);
-  return c.json(await publishDocument(c.env, c.req.param('id'), version!, locale(c)), 200, jsonHeaders);
+  const result = await publishDocumentAndRequest(c.env, c.req.param('id'), version!, locale(c));
+  return c.json(result, 200, jsonHeaders);
 });
+app.post('/admin/api/publish/site', async (c) => c.json({ delivery: await requestPublish(c.env, 'site') }, 200, jsonHeaders));
+app.get('/admin/api/publish/deliveries', async (c) => c.json(await listPublishDeliveries(c.env), 200, jsonHeaders));
+app.post('/admin/api/publish/deliveries/:id/retry', async (c) => c.json({ delivery: await retryPublish(c.env, c.req.param('id')) }, 200, jsonHeaders));
 app.get('/admin/api/documents/:id/revisions', async (c) => c.json(await listRevisions(c.env, c.req.param('id'), locale(c)), 200, jsonHeaders));
 app.post('/admin/api/documents/:id/revisions/:revisionId/restore', async (c) => {
   const { version } = await c.req.json<{ version?: number }>();

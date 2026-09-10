@@ -19,6 +19,9 @@ export type DocumentView = {
   publishedAt: number | null; publishedRevisionId: string | null;
 };
 
+/** A delivery is inserted in the same D1 batch as the published revision pointer. */
+export type PendingPublishDelivery = { id: string; requestedAt: number };
+
 const translationSelect = `
   SELECT t.id,t.document_id,t.locale,t.title,t.sidebar_label,t.description,t.content_json,
     t.published_revision_id,t.version,t.created_at,t.updated_at,t.published_at,
@@ -51,13 +54,17 @@ async function getTranslation(env: RuntimeEnv, documentId: string, locale: Suppo
   return row;
 }
 
-async function snapshot(env: RuntimeEnv, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number) {
-  const id = crypto.randomUUID();
-  await env.DB.prepare(`
+function snapshotStatement(env: RuntimeEnv, id: string, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number) {
+  return env.DB.prepare(`
     INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
     SELECT ?, id, COALESCE((SELECT MAX(revision) + 1 FROM document_revision WHERE document_translation_id = ?), 1), ?, sidebar_label, ?, ?, ?
     FROM document_translation WHERE id = ?`)
-    .bind(id, translationId, input.title, input.description, serializeContent(input.contentJson), now, translationId).run();
+    .bind(id, translationId, input.title, input.description, serializeContent(input.contentJson), now, translationId);
+}
+
+async function snapshot(env: RuntimeEnv, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number) {
+  const id = crypto.randomUUID();
+  await snapshotStatement(env, id, translationId, input, now).run();
   return id;
 }
 
@@ -104,16 +111,27 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
   return getDocument(env, id, locale);
 }
 
-export async function publishDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale) {
+export async function publishDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale, delivery?: PendingPublishDelivery) {
   const current = await getTranslation(env, id, locale);
   if (current.version !== version) throw new DocumentConflictError();
   const now = Date.now();
-  const revisionId = await snapshot(env, current.id, {
+  const revisionId = crypto.randomUUID();
+  const results = await env.DB.batch([
+    snapshotStatement(env, revisionId, current.id, {
     title: current.title, description: current.description, contentJson: parseContent(current.content_json),
-  }, now);
-  const result = await env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
-    .bind(revisionId, now, now, current.id, version).run();
-  if (result.meta.changes !== 1) throw new DocumentConflictError();
+    }, now),
+    env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
+      .bind(revisionId, now, now, current.id, version),
+    ...(delivery ? [env.DB.prepare(`
+      INSERT INTO publish_delivery (id,trigger_kind,document_translation_id,status,attempts,already_exists,requested_at)
+      VALUES (?,'document',?,'pending',0,0,?)`).bind(delivery.id, current.id, delivery.requestedAt)] : []),
+  ]);
+  if (results[1]?.meta.changes !== 1) {
+    // A concurrent write is the only expected cause after the version read. Do
+    // not leave an orphaned retryable request if it occurred in that narrow window.
+    if (delivery) await env.DB.prepare('DELETE FROM publish_delivery WHERE id=?').bind(delivery.id).run();
+    throw new DocumentConflictError();
+  }
   return getDocument(env, id, locale);
 }
 

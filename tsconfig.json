@@ -8,8 +8,16 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "worker-configuration.d.ts"],
-  "exclude": ["src/admin/client.ts"]
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "worker-configuration.d.ts"
+  ],
+  "exclude": [
+    "src/admin/**"
+  ]
 }

@@ -39,4 +39,12 @@ describe('Tiptap renderer', () => {
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: 'javascript:alert(1)' } })).toThrow('Unsafe');
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: '/admin/api/media/object/media/example.png' } })).toThrow('MEDIA_PUBLIC_URL');
   });
+  it('renders task lists and rules created by the Simple Editor toolbar', () => {
+    const markdown = renderDocumentContent({ type: 'doc', content: [
+      { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: true }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Install the CMS' }] }] }] },
+      { type: 'horizontalRule' },
+    ] });
+    expect(markdown).toContain('- [x] Install the CMS');
+    expect(markdown).toContain('---');
+  });
 });

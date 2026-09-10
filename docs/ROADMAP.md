@@ -1,8 +1,19 @@
 # Roadmap / terra引き継ぎ
 
-## 現在地（2026-09-09）
+## 現在地（2026-09-10）
 
-P0〜P2のローカルMVPを実装した。SonicJS、workspaces、内部user/RBAC/KVは撤去済み。
+Admin UIのレイアウト修正を完了した。公式Simple Editorの単体ページ用`100vw`/`100vh`を
+管理画面の編集領域へscopeした。左の文書ナビと、Title・Descriptionの入力枠を持つ中央の編集領域へ
+再構成している。中央の編集領域はサイドバー以外の横幅を使う。Contentは外側のカードを持たず、公式Simple Editorの背景色・toolbar・本文スタイルを
+使い、wrapperの縁だけを角丸にする。CMS側は全画面wrapperを編集領域へ収め、公式の本文列をDocs向けに54remへ広げるだけを上書きする。Descriptionはタイトル直下で編集し、
+Page settings panelと手動slug入力は置かない。
+テーマはAuto（OS追従）/ Light / Darkを選択でき、選択値をbrowser local storageに保存する。
+`npm run check:admin`を追加し、Worker側とは別にReact/Tiptap sourceも型検査する。
+React／テンプレート導入の変更は未コミット。次の実装優先度はP2.5のNavigation Tree操作である。
+
+P0〜P2の基盤はローカルMVPとして実装したが、Navigation Tree導入に伴いD1 schemaとAdmin APIを
+作り直す。旧local D1は削除し、migrationは新しい単一の`0001`のみへ統合する。
+SonicJS、workspaces、内部user/RBAC/KVは撤去済み。
 rootの`src/`、`migrations/`、`astro.config.mjs`、`wrangler.jsonc`だけを実行対象とする。
 本番deploy、実Access、Workers Builds、Deploy Hook配送記録は未実装・未検証。
 
@@ -10,9 +21,10 @@ rootの`src/`、`migrations/`、`astro.config.mjs`、`wrangler.jsonc`だけを�
 
 - 1 Worker + Static Assets。`assets.run_worker_first`で`/admin`と`/admin/*`のみWorker-first。
   公開DocsはStatic Assetsから直接配信され、D1/APIを呼ばない。
-- `migrations/0001_docs.sql`: documents、document_revisions、media。D1 + Drizzle。
+- `migrations/0001_schema.sql`: folder、document、document_revision、media。D1 + Drizzle。
 - Draft/public revision pointer、CRUD、optimistic version競合、revision一覧、Restore、Publish。
-- Tiptapの基本編集、Table/Image/Video、Callout/Steps/Tabs node、最小Admin UI。
+- Tiptap公式Simple Editor（MIT source）を組み込んだReact Admin UI、Table/Image/Video、Callout/Steps/Tabs node。
+  Mediaはdialogからカーソルへ挿入し、下書きの未保存状態を文書切替時に確認する。
 - HonoでAdmin APIを構成。CSRF middlewareとDocs/Media/export routesを分離。
 - R2 Media upload/list/proxy。PNG/JPEG/WebP/AVIF/MP4/WebMのContent-Type・signature・最大10 MiB検証。
 - build専用`/admin/export/snapshot`。productionではCloudflare Accessのpath policyで保護する。
@@ -40,6 +52,21 @@ Node 22.18.0ではundiciの>=22.19警告が出るため、22.22.2以上を使う
 確認は必ずlocal exportまたはWorkers BuildsのPublished snapshotを使用する。大きな動画は
 P3以降にR2 multipart uploadを追加して扱う。
 
+## P2.5: Docs Navigation Tree / schema reset
+
+1. 旧local D1とmigrationを削除し、単数形の`folder`、`document`、`document_revision`、`media`だけを持つ新しい`0001`を作る。
+2. rootは`NULL` parent/folderで表現する。仮想root rowは作らない。partial unique indexとAPI検査でFolder/Documentのslug衝突を拒否する。
+3. `document`はDraft、`published_revision_id`は公開snapshotを表す。Navigationはrevisionに含めず、FolderとDocumentの現在位置を正本にする。
+4. `@headless-tree/core`と`@headless-tree/react`でAdminの左ペインをFolder/PageのNavigation Treeへ置き換える。
+5. exportがTreeから完全なStarlight filePathを作り、Folder/Pageの移動、rename、削除、公開snapshotをローカルで検証する。
+
+進行状況: 新しいsingle migrationをlocal D1へ適用済み。Folder作成、Folder配下のDocument作成、
+Publish、`/admin/export/snapshot`の`guides/install`生成、Astro/Starlightの`/guides/install/`静的生成を
+確認済み。`@headless-tree/react`によるFolder/PageのTree表示とページ選択をAdminへ接続済み。
+旧Section UIを削除し、Document APIの`folderId`へ統一した。Folder update/move/deleteとDocument moveの
+Hono APIは実装済みで、親Folderの存在確認とTree循環を拒否する。Admin UIからのFolder操作、D&D、
+キーボード操作は未実装。
+
 ## P3: Publish → Workers Builds
 
 1. `publish_deliveries`を追加。Publish/unpublish/delete/slug変更後に配送対象を記録する。
@@ -58,8 +85,9 @@ P3以降にR2 multipart uploadを追加して扱う。
 
 ## terraへの引き継ぎプロンプト
 
-> AGENTS.md、docs/ARCHITECTURE.md、docs/ROADMAP.mdを読んでください。P0〜P2は
-> ローカルMiniflareで検証済みです。次はP3の配送記録とDeploy Hook retryを実装し、
-> その後P4で実Cloudflare Access service tokenとWorkers Buildsを接続してください。
+> AGENTS.md、README.md、docs/ARCHITECTURE.md、docs/ROADMAP.mdを読んでください。
+> P2.5のNavigation Treeを完成させます。Folder作成・rename・削除、Documentの移動・並べ替え、
+> headless-treeのD&Dとキーボード操作を、既存のHono Navigation APIと単一migrationに接続してください。
+> Treeの変更からPublished exportまでをlocal Miniflareで検証し、deployはしないでください。
 > 汎用CMS/Auth/RBAC/workflow/plugin systemを作らず、既存のTiptap/Drizzle/Cloudflare機能と
 > Docs向けGlueに限定してください。実Accessやdeployを行った場合だけ、その結果を記録してください。

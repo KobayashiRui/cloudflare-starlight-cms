@@ -10,7 +10,7 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 `/admin` と `/admin/api/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
 利用者が管理者です。
 
-- Tiptap JSONを正本にしたDocs CRUD
+- Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
 - Draft revisionとPublished revisionの分離、revision履歴とRestore
 - D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
 - Cloudflare Access Applicationによる`/admin/*`とbuild exportのedge保護

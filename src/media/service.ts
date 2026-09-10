@@ -53,7 +53,7 @@ export async function uploadMedia(env: RuntimeEnv, request: Request) {
   try {
     await database(env).insert(media).values({
       id, objectKey, fileName: file.name.slice(0, 255) || `${id}.${extension}`, contentType: type,
-      size: file.size, createdAt: now, authorSubject: 'cloudflare-access', authorEmail: 'access-protected-admin@local.invalid',
+      size: file.size, createdAt: now,
     });
   } catch (error) {
     await env.MEDIA_BUCKET.delete(objectKey);

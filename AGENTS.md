@@ -11,7 +11,7 @@ SonicJS等の汎用CMSに依存しない。CloudCore/SonicJSは参考実装に�
 参考コードの採用時は出典とライセンス表示を維持する。
 
 ## 採用
-- Editor: Tiptap。正本はTiptap JSON。Editor engineは自作しない。
+- Admin UI: React。Editor: Tiptap公式Simple Editor（MIT source）+ `@tiptap/react`。正本はTiptap JSON。Editor engineは自作しない。
 - DB: Cloudflare D1 + Drizzle。Media: R2。
 - Auth: Cloudflare Accessのみ。
 - Public: Astro + Starlight SSG、Search: 標準Pagefind。

@@ -5,6 +5,7 @@ import { InvalidMediaError, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { renderDocumentContent } from '../starlight/render.ts';
 import { adminHtml } from './html.ts';
+import { createFolder, deleteFolder, FolderNotFoundError, listTree, moveTreeItem, NavigationConflictError, updateFolder } from '../navigation/service.ts';
 
 type AdminEnv = { Bindings: RuntimeEnv };
 const app = new Hono<AdminEnv>();
@@ -24,14 +25,18 @@ const csrf: MiddlewareHandler<AdminEnv> = async (c, next) => {
 };
 
 async function publishedSnapshot(env: RuntimeEnv) {
-  const rows = await env.DB.prepare(`SELECT d.id, r.title, r.slug, r.description, r.section, r.sort_order, r.content_json, d.created_at, d.updated_at, d.published_at FROM documents d JOIN document_revisions r ON r.id = d.published_revision_id WHERE d.status = 'published' ORDER BY r.sort_order ASC, r.slug ASC`).all<{
-    id: string; title: string; slug: string; description: string; section: string; sort_order: number;
-    content_json: string; created_at: number; updated_at: number; published_at: number;
-  }>();
+  const folders = await env.DB.prepare('SELECT id,parent_id,slug FROM folder').all<{ id:string; parent_id:string|null; slug:string }>();
+  const parent = new Map(folders.results.map((row) => [row.id, row]));
+  const path = (folderId: string | null, slug: string) => {
+    const parts = [slug]; let cursor = folderId; const seen = new Set<string>();
+    while (cursor) { if (seen.has(cursor)) throw new Error('Navigation cycle'); seen.add(cursor); const item = parent.get(cursor); if (!item) throw new Error('Missing folder'); parts.unshift(item.slug); cursor = item.parent_id; }
+    return parts.join('/');
+  };
+  const rows = await env.DB.prepare(`SELECT d.id,d.folder_id,d.sort_order,r.title,r.slug,r.description,r.content_json,d.created_at,d.updated_at,d.published_at FROM document d JOIN document_revision r ON r.id=d.published_revision_id WHERE d.status='published' ORDER BY d.sort_order,d.slug`).all<{ id:string; folder_id:string|null; sort_order:number; title:string; slug:string; description:string; content_json:string; created_at:number; updated_at:number; published_at:number }>();
   return {
     version: 2,
     documents: rows.results.map((row) => ({
-      id: row.id, title: row.title, slug: row.slug, description: row.description, section: row.section,
+      id: row.id, title: row.title, slug: path(row.folder_id, row.slug), description: row.description, section: '',
       order: row.sort_order, body: { format: 'markdown', value: renderDocumentContent(JSON.parse(row.content_json)) },
       status: 'published', createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
       publishedAt: new Date(row.published_at).toISOString(),
@@ -43,6 +48,8 @@ app.onError((error, c) => {
   if (error instanceof DocumentNotFoundError) return c.json({ error: 'Not found' }, 404, jsonHeaders);
   if (error instanceof DocumentConflictError) return c.json({ error: error.message || 'The document changed. Reload it and try again.' }, 409, jsonHeaders);
   if (error instanceof InvalidMediaError) return c.json({ error: error.message }, 400, jsonHeaders);
+  if (error instanceof FolderNotFoundError) return c.json({ error: 'Folder not found' }, 404, jsonHeaders);
+  if (error instanceof NavigationConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof z.ZodError) return c.json({ error: 'Invalid request', details: error.issues }, 400, jsonHeaders);
   console.error('Admin API error', error);
   return c.json({ error: 'Request failed' }, 500, jsonHeaders);
@@ -57,6 +64,11 @@ app.get('/admin/', adminHome);
 app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.use('/admin/api/*', csrf);
+app.get('/admin/api/tree', async (c) => c.json(await listTree(c.env), 200, jsonHeaders));
+app.post('/admin/api/folders', async (c) => c.json(await createFolder(c.env, await c.req.json()), 201, jsonHeaders));
+app.put('/admin/api/folders/:id', async (c) => c.json(await updateFolder(c.env, c.req.param('id'), await c.req.json()), 200, jsonHeaders));
+app.delete('/admin/api/folders/:id', async (c) => { await deleteFolder(c.env, c.req.param('id')); return new Response(null, { status: 204, headers: noStore }); });
+app.post('/admin/api/tree/move', async (c) => c.json(await moveTreeItem(c.env, await c.req.json()), 200, jsonHeaders));
 app.get('/admin/api/documents', async (c) => c.json(await listDocuments(c.env), 200, jsonHeaders));
 app.post('/admin/api/documents', async (c) => c.json(await createDocument(c.env, await c.req.json()), 201, jsonHeaders));
 app.get('/admin/api/documents/:id', async (c) => c.json(await getDocument(c.env, c.req.param('id')), 200, jsonHeaders));

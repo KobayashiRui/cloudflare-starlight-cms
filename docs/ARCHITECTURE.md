@@ -4,15 +4,29 @@
 ## 1 repo / 1 Worker
 公開Docs: Astro/Starlight SSG + Pagefind → Workers Static Assets。
 管理: /admin と /admin/* → Access → Worker → D1/Drizzle、R2。
-管理HTTPはHono、管理APIは /admin/api/*。`/admin/app.js`は本番ではAccess applicationのpath policyで保護し、
-localではtoken付き管理HTMLがAPIへtokenを付与する。選択的Worker-first設定は公式schemaで確認済みで、
+管理HTTPはHono、管理APIは /admin/api/*。`/admin/app.js`を含む`/admin/*`は本番ではAccess applicationのpath policyで保護し、
+local Wranglerでは認証なしで動作する。選択的Worker-first設定は公式schemaで確認済みで、
 公開閲覧でWorker/D1を呼ばない。
 SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
 
-## 編集と公開
-Tiptap JSONが正本。documentsがdraftRevisionId/publishedRevisionIdを参照し、
-revisionsは本文とtitle/slug/description/section/orderの不変snapshotを保存する。
-保存/Restoreは新revision。Publishだけが公開pointerを変更する。競合はrevision比較で検出。
+## 編集・Navigation・公開
+Tiptap JSONがDocumentのDraft正本。`document`は編集中のtitle/slug/description/contentを持ち、
+`published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`は持たない。
+保存とRestoreは`document_revision`を新規追加し、Publishも現在のDocumentからrevisionを新規追加して
+公開pointerを更新する。そのためDraftとPublishedは分離される。
+
+Navigationはcontent revisionと分離した現在のTree状態である。`folder.parent_id IS NULL`と
+`document.folder_id IS NULL`はrootを表す。Folderは本文を持たないDocs専用のNavigation nodeで、
+FolderとDocumentは同じ親内でslugを共有できない。DBのpartial unique indexで各テーブル内の
+root/child slugを保護し、テーブルをまたぐ衝突はNavigation APIが検査する。
+Folderのrename/move、Documentのfolder移動・並べ替えはNavigation変更としてそのまま公開Treeへ反映し、
+Deploy Hookの配送対象にする。Document Restoreは本文/title/description/slugだけを戻し、
+Navigationは復元しない。
+
+DocumentとFolderの`slug`は一階層のURL segmentである。exportはTreeをたどり完全なpathを作り、
+そのpathをStarlight loaderのfilePathに渡す。Treeがそのまま公開URLとStarlight sidebarの階層となる。
+AdminのTree UIは`@headless-tree/core`と`@headless-tree/react`を使う。現時点では展開と選択を実装済みで、
+D&Dとキーボード操作はP2.5の残作業である。独自Tree engineは作らない。
 Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs、
 Video→静的videoの不足だけを実装する。Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
 未知nodeの黙殺や本文のMDX/JS実行は禁止。
@@ -21,7 +35,7 @@ Video→静的videoの不足だけを実装する。Astro Loaderとの接続はl
 同じhuman policyを持つ`/admin`と`/admin/*`を別Applicationとして設定する。専用Access
 application/service tokenで保護したexportを同じWorkerに設ける。localでは認証なしで動作する。
 例: /admin/export/* をhuman用 /admin/* より具体的なapplicationで保護し、
-Workerでもexport専用AUDを管理APIに受理しない。
+WorkerはAccess JWT/AUDを解釈せず、URLごとのAccess Applicationで人間用Adminとbuild exportを分離する。
 path優先順位とservice identity claimsは公式資料/実環境で確認する。
 exportはDB内部schemaと分離したversioned DTOでPublished全件の一貫したsnapshotを返す。
 Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回deployを維持する。

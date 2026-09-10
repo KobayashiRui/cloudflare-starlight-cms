@@ -11,6 +11,7 @@ function decorateText(value: Node, output: string): string {
     const typed = mark as { type: unknown; attrs?: Record<string, unknown> };
     if (typed.type === 'bold') output = `**${output}**`;
     if (typed.type === 'italic') output = `*${output}*`;
+    if (typed.type === 'strike') output = `~~${output}~~`;
     if (typed.type === 'code') output = `\`${output}\``;
     if (typed.type === 'link') output = `[${output}](${url(typed.attrs?.href)})`;
   }
@@ -35,10 +36,13 @@ export function render(nodeValue: unknown): string {
     case 'heading': return `${'#'.repeat(Number(value.attrs?.level ?? 2))} ${text(value)}`;
     case 'bulletList': return children(value).map((item) => `- ${text(item)}`).join('\n');
     case 'orderedList': return children(value).map((item, index) => `${index + 1}. ${text(item)}`).join('\n');
+    case 'taskList': return children(value).map((item) => `- [${item.attrs?.checked === true ? 'x' : ' '}] ${text(item)}`).join('\n');
+    case 'taskItem': return text(value);
     case 'listItem': return text(value);
     case 'blockquote': return text(value).split('\n').map((line) => `> ${line}`).join('\n');
     case 'codeBlock': return `\`\`\`${typeof value.attrs?.language === 'string' ? value.attrs.language : ''}\n${text(value)}\n\`\`\``;
     case 'hardBreak': return '  \n';
+    case 'horizontalRule': return '---';
     case 'image': return `![${typeof value.attrs?.alt === 'string' ? value.attrs.alt : ''}](${url(value.attrs?.src)})`;
     case 'video': return `<video controls src="${url(value.attrs?.src)}"></video>`;
     case 'callout': return `:::note[${asideTitle(value.attrs?.title)}]\n${children(value).map(render).join('\n\n')}\n:::`;

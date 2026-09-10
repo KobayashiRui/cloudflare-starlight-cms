@@ -60,6 +60,10 @@ function ChevronRightIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" /></svg>;
 }
 
+function HistoryIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 1.5M3.1 12a8.9 8.9 0 1 0 2.1-5.8M3.1 4.8v4.1h4.1" /></svg>;
+}
+
 function slugify(value: string) {
   return value
     .normalize('NFKD')
@@ -213,6 +217,15 @@ function App() {
     if (!current || !editor) return;
     setEditorDocument(editor, current.contentJson);
   }, [current, editor]);
+
+  useEffect(() => {
+    if (!isRevisionOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsRevisionOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isRevisionOpen]);
 
   const selectDocument = useCallback(async (document: DocumentRecord, targetLocale: SupportedLocale = document.locale) => {
     if (isDirty && !window.confirm('Discard unsaved changes?')) return;
@@ -463,6 +476,14 @@ function App() {
     }
   };
 
+  const toggleRevisionHistory = async () => {
+    if (isRevisionOpen) {
+      setIsRevisionOpen(false);
+      return;
+    }
+    await loadRevisions();
+  };
+
   const restore = async (revision: Revision) => {
     if (!current?.id) return;
     try {
@@ -576,11 +597,10 @@ function App() {
             <div className="cms-document-state">
               <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved changes' : current.status}</span>
               <span>{isDirty ? 'Draft changes are not saved.' : 'Saved draft.'}</span>
-              {current.id && <button className="cms-history-button" type="button" onClick={() => void loadRevisions()} aria-expanded={isRevisionOpen}>Revision history</button>}
             </div>
             <div className="cms-document-action-buttons">
-              {current.id && <button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>Delete</button>}
               <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+              {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>
           </section>
           <section className="cms-editor-surface" aria-label="Document editor">
@@ -608,6 +628,7 @@ function App() {
                 return uploaded.url;
               }} /></div>
             </section>
+            {current.id && <section className="cms-danger-zone" aria-label="Danger zone"><div><h2>Delete page</h2><p>Permanently remove this page and its translations.</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>Delete page</button></section>}
           </section>
         </>}
       </main>

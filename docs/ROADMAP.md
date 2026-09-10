@@ -8,7 +8,7 @@ Admin UIのレイアウト修正を完了した。公式Simple Editorの単体�
 使い、wrapperの縁だけを角丸にする。CMS側は全画面wrapperを編集領域へ収め、公式の本文列をDocs向けに54remへ広げるだけを上書きする。Descriptionはタイトル直下で編集し、
 Page settings panelと手動slug入力は置かない。
 テーマはSystem（OS追従）を初期値とし、右端の太陽／月ボタンで必要時だけ明暗を直接切り替える。選択値をbrowser local storageに保存する。
-Document操作はmain上部に置き、左にstatus／Revision history、右にDelete／Save draftを並べる。Revision historyは本文を押し下げず、右側drawerで表示する。
+Document操作はmain上部に置き、左にstatus、右端にHistory drawer toggle、その左にSave draftを置く。Deleteは本文下部のDanger zoneに分離する。Historyはactive状態を持ち、同じボタン／Close／Escで閉じられる、右側の高さを制限したdrawerで表示する。
 Breadcrumbは表示上のrootを`Documents`とし、内部root pathを見せずChevronRightでフォルダ階層を区切る。
 `npm run check:admin`を追加し、Worker側とは別にReact/Tiptap sourceも型検査する。
 P3のPublish → Workers Builds配送のローカル実装まで完了した。次はP4の実Cloudflare Access /

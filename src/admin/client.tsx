@@ -56,6 +56,10 @@ function MoonIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" /></svg>;
 }
 
+function ChevronRightIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" /></svg>;
+}
+
 function slugify(value: string) {
   return value
     .normalize('NFKD')
@@ -242,12 +246,12 @@ function App() {
     setFolderName(folder.name);
     setFolderSlug(folder.slug);
     setIsDirty(false);
-    showNotice(`Folder selected: ${folder.name}`);
+    showNotice('');
   }, [isDirty, showNotice, treeItems]);
   const selectNavigationRoot = () => {
     if (isDirty && !window.confirm('Discard unsaved changes?')) return;
     setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(null); setMissingTranslationSource(null);
-    setLocale(defaultLocale); setIsDirty(false); showNotice('Navigation selected.');
+    setLocale(defaultLocale); setIsDirty(false); showNotice('');
   };
 
   const selectTreeDocument = (id: string) => {
@@ -534,21 +538,22 @@ function App() {
     }
     return leaf ? [...folders, { id: '', name: leaf }] : folders;
   };
-  const renderBreadcrumb = (folderId: string | null, leaf?: string) => <nav className="cms-breadcrumb" aria-label="Navigation path">
-    <button className="cms-breadcrumb-root" type="button" onClick={selectNavigationRoot} aria-label="Top level">/</button>
-    {breadcrumbItems(folderId, leaf).map((item) => <span key={`${item.id}:${item.name}`}><b>/</b>{item.id ? <button type="button" onClick={() => selectFolder(item.id)}>{item.name}</button> : <strong>{item.name}</strong>}</span>)}
-  </nav>;
+  const renderBreadcrumb = (folderId: string | null, leaf?: string) => {
+    const items = breadcrumbItems(folderId, leaf);
+    return <nav className="cms-breadcrumb" aria-label="Document hierarchy">
+      <button className="cms-breadcrumb-root" type="button" onClick={selectNavigationRoot}>Documents</button>
+      {items.map((item) => <span className="cms-breadcrumb-item" key={`${item.id}:${item.name}`}><ChevronRightIcon />{item.id ? <button type="button" onClick={() => selectFolder(item.id)}>{item.name}</button> : <strong>{item.name}</strong>}</span>)}
+    </nav>;
+  };
 
   return <div className="cms-shell">
     <header className="cms-topbar">
       <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>Docs CMS</span></a>
       <div className="cms-topbar-controls">
         <div className="cms-actions">
-        {current && <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved' : current.status}</span>}
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
         {latestDelivery?.status === 'failed' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
         {current?.id ? <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
-        {current?.id && <button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void remove()}>Delete</button>}
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -566,7 +571,18 @@ function App() {
 
       <main className="cms-main">
         {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings">{renderBreadcrumb(selectedFolderId)}<header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
-          {renderBreadcrumb(fields.folderId, fields.slug || 'new-document')}
+          {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
+          <section className="cms-document-actions" aria-label="Document actions">
+            <div className="cms-document-state">
+              <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved changes' : current.status}</span>
+              <span>{isDirty ? 'Draft changes are not saved.' : 'Saved draft.'}</span>
+              {current.id && <button className="cms-history-button" type="button" onClick={() => void loadRevisions()} aria-expanded={isRevisionOpen}>Revision history</button>}
+            </div>
+            <div className="cms-document-action-buttons">
+              {current.id && <button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>Delete</button>}
+              <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+            </div>
+          </section>
           <section className="cms-editor-surface" aria-label="Document editor">
             <div className="cms-document-fields">
               <label className="cms-meta-field">
@@ -585,19 +601,19 @@ function App() {
               </label>
             </div>
             <section className="cms-editor-field" aria-label="Content">
-              <header className="cms-editor-field-header"><span>Content</span>{current.id && <button className="cms-history-button" type="button" onClick={() => void loadRevisions()} aria-expanded={isRevisionOpen}>{isRevisionOpen ? 'Refresh history' : 'Revision history'}</button>}</header>
+              <header className="cms-editor-field-header"><span>Content</span></header>
               <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={() => setIsDirty(true)} uploadImage={async (file) => {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
               }} /></div>
             </section>
-            <footer className="cms-draft-actions"><span>{isDirty ? 'Draft changes are not saved.' : 'Save changes as a draft before publishing.'}</span><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button></footer>
-            {isRevisionOpen && <section className="cms-revision-history" aria-label="Revision history"><header><h2>Revision history</h2><button type="button" onClick={() => setIsRevisionOpen(false)}>Close</button></header>{revisions.length === 0 ? <p>No saved revisions yet.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" onClick={() => void restore(revision)}>Restore</button></div>)}</div>}</section>}
           </section>
         </>}
       </main>
     </div>
+
+    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">Revision history</h2><p>Restore adds the selected revision as a new draft.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label="Close revision history">×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">No saved revisions yet.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" onClick={() => void restore(revision)}>Restore</button></div>)}</div>}</aside></div>}
 
     {isMediaPickerOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsMediaPickerOpen(false)}>
       <section className="cms-media-dialog" role="dialog" aria-modal="true" aria-labelledby="media-library-title" onMouseDown={(event) => event.stopPropagation()}>

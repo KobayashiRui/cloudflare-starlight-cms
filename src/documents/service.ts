@@ -137,8 +137,9 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
 
 export async function listRevisions(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
-  return (await env.DB.prepare('SELECT id,revision,title,sidebar_label,description,content_json,created_at FROM document_revision WHERE document_translation_id=? ORDER BY revision DESC')
-    .bind(current.id).all()).results;
+  const rows = await env.DB.prepare('SELECT id,revision,created_at FROM document_revision WHERE document_translation_id=? ORDER BY revision DESC')
+    .bind(current.id).all<{ id: string; revision: number; created_at: number }>();
+  return rows.results.map((row) => ({ id: row.id, revision: row.revision, createdAt: row.created_at }));
 }
 
 export async function restoreRevision(env: RuntimeEnv, id: string, revisionId: string, version: number, locale: SupportedLocale = defaultLocale) {

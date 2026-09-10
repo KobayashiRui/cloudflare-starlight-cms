@@ -1,7 +1,8 @@
+import { folderDeliveryStatement, siteDeliveryStatement } from '../publish/record.ts';
 import { z } from 'zod';
 import { slug } from '../documents/validation.ts';
 import type { RuntimeEnv } from '../env.ts';
-import { defaultLocale, type SupportedLocale } from '../locales.ts';
+import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
 
 const folderInput = z.object({ name: z.string().trim().min(1).max(120), slug, parentId: z.string().uuid().nullable().default(null), order: z.number().int().min(0).max(100000).default(0) });
 export class FolderNotFoundError extends Error {}
@@ -50,7 +51,7 @@ export async function listTree(env: RuntimeEnv, locale: SupportedLocale = defaul
       FROM document_translation t
       LEFT JOIN document_revision r ON r.id=t.published_revision_id`).all<{ document_id: string; locale: SupportedLocale; state: PublicationState }>(),
   ]);
-  const locales = (value: string | null) => value?.split(',').filter((item): item is SupportedLocale => item === 'en' || item === 'ja') ?? [];
+  const locales = (value: string | null) => value?.split(',').filter(isSupportedLocale) ?? [];
   const statesByDocument = new Map<string, { locale: SupportedLocale; state: PublicationState }[]>();
   for (const state of states.results) {
     const values = statesByDocument.get(state.document_id) ?? [];
@@ -82,6 +83,7 @@ export async function updateFolder(env: RuntimeEnv, id: string, raw: unknown, lo
   const results = await env.DB.batch([
     env.DB.prepare('UPDATE folder SET parent_id=?,slug=?,sort_order=?,updated_at=? WHERE id=?').bind(input.parentId, input.slug, input.order, now, id),
     env.DB.prepare('UPDATE folder_translation SET name=?,updated_at=? WHERE folder_id=? AND locale=?').bind(input.name, now, id, locale),
+    folderDeliveryStatement(env, id),
   ]);
   if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) throw new FolderNotFoundError();
   return { id, ...input, updatedAt: now };
@@ -94,7 +96,10 @@ export async function createFolderTranslation(env: RuntimeEnv, folderId: string,
   const existing = await env.DB.prepare('SELECT folder_id FROM folder_translation WHERE folder_id=? AND locale=?').bind(folderId, locale).first();
   if (existing) throw new NavigationConflictError('This translation already exists');
   const now = Date.now();
-  await env.DB.prepare('INSERT INTO folder_translation (folder_id,locale,name,created_at,updated_at) VALUES (?,?,?,?,?)').bind(folderId, locale, source.name, now, now).run();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO folder_translation (folder_id,locale,name,created_at,updated_at) VALUES (?,?,?,?,?)').bind(folderId, locale, source.name, now, now),
+    folderDeliveryStatement(env, folderId),
+  ]);
   return { id: folderId, name: source.name, updatedAt: now };
 }
 
@@ -150,6 +155,17 @@ export async function replaceTreeChildren(env: RuntimeEnv, raw: unknown) {
     if (usedSlugs.has(entry.slug)) throw new NavigationConflictError('A folder or page already uses this URL segment');
     usedSlugs.add(entry.slug);
   }
-  if (entries.length > 0) await env.DB.batch(reorderStatements(env, entries, input.parentId, Date.now()));
+  if (entries.length > 0) await env.DB.batch([
+    ...reorderStatements(env, entries, input.parentId, Date.now()),
+    siteDeliveryStatement(env, `EXISTS (
+      WITH RECURSIVE moved(id) AS (SELECT value FROM json_each(?)),
+      descendants(id) AS (
+        SELECT id FROM folder WHERE 'folder:' || id IN (SELECT id FROM moved)
+        UNION SELECT f.id FROM folder f JOIN descendants p ON f.parent_id=p.id
+      ) SELECT 1 FROM document d JOIN document_translation t ON t.document_id=d.id
+        WHERE t.published_revision_id IS NOT NULL AND
+          (d.folder_id IN (SELECT id FROM descendants) OR 'document:' || d.id IN (SELECT id FROM moved))
+    )`, [JSON.stringify(input.childIds)]),
+  ]);
   return { parentId: input.parentId, childIds: input.childIds };
 }

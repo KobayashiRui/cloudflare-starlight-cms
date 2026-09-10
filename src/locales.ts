@@ -1,11 +1,10 @@
-/**
- * Translation records use language codes. The Starlight adapter maps the
- * default language to an unprefixed URL when public i18n is enabled.
- */
-export const defaultLocale = 'en' as const;
-export const supportedLocales = [defaultLocale, 'ja'] as const;
+import { siteConfig } from './site.config.ts';
+export const defaultLocale = siteConfig.defaultLocale;
+export const supportedLocales = siteConfig.locales.map(({ code }) => code);
 export type SupportedLocale = (typeof supportedLocales)[number];
-
 export function isSupportedLocale(value: string): value is SupportedLocale {
-  return (supportedLocales as readonly string[]).includes(value);
+  return supportedLocales.some((locale) => locale === value);
+}
+export function localeLabel(value: SupportedLocale): string {
+  return siteConfig.locales.find(({ code }) => code === value)?.label ?? value;
 }

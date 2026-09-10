@@ -23,7 +23,7 @@ Navigationはcontent revisionと分離した現在のTree状態である。`fold
 FolderとDocumentは同じ親内でslugを共有できない。DBのpartial unique indexで各テーブル内の
 root/child slugを保護し、テーブルをまたぐ衝突はNavigation APIが検査する。
 Folderのrename/move、Documentのfolder移動・並べ替えはNavigation変更としてそのまま公開Treeへ反映し、
-Deploy Hookの配送対象にする。Document Restoreは本文/title/description/slugだけを戻し、
+Deploy Hookの配送対象にする。Document Restoreは本文/title/descriptionだけを戻し、
 Navigationは復元しない。
 
 DocumentとFolderの`slug`は一階層のURL segmentであり、全translationで共有する。exportはTreeをたどり完全なpathを作り、
@@ -47,12 +47,17 @@ Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回dep
 初回は明示的な空サイト＋Adminをdeployし、export設定後に通常buildへ移る。
 通信失敗時のfallbackとして初回モードを使わない。
 
+localの`npm run dev`はrootのNode coordinatorがAdmin Worker（8787）とStatic Docs preview（4321）を起動する。
+WorkerはAdmin用の`.dev-assets`だけを束縛するので、Published snapshotの変更に伴う`dist`のAstro buildが
+local D1 Workerを再起動させない。coordinatorはsnapshotの内容が変わった時だけAstro buildを実行する。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。Adminはesbuild watchで更新する。
+これはlocal限定の開発補助であり、appsや二つ目のWorkerは追加しない。
+
 ## Hook / Media / Setup
 公開revision確定と`publish_delivery`の保存を同じD1 batchで行った後、Deploy Hook→Workers Builds→
 同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
-最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。failedだけをAdminからretryできる。
-Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。Unpublish/delete/slug変更を実運用で
-反映するには、ヘッダーのRebuild public siteを要求する。自動配送の対象拡張はP4で実Accessとともに検証する。
+最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。`next_retry_at`はpending送信の30秒の占有期限として使用する（自動retry時刻ではない）。failedと期限切れpendingをAdminから手動retryできる。
+URL・Tree変更と削除は同じD1 batchにsite配送を記録し、更新成功後に送信する。
+Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送し、ヘッダーのRebuild public siteは手動の再要求として残す。実配送はP4で実Accessとともに検証する。
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、
@@ -62,8 +67,9 @@ Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF�
 Cloudflare/Astro非公式。無料運用は保証しない。
 
 ## i18n
-対応言語は`src/locales.ts`だけで定義する。新しいPage/Folderはdefault locale（現在は`en`）で作成し、
+サイト名・URL・対応言語は`src/site.config.ts`で定義し、AdminとStarlightで共有する。新しいPage/Folderはdefault locale（現在は`en`）で作成し、
 別言語はDocumentのLanguageから既存translationをDraftとして複製する。Treeは言語によって切り替えず、
 Folder/Pageの構造は常に共通である。Published snapshotはlocaleごとの公開revisionだけを含むv3 DTOであり、
-Starlight loaderはdefault localeをunprefixed path、その他をlocale prefixのfilePathへ変換する。そのため
-未翻訳またはDraftのtranslationは公開されない。
+Starlight loaderはdefault localeをunprefixed path、その他をlocale prefixのfilePathへ変換する。Draft本文は公開されない。未翻訳のURLにはStarlight標準の既定言語fallbackを使用する。
+
+公開exportはFolder・翻訳名・Published revisionを同一D1 batchで読む。更新日時は公開revisionの日時を使う。Navigation祖先のラベル・翻訳・順序を小さなDTOとして送り、Starlight標準sidebarへ変換する。Astro configとContent Loaderは同じbuildプロセス内で一度取得したsnapshotを共有する。

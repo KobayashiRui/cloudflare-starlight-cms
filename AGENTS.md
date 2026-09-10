@@ -34,11 +34,12 @@ migrationsとrootのAstro/Wrangler設定。Astro固有のpages等は必要に応
 将来の薄いdeployテンプレートはMVP後。今はパッケージ公開やmonorepo拡張をしない。
 
 ## データとEditor
-Documentはid/title/slug/description/section/order/contentJson/status/日時を扱う。
-draftRevisionIdとpublishedRevisionIdを分離し、Draft保存で公開snapshotを更新しない。
-revisionには本文と全metadataを保存し、Restoreは新revision追加とする。
-本文/metadataの正本はrevision。重複列を置く場合は同期規則を明確にする。
-同時保存はrevision比較で競合検出し、黙って上書きしない。
+folder/documentは共通TreeとURL segment、folder_translationは表示名を保持する。
+document_translationが編集中の本文・title・descriptionの正本で、published_revision_idが公開snapshotを指す。
+draft_revision_idとstatus列は作らない。保存とRestoreは新しいdocument_revisionを追加する。
+Revisionは本文・title・descriptionを保持し、NavigationとslugはRestoreしない。
+公開DTOの本文と更新日時は公開revisionから取得し、Draft保存で変更しない。
+同時保存はversion比較で競合検出し、黙って上書きしない。
 Tiptap既存機能でHeading/Paragraph/Bold/Italic/Link/List/Code/Table/Imageを扱う。
 Video/Callout/Steps/Tabsは既存拡張を調べ、Docs固有の不足だけcustom nodeにする。
 編集→保存→再編集→静的表示まで一組として実装する。
@@ -70,6 +71,6 @@ Cloudflare設定は最新公式資料を確認。型不一致をキャストで�
 bindings型はWrangler設定確定後に`wrangler types --env-interface CloudflareBindings`で生成する。
 不要な生成型を持ち越さない。
 旧SonicJSローカルDBは無断削除しない。新schemaは新しいDB名/保存先から始める。
-検証はcheck/test/demo build、runtime変更ではdry-runとローカル結合確認。
+検証はcheck/test/空サイトbuild/Published build、runtime変更ではdry-runとローカル結合確認。
 単体成功を実Access/本番deploy成功と扱わない。終了時ROADMAPを更新する。
 独立エージェントへの委任はユーザーが求めた場合のみ。モデルに依存する手順を作らない。

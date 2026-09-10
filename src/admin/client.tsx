@@ -1,3 +1,4 @@
+import { siteConfig } from '../site.config.ts';
 import { Node, type JSONContent } from '@tiptap/core';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import type { Editor, Extensions } from '@tiptap/react';
@@ -5,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
-import { defaultLocale, supportedLocales, type SupportedLocale } from '../locales';
+import { localeLabel, defaultLocale, supportedLocales, type SupportedLocale } from '../locales';
 import './styles/_variables.scss';
 import './styles/_keyframe-animations.scss';
 import './admin.scss';
@@ -186,8 +187,13 @@ function App() {
   const refreshTree = useCallback(async () => { setTreeItems(await api<NavigationItem[]>('/tree')); }, []);
   const refreshDeliveries = useCallback(async () => {
     const deliveries = await api<PublishDelivery[]>('/publish/deliveries');
-    setLatestDelivery(deliveries[0] ?? null);
+    setLatestDelivery(deliveries.find((item) => item.status === 'failed' || (item.status === 'pending' && (!item.nextRetryAt || item.nextRetryAt <= Date.now()))) ?? deliveries[0] ?? null);
   }, []);
+  useEffect(() => {
+    const refresh = () => { void refreshDeliveries().catch((error) => showNotice(String(error), true)); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [refreshDeliveries, showNotice]);
 
   const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
 
@@ -304,7 +310,7 @@ function App() {
     try {
       if (!missingTranslationSource) throw new Error('No source translation is available.');
       const created = await api<DocumentRecord>(`/documents/${encodeURIComponent(missingDocumentId)}/translations`, { method: 'POST', body: JSON.stringify({ sourceLocale: missingTranslationSource }) }, locale);
-      await Promise.all([refreshDocuments(), refreshTree()]);
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       await selectDocument(created);
       showNotice(`${locale} translation created from ${missingTranslationSource}.`);
     } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
@@ -359,7 +365,7 @@ function App() {
     } catch (error) { showNotice(String(error), true); throw error; }
   };
   const treeChanged = async () => {
-    await Promise.all([refreshTree(), refreshDocuments()]);
+    await Promise.all([refreshTree(), refreshDocuments(), refreshDeliveries()]);
     showNotice('Navigation updated.');
   };
 
@@ -397,7 +403,7 @@ function App() {
       setCurrent(saved);
       setFields(documentFields(saved));
       setIsDirty(false);
-      await Promise.all([refreshDocuments(), refreshTree()]);
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice('Draft saved.');
       return saved;
     } catch (error) {
@@ -409,7 +415,7 @@ function App() {
 
   const describeDelivery = (delivery: PublishDelivery) => {
     if (delivery.status === 'accepted') return delivery.alreadyExists ? 'Build already requested.' : 'Build requested.';
-    if (delivery.status === 'skipped') return 'Published, but Deploy Hook is not configured.';
+    if (delivery.status === 'skipped') return delivery.lastError === 'Local development rebuild is active' ? 'Published. Local docs rebuild automatically.' : 'Published, but Deploy Hook is not configured.';
     if (delivery.status === 'failed') return 'Published, but the build request failed. Retry it from the header.';
     return 'Build request is pending.';
   };
@@ -430,7 +436,7 @@ function App() {
       setCurrent(result.document);
       setFields(documentFields(result.document));
       setLatestDelivery(result.delivery);
-      await Promise.all([refreshDocuments(), refreshTree()]);
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
     } catch (error) {
       showNotice(String(error), true);
@@ -494,7 +500,7 @@ function App() {
       setFields(documentFields(restored));
       setEditorDocument(editor, restored.contentJson);
       setIsDirty(false);
-      await Promise.all([refreshDocuments(), refreshTree()]);
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice(`Revision ${revision.revision} restored as a draft.`);
     } catch (error) {
       showNotice(String(error), true);
@@ -512,7 +518,7 @@ function App() {
       setRevisions([]);
       setEditorDocument(editor, emptyContent);
       setIsDirty(false);
-      await Promise.all([refreshDocuments(), refreshTree()]);
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice('Document deleted.');
     } catch (error) {
       showNotice(String(error), true);
@@ -569,11 +575,11 @@ function App() {
 
   return <div className="cms-shell">
     <header className="cms-topbar">
-      <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>Docs CMS</span></a>
+      <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>{siteConfig.title}</span></a>
       <div className="cms-topbar-controls">
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
-        {latestDelivery?.status === 'failed' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
+        {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
         {current?.id ? <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
@@ -591,7 +597,7 @@ function App() {
       </aside>
 
       <main className="cms-main">
-        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings">{renderBreadcrumb(selectedFolderId)}<header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
+        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings">{renderBreadcrumb(selectedFolderId)}<header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
           {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
           <section className="cms-document-actions" aria-label="Document actions">
             <div className="cms-document-state">
@@ -610,7 +616,7 @@ function App() {
                 <input className="cms-slug-input" value={fields.slug} onChange={(event) => updateSlug(event.target.value)} onBlur={() => updateField('slug', slugify(fields.slug))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} aria-invalid={Boolean(fields.slug) && !validSlug.test(fields.slug)} placeholder="getting-started" />
                 <small className="cms-field-help">Required. Lowercase letters, numbers, and hyphens. English titles suggest a value while this field is empty.</small>
               </label>
-              {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{item === 'en' ? 'English' : '日本語'}</option>)}</select></label>}
+              {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
               <label className="cms-meta-field">
                 <span>Title</span>
                 <input className="cms-title-input" value={fields.title} onChange={(event) => updateTitle(event.target.value)} placeholder="Untitled document" />

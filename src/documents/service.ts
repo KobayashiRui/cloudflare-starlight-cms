@@ -1,3 +1,4 @@
+import { siteDeliveryStatement } from '../publish/record.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { documentInput, documentUpdate, parseContent, serializeContent, type DocumentInput } from './validation.ts';
@@ -54,11 +55,11 @@ async function getTranslation(env: RuntimeEnv, documentId: string, locale: Suppo
   return row;
 }
 
-function snapshotStatement(env: RuntimeEnv, id: string, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number) {
+function snapshotStatement(env: RuntimeEnv, id: string, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number, afterUpdate = false) {
   return env.DB.prepare(`
     INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
     SELECT ?, id, COALESCE((SELECT MAX(revision) + 1 FROM document_revision WHERE document_translation_id = ?), 1), ?, sidebar_label, ?, ?, ?
-    FROM document_translation WHERE id = ?`)
+    FROM document_translation WHERE id = ? ${afterUpdate ? 'AND changes()=1' : ''}`)
     .bind(id, translationId, input.title, input.description, serializeContent(input.contentJson), now, translationId);
 }
 
@@ -99,15 +100,19 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
   const input = documentUpdate.parse(raw);
   await assertSlugAvailable(env, input.folderId, input.slug, id);
   const current = await getTranslation(env, id, locale);
+  if (current.version !== input.version) throw new DocumentConflictError();
   const now = Date.now();
   const results = await env.DB.batch([
-    env.DB.prepare('UPDATE document SET folder_id=?,slug=?,sort_order=?,updated_at=? WHERE id=?')
-      .bind(input.folderId, input.slug, input.order, now, id),
+    siteDeliveryStatement(env, `EXISTS (SELECT 1 FROM document d JOIN document_translation t ON t.document_id=d.id
+      WHERE d.id=? AND t.published_revision_id IS NOT NULL AND (d.folder_id IS NOT ? OR d.slug<>? OR d.sort_order<>?)
+      AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?))`, [id,input.folderId,input.slug,input.order,current.id,input.version]),
+    env.DB.prepare('UPDATE document SET folder_id=?,slug=?,sort_order=?,updated_at=? WHERE id=? AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?)')
+      .bind(input.folderId, input.slug, input.order, now, id, current.id, input.version),
     env.DB.prepare('UPDATE document_translation SET title=?,description=?,content_json=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
       .bind(input.title, input.description, serializeContent(input.contentJson), now, current.id, input.version),
+    snapshotStatement(env, crypto.randomUUID(), current.id, input, now, true),
   ]);
-  if (results[1]?.meta.changes !== 1) throw new DocumentConflictError();
-  await snapshot(env, current.id, input, now);
+  if (results[2]?.meta.changes !== 1) throw new DocumentConflictError();
   return getDocument(env, id, locale);
 }
 
@@ -117,19 +122,16 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
   const now = Date.now();
   const revisionId = crypto.randomUUID();
   const results = await env.DB.batch([
-    snapshotStatement(env, revisionId, current.id, {
-    title: current.title, description: current.description, contentJson: parseContent(current.content_json),
-    }, now),
+    env.DB.prepare(`INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
+      SELECT ?,id,COALESCE((SELECT MAX(revision)+1 FROM document_revision WHERE document_translation_id=?),1),title,sidebar_label,description,content_json,?
+      FROM document_translation WHERE id=? AND version=?`).bind(revisionId,current.id,now,current.id,version),
     env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
       .bind(revisionId, now, now, current.id, version),
     ...(delivery ? [env.DB.prepare(`
       INSERT INTO publish_delivery (id,trigger_kind,document_translation_id,status,attempts,already_exists,requested_at)
-      VALUES (?,'document',?,'pending',0,0,?)`).bind(delivery.id, current.id, delivery.requestedAt)] : []),
+      SELECT ?,'document',id,'pending',0,0,? FROM document_translation WHERE id=? AND published_revision_id=?`).bind(delivery.id, delivery.requestedAt, current.id, revisionId)] : []),
   ]);
   if (results[1]?.meta.changes !== 1) {
-    // A concurrent write is the only expected cause after the version read. Do
-    // not leave an orphaned retryable request if it occurred in that narrow window.
-    if (delivery) await env.DB.prepare('DELETE FROM publish_delivery WHERE id=?').bind(delivery.id).run();
     throw new DocumentConflictError();
   }
   return getDocument(env, id, locale);
@@ -155,9 +157,12 @@ export async function restoreRevision(env: RuntimeEnv, id: string, revisionId: s
 
 export async function deleteDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
-  const deleted = await env.DB.prepare('DELETE FROM document_translation WHERE id=? AND version=? RETURNING id').bind(current.id, version).first<{ id: string }>();
-  if (!deleted) throw new DocumentConflictError();
-  await env.DB.prepare('DELETE FROM document WHERE id=? AND NOT EXISTS (SELECT 1 FROM document_translation WHERE document_id=?)').bind(id, id).run();
+  const results = await env.DB.batch([
+    siteDeliveryStatement(env, 'EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=? AND published_revision_id IS NOT NULL)', [current.id, version]),
+    env.DB.prepare('DELETE FROM document_translation WHERE id=? AND version=? RETURNING id').bind(current.id, version),
+    env.DB.prepare('DELETE FROM document WHERE id=? AND NOT EXISTS (SELECT 1 FROM document_translation WHERE document_id=?)').bind(id, id),
+  ]);
+  if (results[1]?.results.length !== 1) throw new DocumentConflictError();
 }
 
 export async function createDocumentTranslation(env: RuntimeEnv, documentId: string, locale: SupportedLocale, sourceLocale: SupportedLocale = defaultLocale) {

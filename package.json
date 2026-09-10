@@ -10,8 +10,7 @@
   "scripts": {
     "build": "astro build && node scripts/build-admin.mjs",
     "build:empty": "CMS_INITIAL_EMPTY=1 npm run build",
-    "dev": "npm run build:empty && wrangler dev --local",
-    "dev:docs": "astro dev",
+    "dev": "node scripts/dev.mjs",
     "check": "CMS_INITIAL_EMPTY=1 astro check && tsc --noEmit && npm run check:admin",
     "check:admin": "tsc -p tsconfig.admin.json --noEmit",
     "test": "vitest run",
@@ -63,6 +62,7 @@
     "@types/react-dom": "18.3.1",
     "class-variance-authority": "0.7.1",
     "esbuild": "0.28.2",
+    "miniflare": "5.20260908.0-alpha",
     "sass-embedded": "1.104.0",
     "typescript": "5.9.3",
     "vitest": "5.0.0",

@@ -5,4 +5,5 @@
 export type RuntimeEnv = CloudflareBindings & {
   MEDIA_PUBLIC_URL?: string;
   WORKERS_DEPLOY_HOOK_URL?: string;
+  LOCAL_DEV_BUILD?: string;
 };

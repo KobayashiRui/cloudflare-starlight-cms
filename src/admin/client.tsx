@@ -102,7 +102,8 @@ function documentFields(document: DocumentRecord): DocumentFields {
 }
 
 function setEditorDocument(editor: Editor | null, content: JSONContent) {
-  editor?.commands.setContent(content || emptyContent, { emitUpdate: false });
+  if (!editor || editor.isDestroyed) return;
+  editor.commands.setContent(content || emptyContent, { emitUpdate: false });
 }
 
 function App() {
@@ -177,7 +178,6 @@ function App() {
       setFields(documentFields(loaded));
       setRevisions([]);
       setIsRevisionOpen(false);
-      setEditorDocument(editor, loaded.contentJson);
       setIsDirty(false);
       showNotice(`${loaded.status === 'published' ? 'Published' : 'Draft'} · revision ${loaded.version}`);
     } catch (error) {
@@ -189,6 +189,7 @@ function App() {
     if (isDirty && !window.confirm('Discard unsaved changes?')) return;
     const folder = treeItems.find((item) => item.id === `folder:${folderId}`);
     if (!folder) return;
+    setEditor(null);
     setCurrent(null);
     setSelectedFolderId(folderId);
     setFolderName(folder.name);

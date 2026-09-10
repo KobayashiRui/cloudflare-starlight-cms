@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DocumentConflictError, DocumentNotFoundError, createDocument, deleteDocument, getDocument, listDocuments, listRevisions, publishDocument, restoreRevision, updateDocument } from '../documents/service.ts';
 import { InvalidMediaError, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
+import { defaultLocale } from '../locales.ts';
 import { renderDocumentContent } from '../starlight/render.ts';
 import { adminHtml } from './html.ts';
 import { createFolder, deleteFolder, FolderNotFoundError, listTree, moveTreeItem, NavigationConflictError, updateFolder } from '../navigation/service.ts';
@@ -32,7 +33,13 @@ async function publishedSnapshot(env: RuntimeEnv) {
     while (cursor) { if (seen.has(cursor)) throw new Error('Navigation cycle'); seen.add(cursor); const item = parent.get(cursor); if (!item) throw new Error('Missing folder'); parts.unshift(item.slug); cursor = item.parent_id; }
     return parts.join('/');
   };
-  const rows = await env.DB.prepare(`SELECT d.id,d.folder_id,d.sort_order,r.title,r.slug,r.description,r.content_json,d.created_at,d.updated_at,d.published_at FROM document d JOIN document_revision r ON r.id=d.published_revision_id WHERE d.status='published' ORDER BY d.sort_order,d.slug`).all<{ id:string; folder_id:string|null; sort_order:number; title:string; slug:string; description:string; content_json:string; created_at:number; updated_at:number; published_at:number }>();
+  const rows = await env.DB.prepare(`
+    SELECT d.id,d.folder_id,d.slug,d.sort_order,r.title,r.description,r.content_json,
+      t.created_at,t.updated_at,t.published_at
+    FROM document d
+    JOIN document_translation t ON t.document_id=d.id AND t.locale=?
+    JOIN document_revision r ON r.id=t.published_revision_id
+    ORDER BY d.sort_order,d.slug`).bind(defaultLocale).all<{ id:string; folder_id:string|null; slug:string; sort_order:number; title:string; description:string; content_json:string; created_at:number; updated_at:number; published_at:number }>();
   return {
     version: 2,
     documents: rows.results.map((row) => ({

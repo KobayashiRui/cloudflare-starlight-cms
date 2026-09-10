@@ -10,9 +10,11 @@ local Wranglerでは認証なしで動作する。選択的Worker-first設定は
 SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
 
 ## 編集・Navigation・公開
-Tiptap JSONがDocumentのDraft正本。`document`は編集中のtitle/slug/description/contentを持ち、
-`published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`は持たない。
-保存とRestoreは`document_revision`を新規追加し、Publishも現在のDocumentからrevisionを新規追加して
+`folder`と`document`は言語に依存しないidentityで、Treeの親子、URL segment、順序だけを持つ。
+表示名は`folder_translation`、編集内容は`document_translation`に置く。現在の管理UIは
+`src/locales.ts`の`defaultLocale`（`en`）に固定されている。Tiptap JSONがそのTranslationのDraft正本で、
+`published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`と`status`列は持たない。
+`published_revision_id IS NULL`が未公開を表す。保存とRestoreは`document_revision`を新規追加し、Publishも現在のTranslationからrevisionを新規追加して
 公開pointerを更新する。そのためDraftとPublishedは分離される。
 
 Navigationはcontent revisionと分離した現在のTree状態である。`folder.parent_id IS NULL`と
@@ -23,7 +25,7 @@ Folderのrename/move、Documentのfolder移動・並べ替えはNavigation変更
 Deploy Hookの配送対象にする。Document Restoreは本文/title/description/slugだけを戻し、
 Navigationは復元しない。
 
-DocumentとFolderの`slug`は一階層のURL segmentである。exportはTreeをたどり完全なpathを作り、
+DocumentとFolderの`slug`は一階層のURL segmentであり、全translationで共有する。exportはTreeをたどり完全なpathを作り、
 そのpathをStarlight loaderのfilePathに渡す。Treeがそのまま公開URLとStarlight sidebarの階層となる。
 AdminのTree UIは`@headless-tree/core`と`@headless-tree/react`を使う。現時点では展開と選択を実装済みで、
 D&Dとキーボード操作はP2.5の残作業である。独自Tree engineは作らない。
@@ -52,3 +54,8 @@ Admin専用URLを含むPublished snapshotはbuildを失敗させる。公開R2 U
 Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF対策だけを実施する。
 まず単一repoで完成。薄いテンプレート/パッケージ公開はMVP後。
 Cloudflare/Astro非公式。無料運用は保証しない。
+
+## i18nの段階導入
+DBは最初から`en`と`ja`を保存できるが、P2.5では`en`だけを作成・編集・exportする。
+P2.6でlocale selector、翻訳作成、missing translation表示を追加した後、Starlight Adapterでdefault localeを
+unprefixed path、その他をlocale prefixへ変換する。途中段階で不完全なlocaleを公開しない。

@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { slug } from '../documents/validation.ts';
 import type { RuntimeEnv } from '../env.ts';
-import { defaultLocale } from '../locales.ts';
+import { defaultLocale, type SupportedLocale } from '../locales.ts';
 
 const folderInput = z.object({ name: z.string().trim().min(1).max(120), slug, parentId: z.string().uuid().nullable().default(null), order: z.number().int().min(0).max(100000).default(0) });
 export class FolderNotFoundError extends Error {}
 export class NavigationConflictError extends Error {}
-export type TreeItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; documentId?: string };
+export type TreeItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: SupportedLocale[]; documentId?: string };
 
 async function assertAvailable(env: RuntimeEnv, parentId: string | null, slugValue: string, ignoreFolder = '', ignoreDocument = '') {
   const [folderMatch, documentMatch] = await Promise.all([
@@ -31,38 +31,51 @@ async function assertNoFolderCycle(env: RuntimeEnv, folderId: string, parentId: 
   }
 }
 
-export async function listTree(env: RuntimeEnv): Promise<TreeItem[]> {
+export async function listTree(env: RuntimeEnv, locale: SupportedLocale = defaultLocale): Promise<TreeItem[]> {
   const [folders, documents] = await Promise.all([
-    env.DB.prepare('SELECT f.id,f.parent_id,t.name,f.slug,f.sort_order FROM folder f JOIN folder_translation t ON t.folder_id=f.id WHERE t.locale=? ORDER BY f.sort_order,f.slug').bind(defaultLocale).all<{ id:string; parent_id:string|null; name:string; slug:string; sort_order:number }>(),
-    env.DB.prepare('SELECT d.id,d.folder_id,t.title,d.slug,d.sort_order FROM document d JOIN document_translation t ON t.document_id=d.id WHERE t.locale=? ORDER BY d.sort_order,d.slug').bind(defaultLocale).all<{ id:string; folder_id:string|null; title:string; slug:string; sort_order:number }>(),
+    env.DB.prepare("SELECT f.id,f.parent_id,COALESCE(t.name,fallback.name,f.slug) AS name,f.slug,f.sort_order,t.folder_id IS NOT NULL AS has_translation,(SELECT group_concat(locale, ',') FROM folder_translation WHERE folder_id=f.id) AS translation_locales FROM folder f LEFT JOIN folder_translation t ON t.folder_id=f.id AND t.locale=? LEFT JOIN folder_translation fallback ON fallback.folder_id=f.id AND fallback.locale=? WHERE EXISTS (SELECT 1 FROM folder_translation WHERE folder_id=f.id) ORDER BY f.sort_order,f.slug").bind(locale, defaultLocale).all<{ id:string; parent_id:string|null; name:string; slug:string; sort_order:number; has_translation:number; translation_locales:string|null }>(),
+    env.DB.prepare("SELECT d.id,d.folder_id,COALESCE(t.title,fallback.title,d.slug) AS title,d.slug,d.sort_order,t.document_id IS NOT NULL AS has_translation,(SELECT group_concat(locale, ',') FROM document_translation WHERE document_id=d.id) AS translation_locales FROM document d LEFT JOIN document_translation t ON t.document_id=d.id AND t.locale=? LEFT JOIN document_translation fallback ON fallback.document_id=d.id AND fallback.locale=? WHERE EXISTS (SELECT 1 FROM document_translation WHERE document_id=d.id) ORDER BY d.sort_order,d.slug").bind(locale, defaultLocale).all<{ id:string; folder_id:string|null; title:string; slug:string; sort_order:number; has_translation:number; translation_locales:string|null }>(),
   ]);
+  const locales = (value: string | null) => value?.split(',').filter((item): item is SupportedLocale => item === 'en' || item === 'ja') ?? [];
   return [
-    ...folders.results.map((row) => ({ id: `folder:${row.id}`, parentId: row.parent_id ? `folder:${row.parent_id}` : null, kind: 'folder' as const, name: row.name, slug: row.slug, order: row.sort_order })),
-    ...documents.results.map((row) => ({ id: `document:${row.id}`, parentId: row.folder_id ? `folder:${row.folder_id}` : null, kind: 'document' as const, name: row.title, slug: row.slug, order: row.sort_order, documentId: row.id })),
+    ...folders.results.map((row) => ({ id: `folder:${row.id}`, parentId: row.parent_id ? `folder:${row.parent_id}` : null, kind: 'folder' as const, name: row.name, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales) })),
+    ...documents.results.map((row) => ({ id: `document:${row.id}`, parentId: row.folder_id ? `folder:${row.folder_id}` : null, kind: 'document' as const, name: row.title, slug: row.slug, order: row.sort_order, hasTranslation: Boolean(row.has_translation), translationLocales: locales(row.translation_locales), documentId: row.id })),
   ];
 }
 
-export async function createFolder(env: RuntimeEnv, raw: unknown) {
+export async function createFolder(env: RuntimeEnv, raw: unknown, locale: SupportedLocale = defaultLocale) {
+  if (locale !== defaultLocale) throw new NavigationConflictError(`Create folders in ${defaultLocale}, then add a translation`);
   const input = folderInput.parse(raw); await assertParentFolder(env, input.parentId); await assertAvailable(env, input.parentId, input.slug);
   const id = crypto.randomUUID(); const now = Date.now();
   await env.DB.batch([
     env.DB.prepare('INSERT INTO folder (id,parent_id,slug,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?)').bind(id, input.parentId, input.slug, input.order, now, now),
-    env.DB.prepare('INSERT INTO folder_translation (folder_id,locale,name,created_at,updated_at) VALUES (?,?,?,?,?)').bind(id, defaultLocale, input.name, now, now),
+    env.DB.prepare('INSERT INTO folder_translation (folder_id,locale,name,created_at,updated_at) VALUES (?,?,?,?,?)').bind(id, locale, input.name, now, now),
   ]);
   return { id, ...input, createdAt: now, updatedAt: now };
 }
 
-export async function updateFolder(env: RuntimeEnv, id: string, raw: unknown) {
+export async function updateFolder(env: RuntimeEnv, id: string, raw: unknown, locale: SupportedLocale = defaultLocale) {
   const input = folderInput.parse(raw);
   if (!await env.DB.prepare('SELECT id FROM folder WHERE id=?').bind(id).first()) throw new FolderNotFoundError();
   await assertNoFolderCycle(env, id, input.parentId); await assertAvailable(env, input.parentId, input.slug, id);
   const now = Date.now();
   const results = await env.DB.batch([
     env.DB.prepare('UPDATE folder SET parent_id=?,slug=?,sort_order=?,updated_at=? WHERE id=?').bind(input.parentId, input.slug, input.order, now, id),
-    env.DB.prepare('UPDATE folder_translation SET name=?,updated_at=? WHERE folder_id=? AND locale=?').bind(input.name, now, id, defaultLocale),
+    env.DB.prepare('UPDATE folder_translation SET name=?,updated_at=? WHERE folder_id=? AND locale=?').bind(input.name, now, id, locale),
   ]);
   if (results[0]?.meta.changes !== 1 || results[1]?.meta.changes !== 1) throw new FolderNotFoundError();
   return { id, ...input, updatedAt: now };
+}
+
+export async function createFolderTranslation(env: RuntimeEnv, folderId: string, locale: SupportedLocale, sourceLocale: SupportedLocale = defaultLocale) {
+  if (locale === sourceLocale) throw new NavigationConflictError('Choose a different language');
+  const source = await env.DB.prepare('SELECT name FROM folder_translation WHERE folder_id=? AND locale=?').bind(folderId, sourceLocale).first<{ name: string }>();
+  if (!source) throw new FolderNotFoundError();
+  const existing = await env.DB.prepare('SELECT folder_id FROM folder_translation WHERE folder_id=? AND locale=?').bind(folderId, locale).first();
+  if (existing) throw new NavigationConflictError('This translation already exists');
+  const now = Date.now();
+  await env.DB.prepare('INSERT INTO folder_translation (folder_id,locale,name,created_at,updated_at) VALUES (?,?,?,?,?)').bind(folderId, locale, source.name, now, now).run();
+  return { id: folderId, name: source.name, updatedAt: now };
 }
 
 export async function deleteFolder(env: RuntimeEnv, id: string) {

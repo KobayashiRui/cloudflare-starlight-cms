@@ -11,8 +11,9 @@ SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
 
 ## 編集・Navigation・公開
 `folder`と`document`は言語に依存しないidentityで、Treeの親子、URL segment、順序だけを持つ。
-表示名は`folder_translation`、編集内容は`document_translation`に置く。現在の管理UIは
-`src/locales.ts`の`defaultLocale`（`en`）に固定されている。Tiptap JSONがそのTranslationのDraft正本で、
+表示名は`folder_translation`、編集内容は`document_translation`に置く。Navigation Treeは
+`src/locales.ts`の`defaultLocale`（`en`）で固定し、選択したDocumentの編集画面だけでtranslationを
+切り替える。Tiptap JSONがそのTranslationのDraft正本で、
 `published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`と`status`列は持たない。
 `published_revision_id IS NULL`が未公開を表す。保存とRestoreは`document_revision`を新規追加し、Publishも現在のTranslationからrevisionを新規追加して
 公開pointerを更新する。そのためDraftとPublishedは分離される。
@@ -57,7 +58,9 @@ Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF�
 まず単一repoで完成。薄いテンプレート/パッケージ公開はMVP後。
 Cloudflare/Astro非公式。無料運用は保証しない。
 
-## i18nの段階導入
-DBは最初から`en`と`ja`を保存できるが、P2.5では`en`だけを作成・編集・exportする。
-P2.6でlocale selector、翻訳作成、missing translation表示を追加した後、Starlight Adapterでdefault localeを
-unprefixed path、その他をlocale prefixへ変換する。途中段階で不完全なlocaleを公開しない。
+## i18n
+対応言語は`src/locales.ts`だけで定義する。新しいPage/Folderはdefault locale（現在は`en`）で作成し、
+別言語はDocumentのLanguageから既存translationをDraftとして複製する。Treeは言語によって切り替えず、
+Folder/Pageの構造は常に共通である。Published snapshotはlocaleごとの公開revisionだけを含むv3 DTOであり、
+Starlight loaderはdefault localeをunprefixed path、その他をlocale prefixのfilePathへ変換する。そのため
+未翻訳またはDraftのtranslationは公開されない。

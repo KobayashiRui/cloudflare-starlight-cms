@@ -3,8 +3,8 @@ import { AssistiveTreeDescription, useTree } from '@headless-tree/react';
 import clsx from 'clsx';
 import { useEffect, useMemo, useRef } from 'react';
 
-export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; documentId?: string };
-const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0 };
+export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; documentId?: string };
+const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0, hasTranslation: true, translationLocales: [] };
 
 export function NavigationTree({ items, selectedDocumentId, selectedFolderId, onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
   items: NavigationItem[]; selectedDocumentId?: string; selectedFolderId: string | null;

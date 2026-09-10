@@ -17,10 +17,11 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 - build専用のexport endpoint、D1のPublished snapshot → Starlight SSG + Pagefind
 - Workers Static Assetsの`run_worker_first`で`/admin/*`だけを動的に処理
 
-DBは多言語対応の準備済みです。`folder` / `document`は言語に依存しないTreeとURL segmentを持ち、
-表示名・タイトル・説明・本文・公開revisionはそれぞれ`folder_translation` /
-`document_translation`に属します。現在の管理UIと公開buildは`en`をデフォルト言語として扱い、
-言語選択・翻訳作成・Starlight i18nの公開はP2.6で追加します。
+`folder` / `document`は言語に依存しないTreeとURL segmentを持ち、表示名・タイトル・説明・本文・
+公開revisionはそれぞれ`folder_translation` / `document_translation`に属します。Treeは基準言語で
+固定し、ページ編集画面のLanguageから`en`と`ja`を切り替えます。未作成の翻訳は、そのページの
+既存translationからDraftとして明示的に複製します。公開buildは`en`をルートURL、`ja`を`/ja/`へ
+出力し、Draft translationは公開しません。
 
 PublishからDeploy Hookを送る配送記録・再試行と、実Cloudflare Access / Workers Builds
 の接続はP3/P4です。deployは実施していません。

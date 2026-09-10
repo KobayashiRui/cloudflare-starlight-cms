@@ -9,12 +9,12 @@ Admin UIのレイアウト修正を完了した。公式Simple Editorの単体�
 Page settings panelと手動slug入力は置かない。
 テーマはAuto（OS追従）/ Light / Darkを選択でき、選択値をbrowser local storageに保存する。
 `npm run check:admin`を追加し、Worker側とは別にReact/Tiptap sourceも型検査する。
-次の実装優先度はP2.5のNavigation Tree操作である。
+次の実装優先度はP3のPublish → Workers Builds配送である。
 
 `0001_schema.sql`はi18n-readyへ更新済み。`folder` / `document`は言語非依存のTree identity、
 `folder_translation` / `document_translation`はlocaleごとの表示・編集状態、`document_revision`は
-translation単位のsnapshotである。`src/locales.ts`は現在`en`をdefaultとして固定する。
-管理UIのlocale selectorや翻訳作成はまだ実装していないため、現時点で作成・公開・exportするのは`en`だけである。
+translation単位のsnapshotである。Treeはdefault locale（`en`）で固定し、Document編集画面でtranslationを
+切り替える。未作成のtranslationは既存translationをコピーしたDraftとして作成する。
 
 P0〜P2の基盤はローカルMVPとして実装したが、Navigation Tree導入に伴いD1 schemaとAdmin APIを
 作り直す。旧local D1は削除し、migrationは新しい単一の`0001`のみへ統合する。
@@ -74,12 +74,12 @@ Hono APIは実装済みで、親Folderの存在確認、slug衝突、Tree循環�
 Admin UIからFolder作成・rename・削除、選択Folder配下のPage／Folder作成、pointer D&D、
 keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み。
 
-## P2.6: Locale UI / Starlight i18n
+## P2.6: Locale UI / Starlight i18n — 完了
 
-1. `src/locales.ts`を唯一のlocale設定として、Adminのlocale selectorを追加する。
-2. missing translation、default localeからの明示的なcopy、Folder/Page translation作成を追加する。
-3. Starlight Adapterでdefault localeをunprefixed path、追加localeをprefix pathへ出力し、同一Tree pathのfallbackを検証する。
-4. localeごとに公開pointerとrevisionを扱い、未翻訳localeを勝手に公開しない。
+1. `src/locales.ts`を唯一のlocale設定とし、Treeはdefault localeで固定した。
+2. Document編集画面のLanguageでtranslationを切り替える。存在しない言語を選ぶと、実在するtranslationからDraftを作成できる。
+3. Published snapshot v3とStarlight loaderはdefault localeをunprefixed path、追加localeをprefix pathへ出力する。
+4. translationごとの公開pointerだけをexportし、Draft translationを静的サイトへ含めない。local Wranglerで`/test/test/`と`/ja/test/test/`の生成を確認済み。
 
 ## P3: Publish → Workers Builds
 

@@ -5,7 +5,7 @@ import { cmsLoader } from './starlight/loader.ts';
 async function snapshot(): Promise<unknown> {
   const endpoint = process.env.CMS_EXPORT_URL;
   if (!endpoint) {
-    if (process.env.CMS_INITIAL_EMPTY === '1') return { version: 2, documents: [] };
+    if (process.env.CMS_INITIAL_EMPTY === '1') return { version: 3, documents: [] };
     throw new Error('CMS_EXPORT_URL is required for a CMS build. Use CMS_INITIAL_EMPTY=1 only for an explicit empty initial build.');
   }
   const clientId = process.env.CF_ACCESS_CLIENT_ID;

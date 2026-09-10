@@ -15,6 +15,7 @@ describe('published build boundary', () => {
   it('accepts a versioned published snapshot and rejects duplicate routes', () => {
     expect(publishedDocuments(published).map((doc) => doc.slug)).toEqual(['one']);
     expect(() => publishedDocuments({ ...published, documents: [...published.documents, { ...published.documents[0], id: 'two' }] })).toThrow('Duplicate');
+    expect(publishedDocuments({ ...published, version: 3, documents: [...published.documents, { ...published.documents[0], locale: 'ja' }] })).toHaveLength(2);
   });
   it.each(['../secret', '/absolute', 'admin', 'admin/users', 'a//b', 'a?b'])('rejects reserved or invalid slug %s', (slug) => {
     expect(() => publishedDocuments({ ...published, documents: [{ ...published.documents[0], slug }] })).toThrow();

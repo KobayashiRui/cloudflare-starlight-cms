@@ -6,3 +6,6 @@ export const defaultLocale = 'en' as const;
 export const supportedLocales = [defaultLocale, 'ja'] as const;
 export type SupportedLocale = (typeof supportedLocales)[number];
 
+export function isSupportedLocale(value: string): value is SupportedLocale {
+  return (supportedLocales as readonly string[]).includes(value);
+}

@@ -62,7 +62,7 @@ try {
   if (![cmsPort, docsPort].every((port) => Number.isInteger(port) && port > 0 && port < 65536) || cmsPort === docsPort) throw new Error('CMS_PORT and DOCS_PORT must be distinct valid ports');
   // Local development always uses Miniflare state. Applying migrations is idempotent
   // and avoids a separate first-run command without touching a remote D1 database.
-  await run(process.execPath, [cli('wrangler'), 'd1', 'migrations', 'apply', 'starlight-cms-local', '--local'], { ...process.env, CI: '1' });
+  await run(process.execPath, [cli('wrangler'), 'd1', 'migrations', 'apply', 'DB', '--local'], { ...process.env, CI: '1' });
   await run(process.execPath, ['scripts/build-admin.mjs']);
   server(process.execPath, ['scripts/build-admin.mjs', '--watch']);
   server(process.execPath, [cli('wrangler'), 'dev', '--local', '--log-level', 'warn', '--port', String(cmsPort), '--var', 'LOCAL_DEV_BUILD:true']);

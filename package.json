@@ -14,7 +14,9 @@
     "check": "CMS_INITIAL_EMPTY=1 astro check && tsc --noEmit && npm run check:admin",
     "check:admin": "tsc -p tsconfig.admin.json --noEmit",
     "test": "vitest run",
-    "migrate:local": "wrangler d1 migrations apply starlight-cms-local --local",
+    "migrate:local": "wrangler d1 migrations apply DB --local",
+    "migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run migrate:remote && wrangler deploy",
     "typegen": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings",
     "dry-run": "wrangler deploy --dry-run"
   },

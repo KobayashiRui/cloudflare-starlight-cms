@@ -110,7 +110,7 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 
 ## P4: Self-host / Cloudflare Access
 
-1. D1/R2のremote provisioningとmigration、production binding設定をREADMEに確定する。
+1. D1/R2はAutomatic Resource Provisioningへ委ね、account固有のID/nameを`wrangler.jsonc`へ置かない。Workers BuildsのDeploy commandでremote migrationを適用する。実アカウントで初回provisionとmigrationの順序を確認する。
 2. `admin/*`のAccess Applicationを1つ設定し、人間向けAllow policyとWorkers Builds用Service Tokenの
    Service Auth policyを追加する。`/admin`は`/admin/`へのredirectだけを返す。BuildはD1権限を持たず、
    Service TokenでPublished exportを取得する。Token漏えい時の失効・再発行・Build secret更新を検証する。

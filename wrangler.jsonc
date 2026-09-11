@@ -19,9 +19,8 @@
   },
   "d1_databases": [{
     "binding": "DB",
-    "database_name": "starlight-cms-local",
     "migrations_dir": "./migrations"
   }],
-  "r2_buckets": [{ "binding": "MEDIA_BUCKET", "bucket_name": "starlight-cms-media" }],
+  "r2_buckets": [{ "binding": "MEDIA_BUCKET" }],
   "observability": { "enabled": true, "head_sampling_rate": 1 }
 }

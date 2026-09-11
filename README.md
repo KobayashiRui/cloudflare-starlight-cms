@@ -35,11 +35,11 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 
 ## Production setup
 
-1. Set the site title, public URL, and locales in [`src/site.config.ts`](src/site.config.ts). Create D1 and R2, then update their bindings in [`wrangler.jsonc`](wrangler.jsonc).
-2. Set `MEDIA_PUBLIC_URL` in `wrangler.jsonc` to the R2 public/custom domain. It is public configuration, not a secret.
+1. Set the site title, public URL, and locales in [`src/site.config.ts`](src/site.config.ts). D1 and R2 bindings in [`wrangler.jsonc`](wrangler.jsonc) have no account-specific IDs or names: Cloudflare provisions and binds them on the first deploy.
+2. Set `MEDIA_PUBLIC_URL` in `wrangler.jsonc` to the R2 public/custom domain after the bucket is provisioned. It is public configuration, not a secret.
 3. Create one Access Self-hosted Application for `docs.example.com/admin/*`. Add a human `Allow` policy and a Workers Builds `Service Auth` policy.
 4. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets. The build derives its export endpoint from `siteConfig.url` and only fetches the published snapshot.
-5. Store the Workers Builds Deploy Hook URL as a Worker secret:
+5. In Workers Builds, use `npm run build:empty` for the first build and `npm run build` afterwards. Set the deploy command to `npm run deploy`; it applies D1 migrations before deploying the Worker. Store the Workers Builds Deploy Hook URL as a Worker secret:
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL

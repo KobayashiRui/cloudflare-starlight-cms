@@ -1,0 +1,132 @@
+<p>
+  <img src="./src/assets/logo.svg" alt="Cloudflare Starlight CMS" width="300">
+</p>
+
+# Cloudflare Starlight CMS
+
+[English](README.md) · 日本語
+
+A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.
+
+Cloudflare / Astroの公式プロジェクトではありません。独自コードはMIT Licenseです。
+
+## Create a project
+
+`create-cloudflare-starlight-cms` をnpmへ公開後は、空のdirectoryへ独立したCMS projectを生成できます。
+
+```sh
+npx create-cloudflare-starlight-cms@latest my-docs
+cd my-docs
+npm install
+npm run dev
+```
+
+カレントdirectoryが空なら末尾に `.` を使えます。CLIは依存install、Git初期化、Cloudflare login、deployを行いません。
+生成されたprojectはこのrepositoryの独立したcopyです。CLI更新は新規生成にだけ適用され、既存projectを自動更新しません。
+公開前はこのrepositoryをcloneして利用してください。
+
+## 現在の実装
+
+単一Worker構成です。公開DocsはAstro StarlightとPagefindをStatic Assetsへ出力し、
+`/admin` は `/admin/` へのredirectだけを返し、`/admin/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
+利用者が管理者です。
+
+- Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
+- 保存済みDraftを、最新のAstro/Starlight buildで生成したshellへ差し込み、実際の見出しから同じ右・モバイルTOCを作る`/admin/preview/:documentId?locale=` Preview
+- 編集中のTranslationとPublished revisionの分離、revision履歴とRestore
+- D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
+- Cloudflare Access Application 1つによる`/admin/*`とbuild exportのedge保護
+- build専用のexport endpoint、D1のPublished snapshot → Starlight SSG + Pagefind
+- Workers Static Assetsの`run_worker_first`で`/admin/*`だけを動的に処理
+
+`folder` / `document`は言語に依存しないTreeとURL segmentを持ち、表示名・タイトル・説明・本文・
+公開revisionはそれぞれ`folder_translation` / `document_translation`に属します。Treeは基準言語で
+固定し、ページ編集画面のLanguageから`en`と`ja`を切り替えます。未作成の翻訳は、そのページの
+既存translationからDraftとして明示的に複製します。公開buildは`en`をルートURL、`ja`を`/ja/`へ
+出力します。Draft本文は公開せず、未翻訳のURLにはStarlight標準の既定言語fallbackが表示されます。
+
+Publishは公開revisionを確定し、D1の`publish_delivery`へ配送記録を保存してから
+Workers Deploy HookをPOSTします。Hookの2xxはBuildの要求受理であり、公開完了ではありません。
+公開ページの削除・URL変更・移動・並べ替えも配送対象です。失敗したHook要求と、30秒以上経過して送信が中断したpending要求はAdminから再試行できます。`WORKERS_DEPLOY_HOOK_URL`がないlocal開発では
+`skipped`として記録され、外部へは送信しません。実Cloudflare Access / Workers Buildsの接続はP4です。deployは実施していません。
+
+## Theme
+
+Admin UIの色は[`src/admin/styles/_cms-theme.scss`](src/admin/styles/_cms-theme.scss)のsemantic tokenで管理します。
+PurpleはPrimary action・選択状態・focus、Greenは公開済み、AmberはDraft/変更、Redは破壊的操作に限定しています。
+プロジェクトのブランドに合わせるときは、このファイルのtokenだけを変更します。Tiptap本文の文字色・ハイライトは、CMS UIテーマとは独立した公式editor paletteです。
+
+公開Starlightの初期accentは[`src/styles/starlight.css`](src/styles/starlight.css)です。light/darkそれぞれの
+`--sl-color-accent-low`、`--sl-color-accent`、`--sl-color-accent-high`を変更すれば、Adminとは独立して公開サイトのブランド色を変更できます。
+
+ロゴとfaviconはそれぞれ[`src/assets/logo.svg`](src/assets/logo.svg)と[`src/assets/favicon.svg`](src/assets/favicon.svg)です。
+Admin、Starlight、ブラウザタブはこの2ファイルを参照します。ロゴをPNGにする場合は、両方の設定にある`logo.svg`を`logo.png`へ変更します。
+
+## ローカル開発
+
+Node.js 22.19.0以上（22.22.2以上を推奨）を使います。以下はCloudflareアカウントなしでD1/R2を
+Miniflareに作成して検証します。
+
+```sh
+npm install
+npm run dev
+```
+
+`npm run dev` はlocal D1 migrationをidempotentに適用します。既存のlocal contentは削除しません。
+
+開発Workerはlocalhostだけで動くため、Accessや代替tokenは使いません。`npm run dev`は
+Admin Workerを`http://127.0.0.1:8787/admin/`、Published Static Docsを
+`http://127.0.0.1:4321/`で起動します。productionではCloudflare Access Applicationが
+`/admin/*`への到達をedgeで制限します。
+
+dev coordinatorはPublished snapshotだけを監視します。AdminでPublishするとAstro/Starlightと
+Pagefindを自動buildし、`4321`のStatic Docsを再読み込みして確認できます。本文・タイトル・説明のDraft保存だけではbuildしません。URL・配置・順序の変更は公開Navigation変更として反映します。
+Adminソースはesbuild watchで再bundleします。Public build後は同じStarlight Preview shellもWorkerのlocal assetsへ同期されます。build失敗時はエラーを修正してdevを再起動してください。自動retryは行いません。
+これはlocal開発のNodeプロセスによる補助であり、productionではWorkers Deploy HookとWorkers Buildsが
+同じ役割を担います。
+
+既存のローカルサーバーとポートが重なる場合は、次のように変更できます。
+
+```sh
+CMS_PORT=8791 DOCS_PORT=4322 npm run dev
+```
+
+`npm run build:empty` は初回deploy用の空サイトだけを作る明示的なコマンドです。
+テストデータは必要なテストだけが`tests/fixtures/`から読むようにします。実行時fixtureや
+デモ用content fallbackは持ちません。
+
+```sh
+npm run check
+npm test
+npm run dry-run
+```
+
+`dry-run`はWorker bundleとStatic Assets設定を検査しますがdeployしません。
+
+## Production setup
+
+1. `src/site.config.ts`でサイト名・公開URL・既定言語・対応言語を設定し、D1/R2を作成し、`wrangler.jsonc`へ実ID・bucket名を設定する。
+2. Cloudflare AccessでSelf-hosted Applicationを1つ作る。Hostnameは公開Docsのhostname、Pathは`admin/*`、
+   nameは任意（例: `Starlight CMS Admin`）とする。`/admin`はAccess対象外だが、Workerが`/admin/`へredirectするだけで管理内容は返さない。
+3. 同じApplicationへ2つのpolicyを追加する。人間向けの`Allow Docs Editors`は許可メールアドレス、社内ドメイン、またはAccess GroupをIncludeする。
+   Build向けの`Allow Docs Build`は`Service Auth`で、Workers Builds専用Service Token（例: `starlight-cms-build`）をIncludeする。
+   WorkerはAccess secretやJWT verifierを持たない。
+4. `MEDIA_PUBLIC_URL`をR2 public/custom domain（例: `https://media.example.com`）としてWorker secret/varsへ設定する。
+   未設定時のMediaはAdmin専用URLとなり、Published snapshotのbuildは意図的に失敗する。
+5. migrationをremote D1へ適用し、空のStatic Docsを初回deployする。
+6. Workers Buildsにこのrepoを接続し、`CMS_EXPORT_URL`、`CF_ACCESS_CLIENT_ID`、
+   `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。BuildはこのService Tokenを付けて
+   `GET /admin/export/snapshot`からPublished snapshotだけを取得する。D1 bindingやCloudflare API TokenはBuildへ渡さない。
+7. Workers Buildsで作成したDeploy Hook URLをsecretとして設定する。URL自体が認証情報なのでGitやログへ残さない。
+
+   ```sh
+   npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
+   ```
+
+   Service Tokenが漏えいした場合は、Cloudflare AccessでTokenを無効化または削除し、新しいTokenを発行して
+   Workers Buildsの2つのbuild secretを更新する。単一ApplicationではBuild Tokenも`/admin/*`へ到達できるため、
+   Build環境は管理権限を持つ信頼済み環境として扱う。Access authentication logsとCMSのrevision履歴も確認する。
+
+実アカウントで検証するまで、上記は手順の設計であり完成したdeployガイドではありません。
+詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、
+[Roadmap](docs/ROADMAP.md)を参照してください。

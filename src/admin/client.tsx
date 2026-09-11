@@ -7,8 +7,10 @@ import { createRoot } from 'react-dom/client';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
 import { localeLabel, defaultLocale, isSupportedLocale, supportedLocales, type SupportedLocale } from '../locales';
+import logoUrl from '../assets/logo.svg';
 import './styles/_variables.scss';
 import './styles/_keyframe-animations.scss';
+import './styles/_cms-theme.scss';
 import './admin.scss';
 
 type DocumentRecord = {
@@ -584,12 +586,12 @@ function App() {
 
   return <div className="cms-shell">
     <header className="cms-topbar">
-      <a className="cms-brand" href="/admin/" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>{siteConfig.title}</span></a>
+      <a className="cms-brand" href="/admin/" aria-label={`${siteConfig.title} home`}><img className="cms-brand-logo" src={logoUrl} alt="" /></a>
       <div className="cms-topbar-controls">
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
         {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
-        {current?.id ? <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-publish" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
+        {current?.id ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}

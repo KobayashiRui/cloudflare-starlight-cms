@@ -9,6 +9,13 @@ export default defineConfig({
   output: 'static',
   integrations: [starlight({
     title: siteConfig.title,
+    logo: {
+      src: './src/assets/logo.svg',
+      alt: `${siteConfig.title} logo`,
+      replacesTitle: true,
+    },
+    favicon: '/favicon.svg',
+    customCss: ['./src/styles/starlight.css'],
     defaultLocale: 'root',
     locales: Object.fromEntries(siteConfig.locales.map(({ code, label }) => [
       code === siteConfig.defaultLocale ? 'root' : code, { label, lang: code },

@@ -1,0 +1,58 @@
+/* CMS-owned semantic tokens. Tiptap's editor tokens remain in _variables.scss. */
+:root {
+  --cms-bg: #f7f8fa;
+  --cms-surface: #ffffff;
+  --cms-elevated: #ffffff;
+  --cms-border: #e2e5ea;
+  --cms-accent: #7c3aed;
+  --cms-accent-hover: #6d28d9;
+  --cms-accent-subtle: rgba(124, 58, 237, .10);
+  --cms-success: #16a34a;
+  --cms-success-subtle: rgba(22, 163, 74, .10);
+  --cms-warning: #d97706;
+  --cms-warning-subtle: rgba(217, 119, 6, .10);
+  --cms-danger: #dc2626;
+  --cms-danger-subtle: rgba(220, 38, 38, .10);
+
+  --cms-text: #182230;
+  --cms-text-muted: #667085;
+  --cms-text-subtle: #98a2b3;
+  --cms-hover: #f1f3f6;
+  --cms-input-bg: #ffffff;
+  --cms-focus-ring: rgba(124, 58, 237, .20);
+  --cms-backdrop: rgba(16, 24, 40, .32);
+  --cms-shadow: rgba(16, 24, 40, .12);
+  --cms-accent-foreground: #ffffff;
+  --cms-success-text: #166534;
+  --cms-warning-text: #92400e;
+  --cms-danger-text: #b91c1c;
+}
+
+html.dark {
+  --cms-bg: #111318;
+  --cms-surface: #181b21;
+  --cms-elevated: #1d2027;
+  --cms-border: #2b303a;
+  --cms-accent: #8b5cf6;
+  --cms-accent-hover: #a78bfa;
+  --cms-accent-subtle: rgba(139, 92, 246, .14);
+  --cms-success: #22c55e;
+  --cms-success-subtle: rgba(34, 197, 94, .14);
+  --cms-warning: #f59e0b;
+  --cms-warning-subtle: rgba(245, 158, 11, .14);
+  --cms-danger: #ef4444;
+  --cms-danger-subtle: rgba(239, 68, 68, .14);
+
+  --cms-text: #f5f7fa;
+  --cms-text-muted: #b0b7c3;
+  --cms-text-subtle: #87909f;
+  --cms-hover: #252a33;
+  --cms-input-bg: #181b21;
+  --cms-focus-ring: rgba(139, 92, 246, .32);
+  --cms-backdrop: rgba(0, 0, 0, .50);
+  --cms-shadow: rgba(0, 0, 0, .42);
+  --cms-accent-foreground: #ffffff;
+  --cms-success-text: #86efac;
+  --cms-warning-text: #fcd34d;
+  --cms-danger-text: #fca5a5;
+}

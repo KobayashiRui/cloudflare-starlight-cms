@@ -1,10 +1,11 @@
 import { build, context } from 'esbuild';
 import { compile } from 'sass-embedded';
 import { fileURLToPath } from 'node:url';
-import { mkdir } from 'node:fs/promises';
+import { copyFile, mkdir } from 'node:fs/promises';
 
 const assetDirectory = process.env.ADMIN_ASSETS_DIR ?? 'dist';
 await mkdir(`${assetDirectory}/admin`, { recursive: true });
+await copyFile('src/assets/favicon.svg', `${assetDirectory}/favicon.svg`);
 
 const sassPlugin = {
   name: 'sass',
@@ -21,6 +22,7 @@ const options = {
   bundle: true,
   format: 'esm',
   jsx: 'automatic',
+  loader: { '.svg': 'dataurl' },
   outfile: `${assetDirectory}/admin/app.js`,
   alias: { '@': './src/admin' },
   plugins: [sassPlugin],

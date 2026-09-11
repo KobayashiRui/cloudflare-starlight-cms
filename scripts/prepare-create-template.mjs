@@ -85,13 +85,14 @@ await writeFile(join(templateRoot, 'src', 'site.config.ts'), templateSiteConfig)
 
 const rootReadme = await readFile(join(repositoryRoot, 'README.md'), 'utf8');
 const templateReadme = rootReadme
-  .replace('# cloudflare-starlight-cms', '# My Docs')
+  .replace('# Cloudflare Starlight CMS', '# My Docs')
+  .replace('[English](README.md) · [日本語](README.ja.md)\n\n', '')
   .replace(
     'A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.',
     'A documentation site created with cloudflare-starlight-cms.',
   )
   .replace(
-    '詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、\n[Roadmap](docs/ROADMAP.md)を参照してください。',
-    'サイト名・言語・公開URLは`src/site.config.ts`で設定します。CMS本体の更新は自動ではありません。必要な変更をこのprojectへ取り込んでください。',
+    'The production procedure is design-complete but has not yet been validated against a real Cloudflare account. See [AGENTS.md](AGENTS.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md) for implementation details and handoff information.',
+    'Configure the site title, locales, and public URL in `src/site.config.ts`. CMS updates are not automatic; selectively bring the changes you need into this project.',
   );
 await writeFile(join(templateRoot, 'README.md'), templateReadme);

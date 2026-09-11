@@ -1,12 +1,18 @@
-# cloudflare-starlight-cms
+<p>
+  <img src="./src/assets/logo.svg" alt="Cloudflare Starlight CMS" width="300">
+</p>
+
+# Cloudflare Starlight CMS
+
+[English](README.md) · [日本語](README.ja.md)
 
 A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.
 
-Cloudflare / Astroの公式プロジェクトではありません。独自コードはMIT Licenseです。
+This is not an official Cloudflare or Astro project. The project's original code is available under the MIT License.
 
 ## Create a project
 
-`create-cloudflare-starlight-cms` をnpmへ公開後は、空のdirectoryへ独立したCMS projectを生成できます。
+After publishing `create-cloudflare-starlight-cms` to npm, create an independent CMS project in an empty directory:
 
 ```sh
 npx create-cloudflare-starlight-cms@latest my-docs
@@ -15,67 +21,59 @@ npm install
 npm run dev
 ```
 
-カレントdirectoryが空なら末尾に `.` を使えます。CLIは依存install、Git初期化、Cloudflare login、deployを行いません。
-生成されたprojectはこのrepositoryの独立したcopyです。CLI更新は新規生成にだけ適用され、既存projectを自動更新しません。
-公開前はこのrepositoryをcloneして利用してください。
+Use `.` as the destination when the current directory is empty. The CLI does not install dependencies, initialize Git, log into Cloudflare, or deploy anything. It creates a standalone copy of this repository: later CLI releases apply only to new projects and never update an existing project automatically.
 
-## 現在の実装
+Until the CLI is published, clone this repository.
 
-単一Worker構成です。公開DocsはAstro StarlightとPagefindをStatic Assetsへ出力し、
-`/admin` は `/admin/` へのredirectだけを返し、`/admin/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
-利用者が管理者です。
+## What is included
 
-- Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
-- 保存済みDraftを、最新のAstro/Starlight buildで生成したshellへ差し込み、実際の見出しから同じ右・モバイルTOCを作る`/admin/preview/:documentId?locale=` Preview
-- 編集中のTranslationとPublished revisionの分離、revision履歴とRestore
-- D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
-- Cloudflare Access Application 1つによる`/admin/*`とbuild exportのedge保護
-- build専用のexport endpoint、D1のPublished snapshot → Starlight SSG + Pagefind
-- Workers Static Assetsの`run_worker_first`で`/admin/*`だけを動的に処理
+The CMS runs as one Worker. Public Docs are built with Astro Starlight and Pagefind, then served as Workers Static Assets. `/admin` redirects to `/admin/`; the Worker handles `/admin/*` before static assets. Anyone who passes Cloudflare Access is an administrator.
 
-`folder` / `document`は言語に依存しないTreeとURL segmentを持ち、表示名・タイトル・説明・本文・
-公開revisionはそれぞれ`folder_translation` / `document_translation`に属します。Treeは基準言語で
-固定し、ページ編集画面のLanguageから`en`と`ja`を切り替えます。未作成の翻訳は、そのページの
-既存translationからDraftとして明示的に複製します。公開buildは`en`をルートURL、`ja`を`/ja/`へ
-出力します。Draft本文は公開せず、未翻訳のURLにはStarlight標準の既定言語fallbackが表示されます。
+- React Admin UI using Tiptap's official Simple Editor source (MIT), with Tiptap JSON as the document source of truth
+- Draft preview injected into a shell made by the current Astro/Starlight build, including the same heading-derived desktop and mobile table of contents
+- Draft versus published revision separation, revision history, and restore
+- D1 + Drizzle, R2 uploads for PNG/JPEG/WebP/AVIF/MP4/WebM, and a Media Picker
+- One Cloudflare Access Application to protect `/admin/*` and the build export endpoint
+- Published D1 snapshot → Starlight SSG + Pagefind, delivered through a Workers Deploy Hook
+- `run_worker_first` Static Assets routing for only `/admin/*`
 
-Publishは公開revisionを確定し、D1の`publish_delivery`へ配送記録を保存してから
-Workers Deploy HookをPOSTします。Hookの2xxはBuildの要求受理であり、公開完了ではありません。
-公開ページの削除・URL変更・移動・並べ替えも配送対象です。失敗したHook要求と、30秒以上経過して送信が中断したpending要求はAdminから再試行できます。`WORKERS_DEPLOY_HOOK_URL`がないlocal開発では
-`skipped`として記録され、外部へは送信しません。実Cloudflare Access / Workers Buildsの接続はP4です。deployは実施していません。
+`folder` and `document` provide locale-independent navigation and URL segments. Names, titles, descriptions, bodies, and published revisions are stored in `folder_translation` and `document_translation`. The tree uses the default locale, and each document editor selects `en` or `ja`. Missing translations are explicitly copied as a draft from an existing translation. The build outputs `en` at the root and `ja` under `/ja/`. Draft content is never public; Starlight's default-locale fallback handles untranslated public routes.
 
-## ローカル開発
+Publishing commits the public revision, records the delivery in D1's `publish_delivery`, and then POSTs a Workers Deploy Hook. A 2xx response means the build request was accepted, not that deployment has finished. Deletes, URL changes, moves, and reorderings also request a rebuild. Failed or stalled requests can be retried in Admin. In local development without `WORKERS_DEPLOY_HOOK_URL`, the delivery is recorded as `skipped` and no external request is sent.
 
-Node.js 22.19.0以上（22.22.2以上を推奨）を使います。以下はCloudflareアカウントなしでD1/R2を
-Miniflareに作成して検証します。
+## Branding and theme
+
+Replace the following two files to brand a project:
+
+- [`src/assets/logo.svg`](src/assets/logo.svg) is used by the Admin header and the Starlight header.
+- [`src/assets/favicon.svg`](src/assets/favicon.svg) is used by the Admin and public site browser tabs.
+
+The favicon is copied to the Static Assets output during each build. To use a PNG logo, rename the file and change the two `logo.svg` references in `astro.config.mjs` and `src/admin/client.tsx`.
+
+Admin colors use semantic tokens in [`src/admin/styles/_cms-theme.scss`](src/admin/styles/_cms-theme.scss). Purple is used for primary actions, selection, and focus; green for published content; amber for drafts and changes; and red for destructive actions. Tiptap text colors and highlights remain part of the editor's own palette.
+
+Public Starlight accent colors are in [`src/styles/starlight.css`](src/styles/starlight.css). Change the three `--sl-color-accent-*` variables for each color mode without affecting Admin.
+
+## Local development
+
+Use Node.js 22.19.0 or later (22.22.2 or later is recommended). The commands below create local Miniflare D1 and R2 resources and do not require a Cloudflare account.
 
 ```sh
 npm install
 npm run dev
 ```
 
-`npm run dev` はlocal D1 migrationをidempotentに適用します。既存のlocal contentは削除しません。
+`npm run dev` applies local D1 migrations idempotently and does not erase local content. It starts the Admin Worker at `http://127.0.0.1:8787/admin/` and the published static Docs at `http://127.0.0.1:4321/`. Local development is unauthenticated because it only listens on localhost; production uses Cloudflare Access at the edge.
 
-開発Workerはlocalhostだけで動くため、Accessや代替tokenは使いません。`npm run dev`は
-Admin Workerを`http://127.0.0.1:8787/admin/`、Published Static Docsを
-`http://127.0.0.1:4321/`で起動します。productionではCloudflare Access Applicationが
-`/admin/*`への到達をedgeで制限します。
+The dev coordinator watches the published snapshot. Publishing from Admin builds Astro/Starlight and Pagefind, then refreshes the static Docs service. Saving a draft alone does not trigger a public build. URL, placement, and order changes are treated as published navigation changes. The coordinator is a local development convenience; production uses Workers Deploy Hooks and Workers Builds for the same workflow.
 
-dev coordinatorはPublished snapshotだけを監視します。AdminでPublishするとAstro/Starlightと
-Pagefindを自動buildし、`4321`のStatic Docsを再読み込みして確認できます。本文・タイトル・説明のDraft保存だけではbuildしません。URL・配置・順序の変更は公開Navigation変更として反映します。
-Adminソースはesbuild watchで再bundleします。Public build後は同じStarlight Preview shellもWorkerのlocal assetsへ同期されます。build失敗時はエラーを修正してdevを再起動してください。自動retryは行いません。
-これはlocal開発のNodeプロセスによる補助であり、productionではWorkers Deploy HookとWorkers Buildsが
-同じ役割を担います。
-
-既存のローカルサーバーとポートが重なる場合は、次のように変更できます。
+Choose other ports when needed:
 
 ```sh
 CMS_PORT=8791 DOCS_PORT=4322 npm run dev
 ```
 
-`npm run build:empty` は初回deploy用の空サイトだけを作る明示的なコマンドです。
-テストデータは必要なテストだけが`tests/fixtures/`から読むようにします。実行時fixtureや
-デモ用content fallbackは持ちません。
+`npm run build:empty` deliberately creates the empty site used for an initial deployment. Runtime fixtures and demo-content fallbacks are not included.
 
 ```sh
 npm run check
@@ -83,32 +81,22 @@ npm test
 npm run dry-run
 ```
 
-`dry-run`はWorker bundleとStatic Assets設定を検査しますがdeployしません。
+`dry-run` validates the Worker bundle and Static Assets configuration without deploying.
 
 ## Production setup
 
-1. `src/site.config.ts`でサイト名・公開URL・既定言語・対応言語を設定し、D1/R2を作成し、`wrangler.jsonc`へ実ID・bucket名を設定する。
-2. Cloudflare AccessでSelf-hosted Applicationを1つ作る。Hostnameは公開Docsのhostname、Pathは`admin/*`、
-   nameは任意（例: `Starlight CMS Admin`）とする。`/admin`はAccess対象外だが、Workerが`/admin/`へredirectするだけで管理内容は返さない。
-3. 同じApplicationへ2つのpolicyを追加する。人間向けの`Allow Docs Editors`は許可メールアドレス、社内ドメイン、またはAccess GroupをIncludeする。
-   Build向けの`Allow Docs Build`は`Service Auth`で、Workers Builds専用Service Token（例: `starlight-cms-build`）をIncludeする。
-   WorkerはAccess secretやJWT verifierを持たない。
-4. `MEDIA_PUBLIC_URL`をR2 public/custom domain（例: `https://media.example.com`）としてWorker secret/varsへ設定する。
-   未設定時のMediaはAdmin専用URLとなり、Published snapshotのbuildは意図的に失敗する。
-5. migrationをremote D1へ適用し、空のStatic Docsを初回deployする。
-6. Workers Buildsにこのrepoを接続し、`CMS_EXPORT_URL`、`CF_ACCESS_CLIENT_ID`、
-   `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。BuildはこのService Tokenを付けて
-   `GET /admin/export/snapshot`からPublished snapshotだけを取得する。D1 bindingやCloudflare API TokenはBuildへ渡さない。
-7. Workers Buildsで作成したDeploy Hook URLをsecretとして設定する。URL自体が認証情報なのでGitやログへ残さない。
+1. Set the site title, public URL, default locale, and supported locales in `src/site.config.ts`. Create D1 and R2, then set their real IDs and bucket name in `wrangler.jsonc`.
+2. Create one Cloudflare Access Self-hosted Application. Use the public Docs hostname and the path `admin/*`; for example, name it `Starlight CMS Admin`. The Worker redirects unprotected `/admin` to `/admin/` but does not return Admin content there.
+3. Add an `Allow Docs Editors` policy for the permitted email addresses, company domain, or Access Group. Add an `Allow Docs Build` Service Auth policy for a Workers Builds-only Service Token such as `starlight-cms-build`. The Worker does not store Access secrets or verify JWTs.
+4. Set `MEDIA_PUBLIC_URL` to an R2 public/custom domain such as `https://media.example.com`. Without it, Media is Admin-only and a published snapshot build intentionally fails.
+5. Apply migrations to remote D1 and perform the initial empty Static Assets deployment.
+6. Connect the repository to Workers Builds. Add `CMS_EXPORT_URL`, `CF_ACCESS_CLIENT_ID`, and `CF_ACCESS_CLIENT_SECRET` as build secrets. The build uses the Service Token to fetch only the published snapshot from `GET /admin/export/snapshot`; do not give the build a D1 binding or Cloudflare API Token.
+7. Store the Workers Builds Deploy Hook URL as a Worker secret. It is a credential and must never be committed or logged.
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
    ```
 
-   Service Tokenが漏えいした場合は、Cloudflare AccessでTokenを無効化または削除し、新しいTokenを発行して
-   Workers Buildsの2つのbuild secretを更新する。単一ApplicationではBuild Tokenも`/admin/*`へ到達できるため、
-   Build環境は管理権限を持つ信頼済み環境として扱う。Access authentication logsとCMSのrevision履歴も確認する。
+If the Service Token leaks, revoke it in Cloudflare Access, issue a replacement, and update the two Workers Builds secrets. Treat the build environment as trusted Admin infrastructure because its token can reach `/admin/*`. Review Access authentication logs and the CMS revision history.
 
-実アカウントで検証するまで、上記は手順の設計であり完成したdeployガイドではありません。
-詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、
-[Roadmap](docs/ROADMAP.md)を参照してください。
+The production procedure is design-complete but has not yet been validated against a real Cloudflare account. See [AGENTS.md](AGENTS.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md) for implementation details and handoff information.

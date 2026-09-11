@@ -11,7 +11,7 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 利用者が管理者です。
 
 - Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
-- 保存済みDraftを`/admin/preview/:documentId?locale=`で確認するread-only Preview
+- 保存済みDraftを、最新のAstro/Starlight buildで生成したshellへ差し込み、実際の見出しから同じ右・モバイルTOCを作る`/admin/preview/:documentId?locale=` Preview
 - 編集中のTranslationとPublished revisionの分離、revision履歴とRestore
 - D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
 - Cloudflare Access Application 1つによる`/admin/*`とbuild exportのedge保護
@@ -31,7 +31,7 @@ Workers Deploy HookをPOSTします。Hookの2xxはBuildの要求受理であり
 
 ## ローカル開発
 
-Node.js 22.22.2以上を推奨します。以下はCloudflareアカウントなしでD1/R2を
+Node.js 22.19.0以上（22.22.2以上を推奨）を使います。以下はCloudflareアカウントなしでD1/R2を
 Miniflareに作成して検証します。
 
 ```sh
@@ -47,7 +47,7 @@ Admin Workerを`http://127.0.0.1:8787/admin/`、Published Static Docsを
 
 dev coordinatorはPublished snapshotだけを監視します。AdminでPublishするとAstro/Starlightと
 Pagefindを自動buildし、`4321`のStatic Docsを再読み込みして確認できます。本文・タイトル・説明のDraft保存だけではbuildしません。URL・配置・順序の変更は公開Navigation変更として反映します。
-Adminソースはesbuild watchで再bundleします。build失敗時はエラーを修正してdevを再起動してください。自動retryは行いません。
+Adminソースはesbuild watchで再bundleします。Public build後は同じStarlight Preview shellもWorkerのlocal assetsへ同期されます。build失敗時はエラーを修正してdevを再起動してください。自動retryは行いません。
 これはlocal開発のNodeプロセスによる補助であり、productionではWorkers Deploy HookとWorkers Buildsが
 同じ役割を担います。
 

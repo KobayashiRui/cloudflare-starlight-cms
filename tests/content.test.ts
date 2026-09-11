@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { renderDocumentContent } from '../src/starlight/render.ts';
+import { renderPreviewContent, renderPreviewDocument, renderPreviewTocItems } from '../src/starlight/preview-render.ts';
 
 const published = {
   version: 2,
@@ -47,5 +48,33 @@ describe('Tiptap renderer', () => {
     ] });
     expect(markdown).toContain('- [x] Install the CMS');
     expect(markdown).toContain('---');
+  });
+  it('uses the supported CMS node set inside the generated Starlight shell', () => {
+    const html = renderPreviewContent({ type: 'doc', content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Draft <guide>' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Read ', marks: [] }, { type: 'text', text: 'this', marks: [{ type: 'link', attrs: { href: '/guide' } }] }] },
+      { type: 'callout', attrs: { title: 'Note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Safe.' }] }] },
+    ] });
+    expect(html).toContain('<h2 id="draft-guide">Draft &lt;guide&gt;</h2>');
+    expect(html).toContain('<a href="/guide">this</a>');
+    expect(html).toContain('starlight-aside--note');
+    expect(() => renderPreviewContent({ type: 'doc', content: [{ type: 'script' }] })).toThrow('Unsupported');
+    expect(() => renderPreviewContent({ type: 'doc', content: [{ type: 'image', attrs: { src: 'javascript:alert(1)' } }] })).toThrow('Unsafe');
+  });
+  it('derives stable heading anchors and nested TOC entries from the same saved document', () => {
+    const preview = renderPreviewDocument({ type: 'doc', content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Getting Started' }] },
+      { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Install' }] },
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Getting Started' }] },
+      { type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: 'Ignored' }] },
+    ] });
+    expect(preview.html).toContain('<h2 id="getting-started">Getting Started</h2>');
+    expect(preview.html).toContain('<h2 id="getting-started-1">Getting Started</h2>');
+    expect(preview.headings.map(({ id }) => id)).toEqual(['getting-started', 'install', 'getting-started-1', 'ignored']);
+    const toc = renderPreviewTocItems(preview.headings, 2, 3, 'toc');
+    expect(toc).toContain('href="#getting-started"');
+    expect(toc).toContain('href="#install"');
+    expect(toc).toContain('style="--depth: 1;"');
+    expect(toc).not.toContain('ignored');
   });
 });

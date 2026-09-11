@@ -43,8 +43,9 @@ Revisionは本文・title・descriptionを保持し、NavigationとslugはRestor
 Tiptap既存機能でHeading/Paragraph/Bold/Italic/Link/List/Code/Table/Imageを扱う。
 Video/Callout/Steps/Tabsは既存拡張を調べ、Docs固有の不足だけcustom nodeにする。
 編集→保存→再編集→静的表示まで一組として実装する。
-Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを確認するread-only画面とする。Previewのために
-Starlight全体のbuild、別Worker、公開前のstatic assetを作らない。
+Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを確認するread-only画面とする。通常のAstro buildで
+生成した`cms-preview-shell` Static AssetをWorkerが再利用し、Preview操作でbuild、別Worker、Deploy Hookを増やさない。
+Previewは`private, no-store`と`noindex`で返し、公開前のDraftをStatic Assetへ保存しない。
 既存renderer/sanitizerを使い、本文をMDX/JSとして実行しない。未知nodeは拒否する。
 DB内部schemaとbuild DTOを分離。旧Markdown fixtureに新仕様を合わせない。
 

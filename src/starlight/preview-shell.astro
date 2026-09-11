@@ -1,0 +1,14 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+---
+
+<StarlightPage frontmatter={{
+  title: 'Preview',
+  description: 'Saved draft preview.',
+  editUrl: false,
+  pagefind: false,
+  head: [{ tag: 'meta', attrs: { name: 'robots', content: 'noindex, nofollow' } }],
+}} hasSidebar={true}>
+  <!-- The protected Worker replaces this marker with a saved Draft. -->
+  <div id="cms-preview-content"></div>
+</StarlightPage>

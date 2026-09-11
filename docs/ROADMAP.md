@@ -9,7 +9,7 @@
 - サイト設定をsrc/site.config.tsへ集約。ローカルはWrangler＋Astro preview、Adminはesbuild watch。
 - 一時Miniflare D1でDraft分離・競合・移動・削除を検証し、実Starlight buildでsidebar・fallback・Pagefind・旧URL消去を確認。
 - Accessは`admin/*`の単一Applicationへ統一する。`/admin`は`/admin/`へのredirectのみ、Buildは同ApplicationのService Tokenでexportを読む。BuildにD1/API Tokenは渡さない。
-- `/admin/preview/:documentId?locale=`で保存済みDraftをread-only表示する。PreviewはAccess配下で、静的buildは発火しない。
+- `/admin/preview/:documentId?locale=`は保存済みDraftを最新のStarlight build shellへ差し込む。同じTiptap renderから生成する実見出しTOCで、公開側と同じ右・モバイルの目次領域と幅を維持する。PreviewはAccess配下で、静的build・Pagefind・Deploy Hookは発火しない。`private, no-store`と`noindex`を返す。
 - 本番Access／Workers Buildsの実接続は未検証。コミット後の次工程とする。
 
 Admin UIのレイアウト修正を完了した。公式Simple Editorの単体ページ用`100vw`/`100vh`を
@@ -132,6 +132,6 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 
 ## 2026-09-11 公開整合性の検証
 
-`npm run check`（error 0、既存Zod hint 9）、`npm test`（27件）、`npm run build:empty`、`npm run dry-run`を確認。
+`npm run check`（error 0、既存Zod hint 9）、`npm test`（31件）、`npm run build:empty`、`npm run dry-run`を確認。
 結合テストは一時Miniflare D1を使用し、実Astro buildを行う。通常の開発用DBを変更しない。
-Wrangler＋Admin watch＋Astro previewのローカル起動を確認。本番deployは未実施。
+Wrangler＋Admin watch＋Astro previewのローカル起動を確認。PreviewはD1 DraftとStatic Assetsの`cms-preview-shell`を結合して返す。本番deployは未実施。

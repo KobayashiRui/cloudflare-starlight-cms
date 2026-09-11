@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { cp, rm } from 'node:fs/promises';
 
 const cmsPort = Number(process.env.CMS_PORT ?? 8787);
 const docsPort = Number(process.env.DOCS_PORT ?? 4321);
@@ -49,7 +50,12 @@ async function ready() {
   throw new Error('Local CMS did not become ready');
 }
 const cli = (name) => `node_modules/${name}/bin/${name === 'wrangler' ? 'wrangler.js' : 'astro.mjs'}`;
-const build = () => run(process.execPath, [cli('astro'), 'build'], { ...process.env, CMS_EXPORT_URL: cmsUrl });
+async function build() {
+  await run(process.execPath, [cli('astro'), 'build'], { ...process.env, CMS_EXPORT_URL: cmsUrl });
+  // Match production: the Worker reads the generated Starlight shell from ASSETS.
+  await rm('.dev-assets', { recursive: true, force: true });
+  await cp('dist', '.dev-assets', { recursive: true, force: true });
+}
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
 

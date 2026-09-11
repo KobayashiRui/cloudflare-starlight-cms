@@ -12,10 +12,11 @@ import { cmsSidebar } from '../src/starlight/sidebar.ts';
 
 let mf: Miniflare;
 let output: string;
+const previewShell = `<!doctype html><html><head><title>Preview</title><meta name="description" content=""><meta property="og:title" content="Preview"><link rel="canonical" href="https://example.test/cms-preview-shell/"></head><body><starlight-lang-select>Language</starlight-lang-select><h1 id="_top">Preview</h1><mobile-starlight-toc data-min-h="2" data-max-h="3"><ul class="isMobile toc"><li>Overview</li></ul></mobile-starlight-toc><starlight-toc data-min-h="2" data-max-h="3"><ul class="toc"><li>Overview</li></ul></starlight-toc><div class="sl-markdown-content"><div id="cms-preview-content"></div></div></body></html>`;
 beforeAll(async () => {
   output = await mkdtemp(join(tmpdir(), 'cms-publish-test-'));
   const bundle = await build({ entryPoints: ['src/index.ts'], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
-  mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'cms-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA_BUCKET'], serviceBindings: { ASSETS: () => new Response('Not found', { status: 404 }) } }] }));
+  mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'cms-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA_BUCKET'], serviceBindings: { ASSETS: () => new Response(previewShell, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }) } }] }));
   const db = await mf.getD1Database('DB');
   for (const file of ['0001_schema.sql', '0002_publish_delivery.sql']) {
     const sql = await readFile(`migrations/${file}`, 'utf8');
@@ -46,15 +47,36 @@ it('redirects the bare admin path to the Access-protected admin path', async () 
   expect(response.headers.get('location')).toBe('/admin/');
 });
 
-it('serves the saved-draft preview from the Access-protected admin path', async () => {
-  const response = await mf.dispatchFetch('http://localhost/admin/preview/preview-document?locale=ja');
+it('serves a saved Draft in the generated Starlight preview shell without requesting a build', async () => {
+  const page = identity.parse(await request('api/documents', 'POST', {
+    title: 'Draft <title>', slug: 'preview-document', folderId: null, order: 0, description: 'Draft description',
+    contentJson: { type: 'doc', content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Draft section' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Draft <body>' }] },
+    ] },
+  }));
+  const response = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=en`);
   expect(response.status).toBe(200);
-  expect(await response.text()).toContain('admin-root');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+  const html = await response.text();
+  expect(html).toContain('<title>Draft &lt;title&gt; | Preview</title>');
+  expect(html).toContain('<h1 id="_top">Draft &lt;title&gt;</h1>');
+  expect(html).toContain('<h2 id="draft-section">Draft section</h2>');
+  expect(html).toContain('<p>Draft &lt;body&gt;</p>');
+  expect(html).toContain('<div id="cms-preview-content"><h2 id="draft-section">Draft section</h2><p>Draft &lt;body&gt;</p></div>');
+  expect(html).toContain('href="#draft-section"');
+  expect(html).not.toContain('Overview');
+  expect(html).not.toContain('canonical');
+  expect(html).not.toContain('starlight-lang-select');
 });
 
 it('keeps drafts private and exports folder labels/order; records public moves and deletion', async () => {
   const folder = z.object({ id: z.string() }).parse(await request('api/folders', 'POST', { name: 'Getting Started', slug: 'guides', order: 3 }));
-  const input = { title: 'Install', slug: 'install', folderId: folder.id, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Public text' }] }] } };
+  const input = { title: 'Install', slug: 'install', folderId: folder.id, order: 0, description: '', contentJson: { type: 'doc', content: [
+    { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Install steps' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Public text' }] },
+  ] } };
   let page = identity.parse(await request('api/documents', 'POST', input));
   expect(publishedDocuments(await request('export/snapshot'))).toEqual([]);
   const result = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version }));
@@ -62,7 +84,11 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   const published = await request('export/snapshot');
   expect(cmsSidebar(published)[0]?.label).toBe('Getting Started');
   await buildDocs();
-  expect(await readFile(join(output, 'guides/install/index.html'), 'utf8')).toContain('Getting Started');
+  await access(join(output, 'cms-preview-shell/index.html'));
+  await access(join(output, 'ja/cms-preview-shell/index.html'));
+  const publicPage = await readFile(join(output, 'guides/install/index.html'), 'utf8');
+  expect(publicPage).toContain('Getting Started');
+  expect(publicPage).toContain('id="install-steps"');
   expect(await readFile(join(output, 'ja/guides/install/index.html'), 'utf8')).toContain('Public text');
   await access(join(output, 'pagefind/pagefind.js'));
   page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'Draft title', version: page.version }));

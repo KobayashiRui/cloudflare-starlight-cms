@@ -36,9 +36,15 @@ Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs
 Video→静的videoの不足だけを実装する。Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
 未知nodeの黙殺や本文のMDX/JS実行は禁止。
 
-Previewは`/admin/preview/:documentId?locale=`で保存済みDraftをread-only Tiptapとして描画する。Previewも
-`/admin/*`のAccess配下であり、静的buildやPagefindは実行しない。Starlightサイト全体のプレビューではなく、
-title・description・本文・公開用mediaの見え方を確認するための画面である。
+Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを表示する。Astro buildは
+`src/pages/cms-preview-shell.astro`（locale routeを含む）を通常のStarlight設定・ユーザーCSS・header/sidebarとともに生成する。
+WorkerはそのStatic Assets shellを`env.ASSETS.fetch()`で読み、D1のDraft title・description・本文を
+HTMLRewriterで差し込む。Previewは単一localeのDraftを示すためpublic language selectorを除去する。Previewも`/admin/*`のAccess配下であり、`Cache-Control: private, no-store`と
+`X-Robots-Tag: noindex, nofollow`を返す。Preview操作では静的build、Pagefind、Deploy Hookを実行しない。
+本文のTiptap JSONは一度だけrenderし、GitHub互換slugの見出しanchorとdesktop/mobile TOCを同時に作る。
+Starlight build済みのTOCコンテナ・class・幅は維持し、静的shellの`Overview`だけをDraft見出しの項目へ置換する。
+本文は公開Markdown rendererと同じ検証済みTiptap node modelから安全なHTMLを生成する。Astroのlayout・theme・
+sidebar・ユーザーCSSは同じ成果物を使うが、Astro build専用の任意MDX/remark変換やShikiの実行をWorkerで再実行しない。
 
 ## Build
 Access Applicationは`admin/*`の1つだけにする。人間向け`Allow` policyと、Workers Builds用Service Tokenを
@@ -53,8 +59,8 @@ Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回dep
 通信失敗時のfallbackとして初回モードを使わない。
 
 localの`npm run dev`はrootのNode coordinatorがAdmin Worker（8787）とStatic Docs preview（4321）を起動する。
-WorkerはAdmin用の`.dev-assets`だけを束縛するので、Published snapshotの変更に伴う`dist`のAstro buildが
-local D1 Workerを再起動させない。coordinatorはsnapshotの内容が変わった時だけAstro buildを実行する。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。Adminはesbuild watchで更新する。
+Published snapshotの変更時だけAstro buildを実行し、`dist`をWorker用`.dev-assets`へ同期するため、local Previewも
+productionと同じStatic Assets shellを読む。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。Adminはesbuild watchで更新する。
 これはlocal限定の開発補助であり、appsや二つ目のWorkerは追加しない。
 
 ## Hook / Media / Setup

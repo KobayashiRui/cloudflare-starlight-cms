@@ -6,6 +6,7 @@ import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
 import { publishedSnapshot } from '../starlight/snapshot.ts';
 import { adminHtml } from './html.ts';
+import { previewDocument } from './preview.ts';
 import { createFolder, createFolderTranslation, deleteFolder, FolderNotFoundError, listTree, NavigationConflictError, replaceTreeChildren, updateFolder } from '../navigation/service.ts';
 import { PublishDeliveryConflictError, PublishDeliveryNotFoundError, deliverPendingChanges, listPublishDeliveries, publishDocumentAndRequest, requestPublish, retryPublish } from '../publish/service.ts';
 
@@ -52,7 +53,7 @@ const adminHome = (c: Context<AdminEnv>) => {
 };
 app.get('/admin', (c) => c.redirect('/admin/', 302));
 app.get('/admin/', adminHome);
-app.get('/admin/preview/:id', adminHome);
+app.get('/admin/preview/:id', async (c) => previewDocument(c.env, c.req.raw, c.req.param('id'), locale(c)));
 app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.use('/admin/api/*', csrf);

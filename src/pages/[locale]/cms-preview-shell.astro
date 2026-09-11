@@ -1,0 +1,12 @@
+---
+import PreviewShell from '../../starlight/preview-shell.astro';
+import { siteConfig } from '../../site.config.ts';
+
+export function getStaticPaths() {
+  return siteConfig.locales
+    .filter(({ code }) => code !== siteConfig.defaultLocale)
+    .map(({ code }) => ({ params: { locale: code } }));
+}
+---
+
+<PreviewShell />

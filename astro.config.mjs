@@ -1,11 +1,12 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import { siteConfig } from './src/site.config.ts';
+import { publicSiteUrl } from './src/starlight/public-url.ts';
 import { loadSnapshot } from './src/starlight/source.ts';
 import { cmsSidebar } from './src/starlight/sidebar.ts';
 
 export default defineConfig({
-  site: siteConfig.url || undefined,
+  site: publicSiteUrl || undefined,
   output: 'static',
   integrations: [starlight({
     title: siteConfig.title,

@@ -1,8 +1,11 @@
+import { siteConfig } from '../site.config.ts';
+
 async function fetchSnapshot(): Promise<unknown> {
-  const endpoint = process.env.CMS_EXPORT_URL;
+  const endpoint = process.env.CMS_EXPORT_URL
+    ?? (siteConfig.url ? new URL('/admin/export/snapshot', siteConfig.url).toString() : undefined);
   if (!endpoint) {
     if (process.env.CMS_INITIAL_EMPTY === '1') return { version: 3, documents: [] };
-    throw new Error('CMS_EXPORT_URL is required for a CMS build. Use CMS_INITIAL_EMPTY=1 only for an explicit empty initial build.');
+    throw new Error('Set siteConfig.url before a CMS build. Use CMS_INITIAL_EMPTY=1 only for an explicit empty initial build.');
   }
   const clientId = process.env.CF_ACCESS_CLIENT_ID;
   const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET;

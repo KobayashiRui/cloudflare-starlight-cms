@@ -92,7 +92,11 @@ const templateReadme = rootReadme
     'A documentation site created with cloudflare-starlight-cms.',
   )
   .replace(
-    'The production procedure is design-complete but has not yet been validated against a real Cloudflare account. See [AGENTS.md](AGENTS.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md) for implementation details and handoff information.',
+    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpx create-cloudflare-starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
+    'Install dependencies and start local development:\n\n```sh\nnpm install\nnpm run dev\n```',
+  )
+  .replace(
+    'See [Architecture](docs/ARCHITECTURE.md) for design details and [Roadmap](docs/ROADMAP.md) for implementation status. Production configuration is designed but has not yet been verified against a real Cloudflare account.',
     'Configure the site title, locales, and public URL in `src/site.config.ts`. CMS updates are not automatic; selectively bring the changes you need into this project.',
   );
 await writeFile(join(templateRoot, 'README.md'), templateReadme);

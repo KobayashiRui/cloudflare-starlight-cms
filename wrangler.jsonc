@@ -6,6 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
+  // Public R2/custom-domain origin. Replace before publishing documents that embed media.
+  "vars": {
+    "MEDIA_PUBLIC_URL": ""
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

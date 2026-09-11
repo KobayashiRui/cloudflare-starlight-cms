@@ -24,7 +24,7 @@ type DocumentRecord = {
   status: 'draft' | 'published';
   version: number;
 };
-type Media = { id: string; fileName: string; contentType: string; url: string };
+type Media = { id: string; fileName: string; contentType: string; url: string; isUsed: boolean };
 type Revision = { id: string; revision: number; createdAt: number };
 type Folder = { id: string; name: string; slug: string; parentId: string | null; order: number };
 type PublishDelivery = {
@@ -551,6 +551,20 @@ function App() {
     }
   };
 
+  const removeMedia = async (item: Media) => {
+    if (item.isUsed || !window.confirm(`Delete ${item.fileName}? This cannot be undone.`)) return;
+    try {
+      setIsSaving(true);
+      await api<void>(`/media/${item.id}`, { method: 'DELETE' });
+      await refreshMedia();
+      showNotice('Media deleted.');
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : String(error), true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const insertMedia = (item: Media) => {
     if (!editor) return;
     if (item.contentType.startsWith('image/')) {
@@ -658,7 +672,7 @@ function App() {
       <section className="cms-media-dialog" role="dialog" aria-modal="true" aria-labelledby="media-library-title" onMouseDown={(event) => event.stopPropagation()}>
         <header><div><h1 id="media-library-title">Media library</h1><p>Select an image or video to add it at the cursor.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsMediaPickerOpen(false)} aria-label="Close media library">×</button></header>
         <div className="cms-media-dialog-actions"><label className="cms-upload">Upload media<input type="file" accept={mediaTypes} onChange={(event) => void upload(event.currentTarget.files?.[0])} /></label></div>
-        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">No media uploaded yet.</p> : media.map((item) => <button key={item.id} type="button" className="cms-media-card" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? 'Image' : 'Video'}</span></button>)}</div>
+        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">No media uploaded yet.</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? 'Image' : 'Video'}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? 'Used' : 'Unused'}</span>{!item.isUsed && <button type="button" className="cms-media-delete" disabled={isSaving} onClick={() => void removeMedia(item)}>Delete</button>}</footer></article>)}</div>
       </section>
     </div>}
     {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: slugify(event.target.value) }))} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}

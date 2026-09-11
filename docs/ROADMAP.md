@@ -50,6 +50,7 @@ local実装・検証済みである。
   Mediaはdialogからカーソルへ挿入し、下書きの未保存状態を文書切替時に確認する。
 - HonoでAdmin APIを構成。CSRF middlewareとDocs/Media/export routesを分離。
 - R2 Media upload/list/proxy。PNG/JPEG/WebP/AVIF/MP4/WebMのContent-Type・signature・最大10 MiB検証。
+- Media一覧はDraft・公開revision・履歴を参照し、未使用のassetだけ削除する。Media folder/tagなどの管理機能は追加しない。
 - build専用`/admin/export/snapshot`。productionではCloudflare Accessのpath policyで保護する。
 - Published D1 snapshot → renderer → Astro/Starlight + Pagefindのローカルbuild。
 - local Wranglerは認証なし。productionはCloudflare Access path policy、更新APIはOrigin/X-Requested-With確認。

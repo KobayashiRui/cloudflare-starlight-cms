@@ -1,7 +1,7 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { DocumentConflictError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
-import { InvalidMediaError, listMedia, uploadMedia } from '../media/service.ts';
+import { InvalidMediaError, MediaInUseError, MediaNotFoundError, deleteUnusedMedia, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
 import { publishedSnapshot } from '../starlight/snapshot.ts';
@@ -38,6 +38,8 @@ app.onError((error, c) => {
   if (error instanceof DocumentNotFoundError) return c.json({ error: 'Not found' }, 404, jsonHeaders);
   if (error instanceof DocumentConflictError) return c.json({ error: error.message || 'The document changed. Reload it and try again.' }, 409, jsonHeaders);
   if (error instanceof InvalidMediaError) return c.json({ error: error.message }, 400, jsonHeaders);
+  if (error instanceof MediaNotFoundError) return c.json({ error: 'Media not found' }, 404, jsonHeaders);
+  if (error instanceof MediaInUseError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof FolderNotFoundError) return c.json({ error: 'Folder not found' }, 404, jsonHeaders);
   if (error instanceof NavigationConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof PublishDeliveryNotFoundError) return c.json({ error: 'Build request not found' }, 404, jsonHeaders);
@@ -59,7 +61,7 @@ app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 app.use('/admin/api/*', csrf);
 app.use('/admin/api/*', async (c, next) => {
   await next();
-  if (['POST', 'PUT', 'DELETE'].includes(c.req.method) && c.res.status < 400) {
+  if (!c.req.path.startsWith('/admin/api/media') && ['POST', 'PUT', 'DELETE'].includes(c.req.method) && c.res.status < 400) {
     c.executionCtx.waitUntil(deliverPendingChanges(c.env));
   }
 });
@@ -97,6 +99,10 @@ app.post('/admin/api/documents/:id/revisions/:revisionId/restore', async (c) => 
 });
 app.get('/admin/api/media', async (c) => c.json(await listMedia(c.env), 200, jsonHeaders));
 app.post('/admin/api/media', async (c) => c.json(await uploadMedia(c.env, c.req.raw), 201, jsonHeaders));
+app.delete('/admin/api/media/:id', async (c) => {
+  await deleteUnusedMedia(c.env, c.req.param('id'));
+  return new Response(null, { status: 204, headers: noStore });
+});
 app.get('/admin/api/media/object/:key{.+}', async (c) => {
   const key = c.req.param('key');
   if (!/^media\/[a-z0-9-]+\.(png|jpg|webp|avif|mp4|webm)$/.test(key)) return c.json({ error: 'Not found' }, 404, jsonHeaders);

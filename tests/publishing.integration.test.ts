@@ -124,3 +124,28 @@ it('recovers an interrupted delivery but rejects a retry while a sender holds th
   const active = await mf.dispatchFetch('http://localhost/admin/api/publish/deliveries/active/retry', { method: 'POST', headers: { 'X-Requested-With': 'cloudflare-starlight-cms' } });
   expect(active.status).toBe(409);
 });
+
+it('deletes only media that is absent from drafts, published pages, and revisions', async () => {
+  const db = await mf.getD1Database('DB');
+  const now = Date.now();
+  const unused = { id: '00000000-0000-4000-8000-000000000001', objectKey: 'media/00000000-0000-4000-8000-000000000001.png' };
+  await db.prepare('INSERT INTO media (id, object_key, file_name, content_type, size, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(unused.id, unused.objectKey, 'unused.png', 'image/png', 4, now).run();
+  const deleted = await mf.dispatchFetch(`http://localhost/admin/api/media/${unused.id}`, {
+    method: 'DELETE', headers: { 'X-Requested-With': 'cloudflare-starlight-cms' },
+  });
+  expect(deleted.status).toBe(204);
+
+  const used = { id: '00000000-0000-4000-8000-000000000002', objectKey: 'media/00000000-0000-4000-8000-000000000002.png' };
+  await db.prepare('INSERT INTO media (id, object_key, file_name, content_type, size, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(used.id, used.objectKey, 'used.png', 'image/png', 4, now).run();
+  await request('api/documents', 'POST', {
+    title: 'Media reference', slug: 'media-reference', folderId: null, order: 0, description: '',
+    contentJson: { type: 'doc', content: [{ type: 'image', attrs: { src: `/admin/api/media/object/${used.objectKey}` } }] },
+  });
+  const rejected = await mf.dispatchFetch(`http://localhost/admin/api/media/${used.id}`, {
+    method: 'DELETE', headers: { 'X-Requested-With': 'cloudflare-starlight-cms' },
+  });
+  expect(rejected.status).toBe(409);
+  expect(await rejected.json()).toMatchObject({ error: expect.stringContaining('still used') });
+});

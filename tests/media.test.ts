@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { signatureMatches } from '../src/media/service.ts';
+import { contentReferencesMediaObject, signatureMatches } from '../src/media/service.ts';
 
 describe('media signatures', () => {
   it.each([
@@ -14,5 +14,26 @@ describe('media signatures', () => {
   });
   it('rejects mismatched bytes', () => {
     expect(signatureMatches('video/mp4', new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe(false);
+  });
+});
+
+describe('media references', () => {
+  const key = 'media/example.png';
+
+  it('finds image and video references in Tiptap JSON', () => {
+    expect(contentReferencesMediaObject(JSON.stringify({ type: 'doc', content: [
+      { type: 'image', attrs: { src: 'https://media.example/media/example.png' } },
+      { type: 'video', attrs: { src: '/admin/api/media/object/media/example.png' } },
+    ] }), key)).toBe(true);
+  });
+
+  it('does not treat plain text as a media reference', () => {
+    expect(contentReferencesMediaObject(JSON.stringify({ type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'media/example.png' }] },
+    ] }), key)).toBe(false);
+  });
+
+  it('retains media when historic content is invalid', () => {
+    expect(contentReferencesMediaObject('{broken', key)).toBe(true);
   });
 });

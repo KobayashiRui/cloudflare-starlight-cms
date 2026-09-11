@@ -26,7 +26,7 @@ The local Admin is at `http://127.0.0.1:8787/admin/`; static Docs are at `http:/
 ## Included
 
 - React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, and locale-aware documents
-- D1 for content, R2 for PNG/JPEG/WebP/AVIF/MP4/WebM, and a media picker
+- D1 for content, R2 for PNG/JPEG/WebP/AVIF/MP4/WebM, and a media picker with safe unused-asset deletion
 - Astro Starlight, Pagefind, and Workers Static Assets for fully static public Docs
 - Cloudflare Access for `/admin/*`; no CMS users, passwords, or roles
 - Publish → Workers Deploy Hook → Workers Builds

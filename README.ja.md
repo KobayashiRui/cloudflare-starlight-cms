@@ -26,7 +26,7 @@ Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`�
 ## 含まれるもの
 
 - Tiptap Simple Editor、Draft、Revision、Preview、Navigation Tree、多言語ページに対応したReact Admin
-- D1のコンテンツ、R2のPNG/JPEG/WebP/AVIF/MP4/WebM、Media Picker
+- D1のコンテンツ、R2のPNG/JPEG/WebP/AVIF/MP4/WebM、未使用時のみ削除できるMedia Picker
 - 完全StaticなAstro Starlight、Pagefind、Workers Static Assetsの公開Docs
 - `/admin/*`を保護するCloudflare Access。CMS独自のユーザー、パスワード、ロールは持たない
 - Publish → Workers Deploy Hook → Workers Builds

@@ -1,9 +1,9 @@
-import { publicSiteUrl } from './public-url.ts';
+import { cmsOrigin } from './cms-origin.ts';
 
 async function fetchSnapshot(): Promise<unknown> {
   if (process.env.CMS_INITIAL_EMPTY === '1') return { version: 3, documents: [] };
   const endpoint = process.env.CMS_EXPORT_URL
-    ?? (publicSiteUrl ? new URL('/admin/export/snapshot', publicSiteUrl).toString() : undefined);
+    ?? (cmsOrigin ? new URL('/admin/export/snapshot', cmsOrigin).toString() : undefined);
   // A blank URL is the template's explicit bootstrap state. Once configured,
   // all build failures stay visible instead of publishing an empty fallback.
   if (!endpoint) return { version: 3, documents: [] };

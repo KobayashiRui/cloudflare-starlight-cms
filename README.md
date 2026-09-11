@@ -36,7 +36,7 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 ## Production setup
 
 1. Set the Workers Builds build command to `npm run build` and deploy command to `npm run deploy`. With no public URL yet, the first build deploys an explicit empty site and provisions D1/R2, including the Admin Worker.
-2. Configure the custom domain. Set `PUBLIC_SITE_URL` to its origin, such as `https://docs.example.com`, in Workers Builds Build Variables. It is public configuration, not a secret. Builds then fetch the CMS snapshot at this URL. [`src/site.config.ts`](src/site.config.ts) remains the fallback for local development, title, and locales.
+2. Configure the custom domain. Set `CMS_ORIGIN` to its origin, such as `https://docs.example.com`, in Workers Builds Build Variables. It is public configuration, not a secret. Builds derive both the Astro site URL and CMS snapshot endpoint from this one value. [`src/site.config.ts`](src/site.config.ts) remains the fallback for local development, title, and locales.
 3. Set `MEDIA_PUBLIC_URL` in `wrangler.jsonc` to the R2 public/custom domain after the bucket is provisioned. It is public configuration, not a secret.
 4. Create one Access Self-hosted Application for `docs.example.com/admin/*`. Add a human `Allow` policy and a Workers Builds `Service Auth` policy.
 5. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets. Store the Workers Builds Deploy Hook URL as a Worker secret:
@@ -57,6 +57,6 @@ npm run build:empty
 npm run dry-run
 ```
 
-With no `PUBLIC_SITE_URL` or `siteConfig.url`, `build` creates the explicit empty site for an initial deploy. `build:empty` is available when an intentionally empty local build is needed. `dry-run` validates the Worker and Static Assets configuration without deploying.
+With no `CMS_ORIGIN` or `siteConfig.url`, `build` creates the explicit empty site for an initial deploy. `build:empty` is available when an intentionally empty local build is needed. `dry-run` validates the Worker and Static Assets configuration without deploying.
 
 See [Architecture](docs/ARCHITECTURE.md) for design details and [Roadmap](docs/ROADMAP.md) for implementation status. Production configuration is designed but has not yet been verified against a real Cloudflare account.

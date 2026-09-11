@@ -36,7 +36,7 @@ Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`�
 ## Production setup
 
 1. Workers BuildsのBuild commandを`npm run build`、Deploy commandを`npm run deploy`にします。公開URL未設定の初回buildは空の公開サイトとAdmin Workerをdeployし、D1/R2をprovisionします。
-2. custom domainを設定後、Workers BuildsのBuild Variablesで`PUBLIC_SITE_URL`へ`https://docs.example.com`のようなoriginを設定します。これは公開設定でありsecretではありません。以後のbuildはこのURLからCMS snapshotを取得します。[`src/site.config.ts`](src/site.config.ts)はローカル開発時のfallbackと、タイトル・言語設定に使います。
+2. custom domainを設定後、Workers BuildsのBuild Variablesで`CMS_ORIGIN`へ`https://docs.example.com`のようなoriginを設定します。これは公開設定でありsecretではありません。この1項目からAstroの公開URLとCMS snapshot endpointを導出します。[`src/site.config.ts`](src/site.config.ts)はローカル開発時のfallbackと、タイトル・言語設定に使います。
 3. bucket作成後に`wrangler.jsonc`の`MEDIA_PUBLIC_URL`へR2 public/custom domainを設定します。これは公開設定でありsecretではありません。
 4. `docs.example.com/admin/*`向けのAccess Self-hosted Applicationを1つ作成し、人間向けの`Allow` policyとWorkers Builds向けの`Service Auth` policyを追加します。
 5. Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`をWorkers BuildsのBuild Variables and Secretsへ登録します。Workers BuildsのDeploy Hook URLをWorker secretとして登録します。
@@ -57,6 +57,6 @@ npm run build:empty
 npm run dry-run
 ```
 
-`PUBLIC_SITE_URL`と`siteConfig.url`の両方が空なら、`build`は初回deploy用の空サイトを作成します。意図的に空のローカルbuildを行う場合は`build:empty`を使えます。`dry-run`はdeployせずWorkerとStatic Assetsの設定を検査します。
+`CMS_ORIGIN`と`siteConfig.url`の両方が空なら、`build`は初回deploy用の空サイトを作成します。意図的に空のローカルbuildを行う場合は`build:empty`を使えます。`dry-run`はdeployせずWorkerとStatic Assetsの設定を検査します。
 
 詳細は[Architecture](docs/ARCHITECTURE.md)、実装状況は[Roadmap](docs/ROADMAP.md)を参照してください。本番のCloudflareアカウントではまだ検証していません。

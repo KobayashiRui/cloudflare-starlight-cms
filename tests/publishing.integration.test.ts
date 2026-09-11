@@ -46,6 +46,12 @@ it('redirects the bare admin path to the Access-protected admin path', async () 
   expect(response.headers.get('location')).toBe('/admin/');
 });
 
+it('serves the saved-draft preview from the Access-protected admin path', async () => {
+  const response = await mf.dispatchFetch('http://localhost/admin/preview/preview-document?locale=ja');
+  expect(response.status).toBe(200);
+  expect(await response.text()).toContain('admin-root');
+});
+
 it('keeps drafts private and exports folder labels/order; records public moves and deletion', async () => {
   const folder = z.object({ id: z.string() }).parse(await request('api/folders', 'POST', { name: 'Getting Started', slug: 'guides', order: 3 }));
   const input = { title: 'Install', slug: 'install', folderId: folder.id, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Public text' }] }] } };

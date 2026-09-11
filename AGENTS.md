@@ -43,6 +43,8 @@ Revisionは本文・title・descriptionを保持し、NavigationとslugはRestor
 Tiptap既存機能でHeading/Paragraph/Bold/Italic/Link/List/Code/Table/Imageを扱う。
 Video/Callout/Steps/Tabsは既存拡張を調べ、Docs固有の不足だけcustom nodeにする。
 編集→保存→再編集→静的表示まで一組として実装する。
+Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを確認するread-only画面とする。Previewのために
+Starlight全体のbuild、別Worker、公開前のstatic assetを作らない。
 既存renderer/sanitizerを使い、本文をMDX/JSとして実行しない。未知nodeは拒否する。
 DB内部schemaとbuild DTOを分離。旧Markdown fixtureに新仕様を合わせない。
 

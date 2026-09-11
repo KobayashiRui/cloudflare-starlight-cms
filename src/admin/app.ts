@@ -52,6 +52,7 @@ const adminHome = (c: Context<AdminEnv>) => {
 };
 app.get('/admin', (c) => c.redirect('/admin/', 302));
 app.get('/admin/', adminHome);
+app.get('/admin/preview/:id', adminHome);
 app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.use('/admin/api/*', csrf);

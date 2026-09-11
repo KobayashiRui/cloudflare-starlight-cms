@@ -36,6 +36,10 @@ Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs
 Video→静的videoの不足だけを実装する。Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
 未知nodeの黙殺や本文のMDX/JS実行は禁止。
 
+Previewは`/admin/preview/:documentId?locale=`で保存済みDraftをread-only Tiptapとして描画する。Previewも
+`/admin/*`のAccess配下であり、静的buildやPagefindは実行しない。Starlightサイト全体のプレビューではなく、
+title・description・本文・公開用mediaの見え方を確認するための画面である。
+
 ## Build
 Access Applicationは`admin/*`の1つだけにする。人間向け`Allow` policyと、Workers Builds用Service Tokenを
 Includeした`Service Auth` policyを同じApplicationに置く。`/admin`はこのwildcardに一致しないため、Workerは

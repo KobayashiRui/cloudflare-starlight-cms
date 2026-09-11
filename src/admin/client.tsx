@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
-import { localeLabel, defaultLocale, supportedLocales, type SupportedLocale } from '../locales';
+import { localeLabel, defaultLocale, isSupportedLocale, supportedLocales, type SupportedLocale } from '../locales';
 import './styles/_variables.scss';
 import './styles/_keyframe-animations.scss';
 import './admin.scss';
@@ -48,6 +48,13 @@ const emptyDocument: DocumentRecord = {
 };
 const mediaTypes = 'image/png,image/jpeg,image/webp,image/avif,video/mp4,video/webm';
 const validSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function previewLocation(): { documentId: string; locale: SupportedLocale } | null {
+  const match = window.location.pathname.match(/^\/admin\/preview\/([^/]+)$/);
+  if (!match) return null;
+  const requestedLocale = new URLSearchParams(window.location.search).get('locale') ?? '';
+  return { documentId: decodeURIComponent(match[1]!), locale: isSupportedLocale(requestedLocale) ? requestedLocale : defaultLocale };
+}
 
 function SunIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>;
@@ -132,6 +139,52 @@ async function api<T>(path: string, init: RequestInit = {}, locale?: SupportedLo
   const payload = JSON.parse(text) as T & { error?: string };
   if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
   return payload;
+}
+
+function PreviewPage({ documentId, locale }: { documentId: string; locale: SupportedLocale }) {
+  const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemePreference>(() => {
+    const saved = window.localStorage.getItem('docs-cms-theme');
+    return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
+  });
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  useEffect(() => {
+    void api<DocumentRecord>(`/documents/${encodeURIComponent(documentId)}`, {}, locale)
+      .then(setPreviewDocument)
+      .catch((reason: unknown) => setError(String(reason)));
+  }, [documentId, locale]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyTheme = () => {
+      const isDark = theme === 'dark' || (theme === 'system' && mediaQuery.matches);
+      setSystemPrefersDark(mediaQuery.matches);
+      document.documentElement.classList.toggle('dark', isDark);
+      document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+    };
+    applyTheme();
+    mediaQuery.addEventListener('change', applyTheme);
+    window.localStorage.setItem('docs-cms-theme', theme);
+    return () => mediaQuery.removeEventListener('change', applyTheme);
+  }, [theme]);
+
+  const displayedTheme = theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : theme;
+  return <div className="cms-shell cms-preview-shell">
+    <header className="cms-topbar">
+      <a className="cms-brand" href="/admin/" aria-label="Back to Docs CMS"><span className="cms-brand-mark">✦</span><span>{siteConfig.title}</span></a>
+      <div className="cms-topbar-controls"><span className="cms-preview-label">Draft preview</span><a className="cms-button" href="/admin/">Back to editor</a><button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>{displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}</button></div>
+    </header>
+    <main className="cms-preview-main">
+      {error ? <section className="cms-preview-empty"><h1>Preview unavailable</h1><p>{error}</p></section> : !previewDocument ? <section className="cms-preview-empty"><p>Loading preview…</p></section> : <article className="cms-preview-document">
+        <p className="cms-preview-kicker">{localeLabel(previewDocument.locale)} · {previewDocument.status === 'published' ? 'Saved draft · Published version exists' : 'Saved draft'}</p>
+        <h1>{previewDocument.title || 'Untitled document'}</h1>
+        {previewDocument.description && <p className="cms-preview-description">{previewDocument.description}</p>}
+        <div className="cms-preview-editor"><SimpleEditor content={previewDocument.contentJson} extensions={documentExtensions} editable={false} /></div>
+      </article>}
+    </main>
+  </div>;
 }
 
 function documentFields(document: DocumentRecord): DocumentFields {
@@ -413,6 +466,15 @@ function App() {
     }
   };
 
+  const preview = () => {
+    if (!current?.id) return;
+    if (isDirty) {
+      showNotice('Save the draft before opening preview.', true);
+      return;
+    }
+    window.open(`/admin/preview/${encodeURIComponent(current.id)}?locale=${encodeURIComponent(current.locale)}`, '_blank', 'noopener');
+  };
+
   const describeDelivery = (delivery: PublishDelivery) => {
     if (delivery.status === 'accepted') return delivery.alreadyExists ? 'Build already requested.' : 'Build requested.';
     if (delivery.status === 'skipped') return delivery.lastError === 'Local development rebuild is active' ? 'Published. Local docs rebuild automatically.' : 'Published, but Deploy Hook is not configured.';
@@ -605,6 +667,7 @@ function App() {
               <span>{isDirty ? 'Draft changes are not saved.' : 'Saved draft.'}</span>
             </div>
             <div className="cms-document-action-buttons">
+              {current.id && <button className="cms-button" type="button" disabled={isSaving} onClick={preview}>Preview draft</button>}
               <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
               {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>
@@ -655,4 +718,5 @@ function App() {
 
 const root = document.querySelector('#admin-root');
 if (!root) throw new Error('Admin root is missing.');
-createRoot(root).render(<App />);
+const preview = previewLocation();
+createRoot(root).render(preview ? <PreviewPage {...preview} /> : <App />);

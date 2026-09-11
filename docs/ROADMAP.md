@@ -9,6 +9,7 @@
 - サイト設定をsrc/site.config.tsへ集約。ローカルはWrangler＋Astro preview、Adminはesbuild watch。
 - 一時Miniflare D1でDraft分離・競合・移動・削除を検証し、実Starlight buildでsidebar・fallback・Pagefind・旧URL消去を確認。
 - Accessは`admin/*`の単一Applicationへ統一する。`/admin`は`/admin/`へのredirectのみ、Buildは同ApplicationのService Tokenでexportを読む。BuildにD1/API Tokenは渡さない。
+- `/admin/preview/:documentId?locale=`で保存済みDraftをread-only表示する。PreviewはAccess配下で、静的buildは発火しない。
 - 本番Access／Workers Buildsの実接続は未検証。コミット後の次工程とする。
 
 Admin UIのレイアウト修正を完了した。公式Simple Editorの単体ページ用`100vw`/`100vh`を

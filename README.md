@@ -11,6 +11,7 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 利用者が管理者です。
 
 - Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
+- 保存済みDraftを`/admin/preview/:documentId?locale=`で確認するread-only Preview
 - 編集中のTranslationとPublished revisionの分離、revision履歴とRestore
 - D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
 - Cloudflare Access Application 1つによる`/admin/*`とbuild exportのedge保護

@@ -201,12 +201,13 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage }: {
+export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, editable = true }: {
   content: JSONContent
   extensions?: Extensions
   onEditorReady?: (editor: Editor) => void
   onUpdate?: (editor: Editor) => void
   uploadImage?: (file: File) => Promise<string>
+  editable?: boolean
 }) {
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
@@ -219,12 +220,13 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
 
   const editor = useEditor({
     immediatelyRender: false,
+    editable,
     editorProps: {
       attributes: {
         autocomplete: "off",
         autocorrect: "off",
         autocapitalize: "off",
-        "aria-label": "Main content area, start typing to enter text.",
+        "aria-label": editable ? "Main content area, start typing to enter text." : "Document preview content.",
         class: "simple-editor",
       },
     },
@@ -300,7 +302,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
   return (
     <div className="simple-editor-wrapper">
       <EditorContext.Provider value={{ editor }}>
-        <Toolbar
+        {editable && <Toolbar
           ref={toolbarRef}
           style={{
             ...(isMobile
@@ -325,15 +327,15 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
               onBack={() => setMobileView("main")}
             />
           )}
-        </Toolbar>
+        </Toolbar>}
 
-        <SearchAndReplace
+        {editable && <SearchAndReplace
           className="simple-editor-search-and-replace"
           open={isSearchAndReplaceOpen}
           onOpen={openSearchAndReplace}
           onClose={closeSearchAndReplace}
           scrollIntoViewOptions={SEARCH_AND_REPLACE_SCROLL_OPTIONS}
-        />
+        />}
 
         <EditorContent
           editor={editor}

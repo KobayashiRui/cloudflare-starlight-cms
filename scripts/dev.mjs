@@ -64,7 +64,7 @@ try {
   await build();
   if (stopping) throw new Error('Development server stopped');
   server(process.execPath, [cli('astro'), 'preview', '--ignore-lock', '--host', '127.0.0.1', '--port', String(docsPort)], { ...process.env, ASTRO_PREVIEW_BACKGROUND: 'false' });
-  console.log(`Admin: http://127.0.0.1:${cmsPort}/admin\nPublished docs: http://127.0.0.1:${docsPort}/`);
+  console.log(`Admin: http://127.0.0.1:${cmsPort}/admin/\nPublished docs: http://127.0.0.1:${docsPort}/`);
   let failed;
   async function poll() {
     try {

@@ -50,7 +50,7 @@ app.get('/admin/export/snapshot', async (c) => c.json(await publishedSnapshot(c.
 const adminHome = (c: Context<AdminEnv>) => {
   return c.html(adminHtml(), 200, { 'Cache-Control': 'no-store' });
 };
-app.get('/admin', adminHome);
+app.get('/admin', (c) => c.redirect('/admin/', 302));
 app.get('/admin/', adminHome);
 app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 

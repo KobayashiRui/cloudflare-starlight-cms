@@ -3,8 +3,8 @@
 
 ## 1 repo / 1 Worker
 公開Docs: Astro/Starlight SSG + Pagefind → Workers Static Assets。
-管理: /admin と /admin/* → Access → Worker → D1/Drizzle、R2。
-管理HTTPはHono、管理APIは /admin/api/*。`/admin/app.js`を含む`/admin/*`は本番ではAccess applicationのpath policyで保護し、
+管理: /admin（redirectのみ）と /admin/* → Access → Worker → D1/Drizzle、R2。
+管理HTTPはHono、管理APIは /admin/api/*。`/admin/app.js`を含む`/admin/*`は本番では1つのAccess applicationのpath policyで保護し、
 local Wranglerでは認証なしで動作する。選択的Worker-first設定は公式schemaで確認済みで、
 公開閲覧でWorker/D1を呼ばない。
 SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
@@ -37,11 +37,12 @@ Video→静的videoの不足だけを実装する。Astro Loaderとの接続はl
 未知nodeの黙殺や本文のMDX/JS実行は禁止。
 
 ## Build
-同じhuman policyを持つ`/admin`と`/admin/*`を別Applicationとして設定する。専用Access
-application/service tokenで保護したexportを同じWorkerに設ける。localでは認証なしで動作する。
-例: /admin/export/* をhuman用 /admin/* より具体的なapplicationで保護し、
-WorkerはAccess JWT/AUDを解釈せず、URLごとのAccess Applicationで人間用Adminとbuild exportを分離する。
-path優先順位とservice identity claimsは公式資料/実環境で確認する。
+Access Applicationは`admin/*`の1つだけにする。人間向け`Allow` policyと、Workers Builds用Service Tokenを
+Includeした`Service Auth` policyを同じApplicationに置く。`/admin`はこのwildcardに一致しないため、Workerは
+`/admin/`へのredirectだけを返す。localでは認証なしで動作する。WorkerはAccess JWT/AUDを解釈しない。
+BuildはService Tokenを`CF-Access-Client-Id`と`CF-Access-Client-Secret`で提示してexportを取得する。
+この単純な構成ではBuild Tokenも`/admin/*`へ到達できるため、Build環境を管理権限を持つ信頼済み環境として扱い、
+漏えい時はTokenを無効化または削除してBuild secretsを更新する。
 exportはDB内部schemaと分離したversioned DTOでPublished全件の一貫したsnapshotを返す。
 Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回deployを維持する。
 初回は明示的な空サイト＋Adminをdeployし、export設定後に通常buildへ移る。

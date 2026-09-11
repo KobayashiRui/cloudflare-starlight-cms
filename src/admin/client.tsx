@@ -575,7 +575,7 @@ function App() {
 
   return <div className="cms-shell">
     <header className="cms-topbar">
-      <a className="cms-brand" href="/admin" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>{siteConfig.title}</span></a>
+      <a className="cms-brand" href="/admin/" aria-label="Docs CMS home"><span className="cms-brand-mark">✦</span><span>{siteConfig.title}</span></a>
       <div className="cms-topbar-controls">
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>

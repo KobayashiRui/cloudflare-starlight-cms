@@ -7,13 +7,13 @@ Cloudflare / Astroの公式プロジェクトではありません。独自コ�
 ## 現在の実装
 
 単一Worker構成です。公開DocsはAstro StarlightとPagefindをStatic Assetsへ出力し、
-`/admin` と `/admin/api/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
+`/admin` は `/admin/` へのredirectだけを返し、`/admin/*` だけWorkerが先に処理します。Cloudflare Accessを通過した
 利用者が管理者です。
 
 - Tiptap公式Simple Editor（MIT source）を使うReact管理画面と、Tiptap JSONを正本にしたDocs CRUD
 - 編集中のTranslationとPublished revisionの分離、revision履歴とRestore
 - D1 + Drizzle、R2へのPNG/JPEG/WebP/AVIF/MP4/WebM upload（Worker経由は10 MiBまで）、Media Picker
-- Cloudflare Access Applicationによる`/admin/*`とbuild exportのedge保護
+- Cloudflare Access Application 1つによる`/admin/*`とbuild exportのedge保護
 - build専用のexport endpoint、D1のPublished snapshot → Starlight SSG + Pagefind
 - Workers Static Assetsの`run_worker_first`で`/admin/*`だけを動的に処理
 
@@ -40,7 +40,7 @@ npm run dev
 ```
 
 開発Workerはlocalhostだけで動くため、Accessや代替tokenは使いません。`npm run dev`は
-Admin Workerを`http://127.0.0.1:8787/admin`、Published Static Docsを
+Admin Workerを`http://127.0.0.1:8787/admin/`、Published Static Docsを
 `http://127.0.0.1:4321/`で起動します。productionではCloudflare Access Applicationが
 `/admin/*`への到達をedgeで制限します。
 
@@ -71,21 +71,26 @@ npm run dry-run
 ## Production setup
 
 1. `src/site.config.ts`でサイト名・公開URL・既定言語・対応言語を設定し、D1/R2を作成し、`wrangler.jsonc`へ実ID・bucket名を設定する。
-2. Cloudflare Accessで、同じhuman policyを持つ`/admin`と`/admin/*`の2つのApplicationを作成する。
-   wildcard pathは親pathを含まないため、両方が必要である。
-3. より具体的な`/admin/export/*` Applicationを作成し、Workers Builds用Service Tokenだけを許可する。
-   Access policyがURL単位で保護するため、WorkerへAccess secretやJWT verifierは設定しない。
+2. Cloudflare AccessでSelf-hosted Applicationを1つ作る。Hostnameは公開Docsのhostname、Pathは`admin/*`、
+   nameは任意（例: `Starlight CMS Admin`）とする。`/admin`はAccess対象外だが、Workerが`/admin/`へredirectするだけで管理内容は返さない。
+3. 同じApplicationへ2つのpolicyを追加する。人間向けの`Allow Docs Editors`は許可メールアドレス、社内ドメイン、またはAccess GroupをIncludeする。
+   Build向けの`Allow Docs Build`は`Service Auth`で、Workers Builds専用Service Token（例: `starlight-cms-build`）をIncludeする。
+   WorkerはAccess secretやJWT verifierを持たない。
 4. `MEDIA_PUBLIC_URL`をR2 public/custom domain（例: `https://media.example.com`）としてWorker secret/varsへ設定する。
    未設定時のMediaはAdmin専用URLとなり、Published snapshotのbuildは意図的に失敗する。
 5. migrationをremote D1へ適用し、空のStatic Docsを初回deployする。
 6. Workers Buildsにこのrepoを接続し、`CMS_EXPORT_URL`、`CF_ACCESS_CLIENT_ID`、
-   `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。後者2つはexport用Access
-   Applicationだけを通過できるService Tokenの値にする。
+   `CF_ACCESS_CLIENT_SECRET`をbuild secretとして設定する。BuildはこのService Tokenを付けて
+   `GET /admin/export/snapshot`からPublished snapshotだけを取得する。D1 bindingやCloudflare API TokenはBuildへ渡さない。
 7. Workers Buildsで作成したDeploy Hook URLをsecretとして設定する。URL自体が認証情報なのでGitやログへ残さない。
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
    ```
+
+   Service Tokenが漏えいした場合は、Cloudflare AccessでTokenを無効化または削除し、新しいTokenを発行して
+   Workers Buildsの2つのbuild secretを更新する。単一ApplicationではBuild Tokenも`/admin/*`へ到達できるため、
+   Build環境は管理権限を持つ信頼済み環境として扱う。Access authentication logsとCMSのrevision履歴も確認する。
 
 実アカウントで検証するまで、上記は手順の設計であり完成したdeployガイドではありません。
 詳細と引き継ぎ情報は[AGENTS.md](AGENTS.md)、[Architecture](docs/ARCHITECTURE.md)、

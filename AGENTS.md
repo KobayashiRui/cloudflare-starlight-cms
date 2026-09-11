@@ -28,7 +28,7 @@ revision snapshot、build adapter、Hook接続とsetupに限定する。
 1 repo / 1 Workerへ集約済み。`apps/`と`packages/`は削除済みで復活させない。
 目標はsrc/admin、api、db、editor、media、starlight、src/index.ts、
 migrationsとrootのAstro/Wrangler設定。Astro固有のpages等は必要に応じて配置する。
-/admin と /admin/* をWorker-firstで処理し、管理APIは /admin/api/* にまとめる。
+/admin は /admin/ へのredirectだけを返し、/admin と /admin/* をWorker-firstで処理する。管理APIは /admin/api/* にまとめる。
 管理HTTPはHonoで構成する。Honoはroute/middlewareの整理にのみ使い、汎用CMS機能を加えない。
 管理assetsもAccess配下。公開Docs閲覧時はStatic AssetsのみでD1/APIを呼ばない。
 将来の薄いdeployテンプレートはMVP後。今はパッケージ公開やmonorepo拡張をしない。
@@ -47,11 +47,13 @@ Video/Callout/Steps/Tabsは既存拡張を調べ、Docs固有の不足だけcust
 DB内部schemaとbuild DTOを分離。旧Markdown fixtureに新仕様を合わせない。
 
 ## Access / Media / Publish
-Cloudflare Access Applicationが`/admin`、`/admin/*`、export用pathをedgeで保護する。Workerは
-Access JWT、email、roleを処理しない。`workers_dev: false`とpreview URL無効化を維持し、
+Cloudflare Access Applicationは`/admin/*`をedgeで保護する1つだけにする。人間向けAllow policyと
+Workers Builds用Service TokenのService Auth policyを同じApplicationへ設定する。`/admin`はwildcardの外だが、
+redirectだけで管理内容は返さない。WorkerはAccess JWT、email、roleを処理しない。`workers_dev: false`とpreview URL無効化を維持し、
 Access外からWorkerへ到達できる経路を作らない。local Wranglerはlocalhostで認証なしとする。
-管理更新APIにCSRF対策。Build用Access credentialはexport用pathだけを通過できるようにする。
-Workers Buildsは`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`をbuild secretとして渡す。
+管理更新APIにCSRF対策。Workers Buildsは`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`をbuild secretとして渡し、
+D1 bindingやCloudflare API Tokenは渡さない。単一ApplicationではBuild Tokenも`/admin/*`へ到達できるため、
+Build環境は管理権限を持つ信頼済み環境とし、漏えい時はAccessでTokenを無効化または削除してBuild secretを更新する。
 直Worker URL、preview、管理HTMLのStatic Assets迂回も検証する。
 Mediaは既存upload UI＋最小の一覧/選択/挿入Glue。
 PNG/JPEG/WebP/AVIF/MP4/WebMのサイズ/実データ形式を検証し、R2とD1の片側失敗を処理。

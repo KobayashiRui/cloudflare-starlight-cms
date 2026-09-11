@@ -8,6 +8,7 @@
 - 削除・URL変更・Tree移動の配送をDB更新と同一batchへ追加。failedと期限切れpendingは手動retry。
 - サイト設定をsrc/site.config.tsへ集約。ローカルはWrangler＋Astro preview、Adminはesbuild watch。
 - 一時Miniflare D1でDraft分離・競合・移動・削除を検証し、実Starlight buildでsidebar・fallback・Pagefind・旧URL消去を確認。
+- Accessは`admin/*`の単一Applicationへ統一する。`/admin`は`/admin/`へのredirectのみ、Buildは同ApplicationのService Tokenでexportを読む。BuildにD1/API Tokenは渡さない。
 - 本番Access／Workers Buildsの実接続は未検証。コミット後の次工程とする。
 
 Admin UIのレイアウト修正を完了した。公式Simple Editorの単体ページ用`100vw`/`100vh`を
@@ -103,8 +104,9 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 ## P4: Self-host / Cloudflare Access
 
 1. D1/R2のremote provisioningとmigration、production binding設定をREADMEに確定する。
-2. 同じhuman policyを持つAccess Applicationを`/admin`と`/admin/*`に設定し、build
-   `/admin/export/*`はより具体的なApplicationとService Tokenで保護する。
+2. `admin/*`のAccess Applicationを1つ設定し、人間向けAllow policyとWorkers Builds用Service Tokenの
+   Service Auth policyを追加する。`/admin`は`/admin/`へのredirectだけを返す。BuildはD1権限を持たず、
+   Service TokenでPublished exportを取得する。Token漏えい時の失効・再発行・Build secret更新を検証する。
 3. R2 public/custom domainを`MEDIA_PUBLIC_URL`へ設定し、公開した画像/動画を実URLで確認する。
 4. Workers Buildsのbuild secret、Deploy Hook、初回空サイト→通常CMS buildを実アカウントで確認する。
 5. workers.dev/preview/管理assetsの迂回を検証する。Deploy to Cloudflareボタンと薄いテンプレートはその後。

@@ -40,6 +40,12 @@ async function buildDocs() {
 }
 const identity = z.object({ id: z.string(), version: z.number() });
 
+it('redirects the bare admin path to the Access-protected admin path', async () => {
+  const response = await mf.dispatchFetch('http://localhost/admin', { redirect: 'manual' });
+  expect(response.status).toBe(302);
+  expect(response.headers.get('location')).toBe('/admin/');
+});
+
 it('keeps drafts private and exports folder labels/order; records public moves and deletion', async () => {
   const folder = z.object({ id: z.string() }).parse(await request('api/folders', 'POST', { name: 'Getting Started', slug: 'guides', order: 3 }));
   const input = { title: 'Install', slug: 'install', folderId: folder.id, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Public text' }] }] } };

@@ -72,6 +72,7 @@
     "wrangler": "4.130.0"
   },
   "optionalDependencies": {
+    "@bruits/satteri-linux-x64-gnu": "0.10.5",
     "@rolldown/binding-linux-x64-gnu": "1.2.7"
   }
 }

@@ -2,6 +2,12 @@
 
 ## 現在地（2026-09-11）
 
+`packages/create-cloudflare-starlight-cms`に、rootアプリをrelease時に同梱templateへ変換する最小CLIを追加した。
+`npx create-cloudflare-starlight-cms@latest <directory>`（または`.`）で、My Docs / en-onlyの独立projectを作る。
+CLIは未公開で、npm publishは別工程である。自動更新・install・Git初期化・deployは行わない。
+fresh local DBの非対話migration、`dist`を共有するAdmin/Public assets、実npm tgzからのproject生成とlocal Admin assetsの200応答まで検証済み。
+詳細は[TEMPLATE-PLAN.md](TEMPLATE-PLAN.md)を参照。
+
 公開の整合性とfork後の設定を整理した。
 - exportのD1読取をbatch化し、公開更新日時をrevisionから取得。Draft保存でsnapshotは変わらない。
 - Folderラベル・翻訳・順序をStarlight標準sidebarへ接続。未翻訳URLは標準fallbackを採用。

@@ -9,6 +9,7 @@ import { readFile, mkdtemp, rm, access } from 'node:fs/promises';
 import { z } from 'zod';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { cmsSidebar } from '../src/starlight/sidebar.ts';
+import { supportedLocales } from '../src/locales.ts';
 
 let mf: Miniflare;
 let output: string;
@@ -40,6 +41,7 @@ async function buildDocs() {
   });
 }
 const identity = z.object({ id: z.string(), version: z.number() });
+const hasJapanese = (supportedLocales as readonly string[]).includes('ja');
 
 it('redirects the bare admin path to the Access-protected admin path', async () => {
   const response = await mf.dispatchFetch('http://localhost/admin', { redirect: 'manual' });
@@ -85,11 +87,11 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   expect(cmsSidebar(published)[0]?.label).toBe('Getting Started');
   await buildDocs();
   await access(join(output, 'cms-preview-shell/index.html'));
-  await access(join(output, 'ja/cms-preview-shell/index.html'));
+  if (hasJapanese) await access(join(output, 'ja/cms-preview-shell/index.html'));
   const publicPage = await readFile(join(output, 'guides/install/index.html'), 'utf8');
   expect(publicPage).toContain('Getting Started');
   expect(publicPage).toContain('id="install-steps"');
-  expect(await readFile(join(output, 'ja/guides/install/index.html'), 'utf8')).toContain('Public text');
+  if (hasJapanese) expect(await readFile(join(output, 'ja/guides/install/index.html'), 'utf8')).toContain('Public text');
   await access(join(output, 'pagefind/pagefind.js'));
   page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'Draft title', version: page.version }));
   expect(await request('export/snapshot')).toEqual(published);

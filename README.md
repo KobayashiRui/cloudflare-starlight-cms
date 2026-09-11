@@ -4,6 +4,21 @@ A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers
 
 Cloudflare / Astroの公式プロジェクトではありません。独自コードはMIT Licenseです。
 
+## Create a project
+
+`create-cloudflare-starlight-cms` をnpmへ公開後は、空のdirectoryへ独立したCMS projectを生成できます。
+
+```sh
+npx create-cloudflare-starlight-cms@latest my-docs
+cd my-docs
+npm install
+npm run dev
+```
+
+カレントdirectoryが空なら末尾に `.` を使えます。CLIは依存install、Git初期化、Cloudflare login、deployを行いません。
+生成されたprojectはこのrepositoryの独立したcopyです。CLI更新は新規生成にだけ適用され、既存projectを自動更新しません。
+公開前はこのrepositoryをcloneして利用してください。
+
 ## 現在の実装
 
 単一Worker構成です。公開DocsはAstro StarlightとPagefindをStatic Assetsへ出力し、
@@ -35,10 +50,11 @@ Node.js 22.19.0以上（22.22.2以上を推奨）を使います。以下はClou
 Miniflareに作成して検証します。
 
 ```sh
-npm ci
-npm run migrate:local
+npm install
 npm run dev
 ```
+
+`npm run dev` はlocal D1 migrationをidempotentに適用します。既存のlocal contentは削除しません。
 
 開発Workerはlocalhostだけで動くため、Accessや代替tokenは使いません。`npm run dev`は
 Admin Workerを`http://127.0.0.1:8787/admin/`、Published Static Docsを

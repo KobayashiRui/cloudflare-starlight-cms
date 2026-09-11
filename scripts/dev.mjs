@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { cp, rm } from 'node:fs/promises';
 
 const cmsPort = Number(process.env.CMS_PORT ?? 8787);
 const docsPort = Number(process.env.DOCS_PORT ?? 4321);
@@ -52,19 +51,21 @@ async function ready() {
 const cli = (name) => `node_modules/${name}/bin/${name === 'wrangler' ? 'wrangler.js' : 'astro.mjs'}`;
 async function build() {
   await run(process.execPath, [cli('astro'), 'build'], { ...process.env, CMS_EXPORT_URL: cmsUrl });
-  // Match production: the Worker reads the generated Starlight shell from ASSETS.
-  await rm('.dev-assets', { recursive: true, force: true });
-  await cp('dist', '.dev-assets', { recursive: true, force: true });
+  // Match production: both public and Admin assets are served from the configured
+  // Static Assets directory. Astro clears dist, so recreate the Admin bundle after it.
+  await run(process.execPath, ['scripts/build-admin.mjs']);
 }
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
 
 try {
   if (![cmsPort, docsPort].every((port) => Number.isInteger(port) && port > 0 && port < 65536) || cmsPort === docsPort) throw new Error('CMS_PORT and DOCS_PORT must be distinct valid ports');
-  const adminEnv = { ...process.env, ADMIN_ASSETS_DIR: '.dev-assets' };
-  await run(process.execPath, ['scripts/build-admin.mjs'], adminEnv);
-  server(process.execPath, ['scripts/build-admin.mjs', '--watch'], adminEnv);
-  server(process.execPath, [cli('wrangler'), 'dev', '--local', '--log-level', 'warn', '--port', String(cmsPort), '--assets', '.dev-assets', '--var', 'LOCAL_DEV_BUILD:true']);
+  // Local development always uses Miniflare state. Applying migrations is idempotent
+  // and avoids a separate first-run command without touching a remote D1 database.
+  await run(process.execPath, [cli('wrangler'), 'd1', 'migrations', 'apply', 'starlight-cms-local', '--local'], { ...process.env, CI: '1' });
+  await run(process.execPath, ['scripts/build-admin.mjs']);
+  server(process.execPath, ['scripts/build-admin.mjs', '--watch']);
+  server(process.execPath, [cli('wrangler'), 'dev', '--local', '--log-level', 'warn', '--port', String(cmsPort), '--var', 'LOCAL_DEV_BUILD:true']);
   let completed = await ready();
   if (stopping) throw new Error('Development server stopped');
   await build();

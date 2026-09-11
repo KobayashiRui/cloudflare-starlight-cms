@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { renderDocumentContent } from '../src/starlight/render.ts';
 import { renderPreviewContent, renderPreviewDocument, renderPreviewTocItems } from '../src/starlight/preview-render.ts';
+import { supportedLocales } from '../src/locales.ts';
 
 const published = {
   version: 2,
@@ -16,7 +17,8 @@ describe('published build boundary', () => {
   it('accepts a versioned published snapshot and rejects duplicate routes', () => {
     expect(publishedDocuments(published).map((doc) => doc.slug)).toEqual(['one']);
     expect(() => publishedDocuments({ ...published, documents: [...published.documents, { ...published.documents[0], id: 'two' }] })).toThrow('Duplicate');
-    expect(publishedDocuments({ ...published, version: 3, documents: [...published.documents, { ...published.documents[0], locale: 'ja' }] })).toHaveLength(2);
+    const alternateLocale = supportedLocales.find((locale) => locale !== 'en');
+    expect(publishedDocuments({ ...published, version: 3, documents: alternateLocale ? [...published.documents, { ...published.documents[0], locale: alternateLocale }] : published.documents })).toHaveLength(alternateLocale ? 2 : 1);
   });
   it.each(['../secret', '/absolute', 'admin', 'admin/users', 'a//b', 'a?b'])('rejects reserved or invalid slug %s', (slug) => {
     expect(() => publishedDocuments({ ...published, documents: [{ ...published.documents[0], slug }] })).toThrow();

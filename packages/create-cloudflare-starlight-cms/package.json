@@ -1,0 +1,26 @@
+{
+  "name": "create-cloudflare-starlight-cms",
+  "version": "0.1.0",
+  "description": "Create a self-hosted Astro Starlight documentation CMS for Cloudflare Workers.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-cloudflare-starlight-cms": "./bin/index.js"
+  },
+  "files": [
+    "bin",
+    "template",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/prepare-create-template.mjs"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

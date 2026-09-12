@@ -49,6 +49,10 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 
 Publishing updates the public revision and requests a build. A successful Hook request means the build was accepted, not that it has deployed. Without a Hook, local publishing still rebuilds the local static Docs.
 
+Use a root-level document with the URL segment `index` as the homepage. It is a regular CMS document and publishes at `/`; its translations publish at their locale roots, such as `/ja/`.
+
+For a custom landing page instead, do not create that CMS `index` document. Add `src/pages/index.astro` to the generated project: Astro owns `/`, while CMS documents remain available at their own paths such as `/getting-started/`.
+
 Initialization records the two bundled CREATE migrations in `d1_migrations`, shared with Wrangler. Failed initialization returns 503 and can be retried. Future ALTER/backfill migrations require an explicit upgrade procedure; adding a SQL file does not automatically enable runtime execution. Keep production data when upgrading.
 
 If provisioning reports an existing D1 after deletion, check Cloudflare Audit Logs for `DeleteDatabase` and subsequent `CreateDatabase` events and check overlapping builds. This error happens before schema initialization. Do not repeatedly delete databases or rename the Worker as a recovery procedure. Successful existing bindings are inherited by Wrangler; recovery of an unbound resource after a failed first deploy needs account-level verification.

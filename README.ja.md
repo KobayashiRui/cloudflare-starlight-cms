@@ -47,6 +47,10 @@ Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`�
 
 Publishは公開revisionを更新してbuildを要求します。Hookの成功はbuildの受理を意味し、公開完了ではありません。Hook未設定でもローカルでは公開Docsを再buildします。
 
+root直下でURL segmentを`index`にしたDocumentがホームページです。通常のCMS Documentとして扱われ、`/`へ公開されます。翻訳は`/ja/`のように各言語のrootへ公開されます。
+
+独自のランディングページを使う場合は、CMSの`index` Documentを作りません。生成projectに`src/pages/index.astro`を追加するとAstroが`/`を担当し、CMS Documentは`/getting-started/`のような各URLで公開されます。
+
 ## Commands
 
 ```sh

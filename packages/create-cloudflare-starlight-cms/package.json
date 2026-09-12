@@ -1,11 +1,27 @@
 {
   "name": "create-cloudflare-starlight-cms",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "description": "Create a self-hosted Astro Starlight documentation CMS for Cloudflare Workers.",
+  "keywords": [
+    "astro",
+    "cloudflare",
+    "cms",
+    "docs",
+    "starlight",
+    "workers"
+  ],
+  "homepage": "https://github.com/KobayashiRui/cloudflare-starlight-cms#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KobayashiRui/cloudflare-starlight-cms.git"
+  },
+  "bugs": {
+    "url": "https://github.com/KobayashiRui/cloudflare-starlight-cms/issues"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {
-    "create-cloudflare-starlight-cms": "./bin/index.js"
+    "create-cloudflare-starlight-cms": "bin/index.js"
   },
   "files": [
     "bin",
@@ -15,7 +31,10 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "prepack": "node ../../scripts/prepare-create-template.mjs"
+    "prepack": "node ../../scripts/prepare-create-template.mjs",
+    "release:check": "node ../../scripts/release-check.mjs",
+    "prepublishOnly": "npm run release:check",
+    "release:dry-run": "npm publish --dry-run --access public"
   },
   "engines": {
     "node": ">=22.19.0"

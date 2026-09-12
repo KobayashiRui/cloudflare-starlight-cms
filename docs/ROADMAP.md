@@ -1,5 +1,11 @@
 # Roadmap / terra引き継ぎ
 
+## P5 npm release preparation（2026-09-13）
+
+- `create-cloudflare-starlight-cms`をv0.9.0として公開準備した。npm package metadata、public access、Node 22.19以上を明記した。
+- rootの`npm run release:check`はcheck/test/空サイトbuild/Worker dry-runに加え、実tgzを一時installしてCLI生成とLinux lock検査まで行う。`prepublishOnly`にも同じ検査を設定した。
+- `npm run release:dry-run`でnpm publish lifecycleを検証済み。実npm公開、package name所有権の最終確認、公開後のregistry経由smoke testはリリース担当者が行う。
+
 ## P0 deployment bootstrap（2026-09-13）
 
 - 標準`npx wrangler deploy`を採用。deploy scriptからremote migration前提を除去。

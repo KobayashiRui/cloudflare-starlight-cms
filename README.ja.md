@@ -37,9 +37,9 @@ Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`�
 
 1. Workers BuildsのBuild commandを`npm run build`、Deploy commandを標準の`npx wrangler deploy`にします。非本番ブランチbuildは無効にしてください。公開URL未設定の初回buildは空の公開サイトとAdmin Workerをdeployし、D1/R2をprovisionします。最初の管理API・export・previewアクセス時に同梱schemaを適用します。
 2. custom domainを設定後、Workers BuildsのBuild Variablesで`CMS_ORIGIN`へ`https://docs.example.com`のようなoriginを設定します。これは公開設定でありsecretではありません。この1項目からAstroの公開URLとCMS snapshot endpointを導出します。[`src/site.config.ts`](src/site.config.ts)はローカル開発時のfallbackと、タイトル・言語設定に使います。
-3. bucket作成後に`wrangler.jsonc`の`MEDIA_PUBLIC_URL`へR2 public/custom domainを設定します。これは公開設定でありsecretではありません。
+3. bucket作成後、R2 public/custom domainをproduction Workerの実行時Variable `MEDIA_PUBLIC_URL`として **Worker → Settings → Variables and Secrets** へ登録します。これは公開設定でありsecretではありません。
 4. `docs.example.com/admin/*`向けのAccess Self-hosted Applicationを1つ作成し、人間向けの`Allow` policyとWorkers Builds向けの`Service Auth` policyを追加します。
-5. Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`をWorkers BuildsのBuild Variables and Secretsへ登録します。Workers BuildsのDeploy Hook URLをWorker secretとして登録します。
+5. Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`をWorkers BuildsのBuild Variables and Secretsへ登録します。Workers BuildsのDeploy Hook URLは、production Workerの実行時Secret `WORKERS_DEPLOY_HOOK_URL`として **Worker → Settings → Variables and Secrets** へ登録します。Workers Buildsの変数へ登録しても、実行中のCMS Workerには渡りません。`keep_vars: true`により、コードdeployごとにDashboardの実行時Variableを保持します。ローカルの認証済みterminalから登録する場合は次のとおりです。
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL

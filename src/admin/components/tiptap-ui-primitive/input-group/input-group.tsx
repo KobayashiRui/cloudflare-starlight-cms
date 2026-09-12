@@ -95,18 +95,19 @@ function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function InputGroupInput({
-  className,
-  ...props
-}: React.ComponentProps<"input">) {
-  return (
-    <Input
-      data-slot="tiptap-input-group-control"
-      className={cn("tiptap-input-group-control", className)}
-      {...props}
-    />
-  )
-}
+const InputGroupInput = React.forwardRef<
+  HTMLInputElement,
+  React.ComponentProps<"input">
+>(({ className, ...props }, ref) => (
+  <Input
+    ref={ref}
+    data-slot="tiptap-input-group-control"
+    className={cn("tiptap-input-group-control", className)}
+    {...props}
+  />
+))
+
+InputGroupInput.displayName = "InputGroupInput"
 
 function InputGroupTextarea({
   className,

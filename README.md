@@ -39,9 +39,9 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 
 1. Set the Workers Builds build command to `npm run build` and keep the default deploy command `npx wrangler deploy`. Disable non-production branch builds. With no public URL yet, the first build deploys an empty site and Admin Worker and provisions D1/R2. The first management API, export, or preview request applies the bundled initial schema automatically.
 2. Configure the custom domain. Set `CMS_ORIGIN` to its origin, such as `https://docs.example.com`, in Workers Builds Build Variables. It is public configuration, not a secret. Builds derive both the Astro site URL and CMS snapshot endpoint from this one value. [`src/site.config.ts`](src/site.config.ts) remains the fallback for local development, title, and locales.
-3. Set `MEDIA_PUBLIC_URL` in `wrangler.jsonc` to the R2 public/custom domain after the bucket is provisioned. It is public configuration, not a secret.
+3. After the bucket is provisioned, add `MEDIA_PUBLIC_URL` as a production Worker runtime Variable in **Worker → Settings → Variables and Secrets**. Set it to the R2 public/custom-domain origin. It is public configuration, not a secret.
 4. Create one Access Self-hosted Application for `docs.example.com/admin/*`. Add a human `Allow` policy and a Workers Builds `Service Auth` policy.
-5. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets. Store the Workers Builds Deploy Hook URL as a Worker secret:
+5. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets. Add the Workers Builds Deploy Hook URL as the production Worker runtime secret `WORKERS_DEPLOY_HOOK_URL` in **Worker → Settings → Variables and Secrets**. Do not add it to the Workers Builds variables: build variables are not available to the running CMS Worker. `keep_vars: true` preserves dashboard runtime variables during each code deploy. From a local authenticated terminal, the equivalent is:
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL

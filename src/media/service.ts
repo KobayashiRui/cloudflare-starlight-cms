@@ -88,14 +88,14 @@ export async function uploadMedia(env: RuntimeEnv, request: Request) {
   const id = crypto.randomUUID();
   const objectKey = `media/${id}.${extension}`;
   const now = Date.now();
-  await env.MEDIA_BUCKET.put(objectKey, file.stream(), { httpMetadata: { contentType: type } });
+  await env.MEDIA.put(objectKey, file.stream(), { httpMetadata: { contentType: type } });
   try {
     await database(env).insert(media).values({
       id, objectKey, fileName: file.name.slice(0, 255) || `${id}.${extension}`, contentType: type,
       size: file.size, createdAt: now,
     });
   } catch (error) {
-    await env.MEDIA_BUCKET.delete(objectKey);
+    await env.MEDIA.delete(objectKey);
     throw error;
   }
   return { id, objectKey, fileName: file.name, contentType: type, size: file.size, url: mediaUrl(env, objectKey) };
@@ -111,7 +111,7 @@ export async function deleteUnusedMedia(env: RuntimeEnv, id: string): Promise<vo
 
   await db.delete(media).where(eq(media.id, id));
   try {
-    await env.MEDIA_BUCKET.delete(row.objectKey);
+    await env.MEDIA.delete(row.objectKey);
   } catch (error) {
     // Restore the row when R2 rejects deletion, leaving the object manageable.
     await db.insert(media).values(row);

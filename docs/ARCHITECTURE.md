@@ -74,8 +74,9 @@ Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、
 Admin専用URLを含むPublished snapshotはbuildを失敗させる。公開R2 URLはDraftでも秘匿されない。
 Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF対策だけを実施する。
-`wrangler.jsonc`はaccount固有のD1 database ID、D1 database name、R2 bucket nameを持たず、`DB`と`MEDIA_BUCKET`のbindingだけを宣言する。
+`wrangler.jsonc`はaccount固有のD1 database ID、D1 database name、R2 bucket nameを持たず、`DB`と`MEDIA`のbindingだけを宣言する。
 Cloudflare Automatic Resource Provisioningが初回deploy時にD1/R2を作成してbindingする。GitHub経由のdeployでは作成後のIDはDashboardで管理され、repositoryへ書き戻されない。
+create CLIは出力先のproject名をWorker名へ設定するため、生成projectごとに自動作成リソースも分離される。
 Workers Buildsは常に`npm run build`を実行する。初回は`CMS_ORIGIN`と`siteConfig.url`が空のため、明示的な空サイトを生成する。custom domain接続後にBuild Variableの`CMS_ORIGIN`を設定すると、Astroの公開URLとAccess経由のPublished snapshot endpointを同じoriginから導出する。Deploy commandの`npm run deploy`が`DB`へのremote migrationを適用してからWorkerをdeployする。
 まず単一repoで完成。薄いテンプレート/パッケージ公開はMVP後。
 Cloudflare/Astro非公式。無料運用は保証しない。

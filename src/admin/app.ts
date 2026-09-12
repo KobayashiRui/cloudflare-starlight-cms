@@ -106,7 +106,7 @@ app.delete('/admin/api/media/:id', async (c) => {
 app.get('/admin/api/media/object/:key{.+}', async (c) => {
   const key = c.req.param('key');
   if (!/^media\/[a-z0-9-]+\.(png|jpg|webp|avif|mp4|webm)$/.test(key)) return c.json({ error: 'Not found' }, 404, jsonHeaders);
-  const object = await c.env.MEDIA_BUCKET.get(key);
+  const object = await c.env.MEDIA.get(key);
   if (!object) return c.json({ error: 'Not found' }, 404, jsonHeaders);
   const headers = new Headers(noStore);
   object.writeHttpMetadata(headers);

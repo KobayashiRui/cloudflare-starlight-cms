@@ -21,6 +21,16 @@ function projectNameFromDirectory(directory) {
   return normalized && /^[a-z0-9]/.test(normalized) ? normalized : 'my-docs';
 }
 
+function workerNameFromProjectName(projectName) {
+  const workerName = projectName
+    .replace(/[._]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63)
+    .replace(/-+$/g, '');
+  return workerName || 'my-docs';
+}
+
 async function exists(path) {
   try {
     await access(path, constants.F_OK);
@@ -90,6 +100,17 @@ async function configurePackage(destination, projectName) {
   await writeFile(lockPath, `${JSON.stringify(lockfile, null, 2)}\n`);
 }
 
+async function configureWrangler(destination, workerName) {
+  const wranglerPath = join(destination, 'wrangler.jsonc');
+  const wranglerConfig = await readFile(wranglerPath, 'utf8');
+  const configured = wranglerConfig.replace(
+    /("name"\s*:\s*)"[^"]+"/,
+    `$1"${workerName}"`,
+  );
+  if (configured === wranglerConfig) throw new Error('The packaged template has no Worker name to configure.');
+  await writeFile(wranglerPath, configured);
+}
+
 function printSuccess(destination) {
   const relativeDestination = relative(process.cwd(), destination) || '.';
   const directoryForCommand = relativeDestination === '.' || relativeDestination.startsWith('..')
@@ -115,7 +136,9 @@ if (argument === '--help' || argument === '-h') {
     await assertDirectoryIsReady(destination);
     await mkdir(destination, { recursive: true });
     await copyDirectory(templateRoot, destination, true);
-    await configurePackage(destination, projectNameFromDirectory(destination));
+    const projectName = projectNameFromDirectory(destination);
+    await configurePackage(destination, projectName);
+    await configureWrangler(destination, workerNameFromProjectName(projectName));
     printSuccess(destination);
   } catch (error) {
     console.error(`Could not create project: ${error.message}`);

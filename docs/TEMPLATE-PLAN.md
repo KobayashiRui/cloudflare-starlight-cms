@@ -28,7 +28,7 @@ CLI実行時にGitHub mainをfetchしない。npmのCLI versionと同梱template
 - 引数は `<directory>` / `.`、`--help`、`--version` のみ。引数なし・未知optionはusageを示し非ゼロ終了。対話質問は次段階で必要性を判断する。
 - Site titleは `My Docs`、default localeは `en`、supported localesはenのみ。後で `src/site.config.ts` を編集する。設定ファイルをrootへ移動しない。
 - package名だけ出力先basenameからnpm有効名へ正規化する。空・日本語のみなどの場合は固定名 `my-docs` にfallback。nameはprivate packageなのでdirectory名の厳しい制約は不要。lockfileのroot nameも合わせる。
-- Worker/D1/R2名は初版では既存の固定サンプル値。production setupで利用者が設定する。自動renameするとmigration script等との整合箇所が増えるため実施しない。
+- CLIはproject名をCloudflare Worker名として`wrangler.jsonc`へ設定する。Worker名の制約に合わせて`.`と`_`は`-`へ正規化する。D1/R2は`DB`と`MEDIA` bindingだけを持ち、Cloudflare Automatic Resource ProvisioningがWorker名を基準に作成するため、resource ID/nameを設定・出力しない。
 - 出力先は未作成または空のみ。`.git`（file/worktreeも含む）と`.DS_Store`は保持したまま許可。それ以外の既存ファイルがあれば書込前に中断する。`--force`なし。
 - 出力先のsymlinkは拒否する。template内のsymlinkも配布準備で拒否する。コピーは既存ファイルを上書きしない。失敗時にユーザーdirectory全体を削除しない。
 - shell実行・install・git init・deploy・Cloudflare loginはしない。生成成功後に実行するコマンドとREADMEのsetup先を表示する。

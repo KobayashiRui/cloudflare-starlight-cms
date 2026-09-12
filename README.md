@@ -23,6 +23,8 @@ npm run dev
 
 The local Admin is at `http://127.0.0.1:8787/admin/`; static Docs are at `http://127.0.0.1:4321/`. Local D1 and R2 use Miniflare and need no Cloudflare account.
 
+The CLI writes the normalized project name to `wrangler.jsonc` as the Worker name. Its `DB` and `MEDIA` bindings have no resource IDs or names, so Cloudflare provisions their D1 database and R2 bucket during the first deploy.
+
 ## Included
 
 - React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, and locale-aware documents

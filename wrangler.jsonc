@@ -21,6 +21,6 @@
     "binding": "DB",
     "migrations_dir": "./migrations"
   }],
-  "r2_buckets": [{ "binding": "MEDIA_BUCKET" }],
+  "r2_buckets": [{ "binding": "MEDIA" }],
   "observability": { "enabled": true, "head_sampling_rate": 1 }
 }

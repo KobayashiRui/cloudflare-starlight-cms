@@ -11,4 +11,6 @@ npm run dev
 
 Use `.` to create a project in the current empty directory. The CLI never installs dependencies, initializes Git, deploys, or accesses a Cloudflare account.
 
+The normalized project name also becomes the generated `wrangler.jsonc` Worker name. `DB` and `MEDIA` are binding-only definitions, so Cloudflare provisions the D1 database and R2 bucket on the first deployment.
+
 The generated project is an independent copy of the CMS template. Updating this CLI affects new projects only.

@@ -1,5 +1,16 @@
 export type DeployHookResult = { buildId: string | null; alreadyExists: boolean };
 
+function transportError(error: unknown): Error {
+  // Do not persist runtime error messages: they can contain the secret hook URL.
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return new Error('Workers Deploy Hook request timed out');
+  }
+  if (error instanceof TypeError) {
+    return new Error('Workers Deploy Hook network request failed');
+  }
+  return new Error('Workers Deploy Hook transport failed');
+}
+
 /**
  * Low-level Workers Builds transport. The URL is a secret, so errors deliberately
  * contain no destination or response body.
@@ -12,8 +23,10 @@ export async function triggerDeployHook(url: string, request: typeof fetch = fet
     throw new Error('Invalid Workers Deploy Hook URL');
   }
   let response: Response;
-  try { response = await request(parsed.href, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10_000) }); }
-  catch { throw new Error('Workers Deploy Hook request failed'); }
+  // This deliberately matches Cloudflare's documented Deploy Hook request. The
+  // hook URL itself is the credential; no Access or API-token header is used.
+  try { response = await request(parsed.href, { method: 'POST' }); }
+  catch (error) { throw transportError(error); }
   if (!response.ok) throw new Error(`Workers Deploy Hook rejected: ${response.status}`);
   try {
     const body = await response.json() as { result?: { build_uuid?: unknown; already_exists?: unknown } };

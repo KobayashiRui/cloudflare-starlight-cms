@@ -107,7 +107,7 @@ async function configureWrangler(destination, workerName) {
     /("name"\s*:\s*)"[^"]+"/,
     `$1"${workerName}"`,
   );
-  if (configured === wranglerConfig) throw new Error('The packaged template has no Worker name to configure.');
+  if (!/"name"\s*:\s*"[^"]+"/.test(wranglerConfig)) throw new Error('The packaged template has no Worker name to configure.');
   await writeFile(wranglerPath, configured);
 }
 

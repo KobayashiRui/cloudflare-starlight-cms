@@ -35,7 +35,7 @@ Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`�
 
 ## Production setup
 
-1. Workers BuildsのBuild commandを`npm run build`、Deploy commandを`npm run deploy`にします。公開URL未設定の初回buildは空の公開サイトとAdmin Workerをdeployし、D1/R2をprovisionします。
+1. Workers BuildsのBuild commandを`npm run build`、Deploy commandを標準の`npx wrangler deploy`にします。非本番ブランチbuildは無効にしてください。公開URL未設定の初回buildは空の公開サイトとAdmin Workerをdeployし、D1/R2をprovisionします。最初の管理API・export・previewアクセス時に同梱schemaを適用します。
 2. custom domainを設定後、Workers BuildsのBuild Variablesで`CMS_ORIGIN`へ`https://docs.example.com`のようなoriginを設定します。これは公開設定でありsecretではありません。この1項目からAstroの公開URLとCMS snapshot endpointを導出します。[`src/site.config.ts`](src/site.config.ts)はローカル開発時のfallbackと、タイトル・言語設定に使います。
 3. bucket作成後に`wrangler.jsonc`の`MEDIA_PUBLIC_URL`へR2 public/custom domainを設定します。これは公開設定でありsecretではありません。
 4. `docs.example.com/admin/*`向けのAccess Self-hosted Applicationを1つ作成し、人間向けの`Allow` policyとWorkers Builds向けの`Service Auth` policyを追加します。

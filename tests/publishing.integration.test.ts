@@ -16,13 +16,18 @@ let output: string;
 const previewShell = `<!doctype html><html><head><title>Preview</title><meta name="description" content=""><meta property="og:title" content="Preview"><link rel="canonical" href="https://example.test/cms-preview-shell/"></head><body><starlight-lang-select>Language</starlight-lang-select><h1 id="_top">Preview</h1><mobile-starlight-toc data-min-h="2" data-max-h="3"><ul class="isMobile toc"><li>Overview</li></ul></mobile-starlight-toc><starlight-toc data-min-h="2" data-max-h="3"><ul class="toc"><li>Overview</li></ul></starlight-toc><div class="sl-markdown-content"><div id="cms-preview-content"></div></div></body></html>`;
 beforeAll(async () => {
   output = await mkdtemp(join(tmpdir(), 'cms-publish-test-'));
-  const bundle = await build({ entryPoints: ['src/index.ts'], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
+  const bundle = await build({ entryPoints: ['src/index.ts'], loader: { '.sql': 'text' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
   mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'cms-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA'], serviceBindings: { ASSETS: () => new Response(previewShell, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }) } }] }));
   const db = await mf.getD1Database('DB');
-  for (const file of ['0001_schema.sql', '0002_publish_delivery.sql']) {
-    const sql = await readFile(`migrations/${file}`, 'utf8');
-    await db.batch(sql.split(';').map((query) => query.trim()).filter(Boolean).map((query) => db.prepare(query)));
-  }
+  // An incompatible pre-existing table must fail closed, without recording
+  // a completed migration. Repairing this disposable test DB permits retry.
+  await db.prepare('CREATE TABLE folder (id TEXT PRIMARY KEY)').run();
+  expect((await mf.dispatchFetch('http://localhost/admin/export/snapshot')).status).toBe(503);
+  expect((await db.prepare('SELECT name FROM d1_migrations').all()).results).toHaveLength(0);
+  await db.prepare('DROP TABLE folder').run();
+  const responses = await Promise.all(Array.from({ length: 4 }, () => mf.dispatchFetch('http://localhost/admin/export/snapshot')));
+  for (const response of responses) expect(response.status).toBe(200);
+  expect((await db.prepare('SELECT name FROM d1_migrations').all()).results).toHaveLength(2);
 }, 30000);
 afterAll(async () => { await mf?.dispose(); if (output) await rm(output, { recursive: true, force: true }); });
 

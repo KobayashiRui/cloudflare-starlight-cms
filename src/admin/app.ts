@@ -1,4 +1,5 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { ensureSchema } from '../db/bootstrap.ts';
 import { z } from 'zod';
 import { DocumentConflictError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
 import { InvalidMediaError, MediaInUseError, MediaNotFoundError, deleteUnusedMedia, listMedia, uploadMedia } from '../media/service.ts';
@@ -49,6 +50,16 @@ app.onError((error, c) => {
   return c.json({ error: 'Request failed' }, 500, jsonHeaders);
 });
 
+app.use('/admin/*', async (c, next) => {
+  if (c.req.path.startsWith('/admin/api/') || c.req.path.startsWith('/admin/preview/') || c.req.path === '/admin/export/snapshot') {
+    try {
+      await ensureSchema(c.env.DB);
+    } catch {
+      return c.json({ error: 'Database initialization failed. Retry the request.' }, 503, { ...noStore, 'Retry-After': '5' });
+    }
+  }
+  await next();
+});
 app.get('/admin/export/snapshot', async (c) => c.json(await publishedSnapshot(c.env), 200, jsonHeaders));
 const adminHome = (c: Context<AdminEnv>) => {
   return c.html(adminHtml(), 200, { 'Cache-Control': 'no-store' });

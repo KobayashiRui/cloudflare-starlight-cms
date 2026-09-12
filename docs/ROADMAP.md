@@ -1,5 +1,14 @@
 # Roadmap / terra引き継ぎ
 
+## P0 deployment bootstrap（2026-09-13）
+
+- 標準`npx wrangler deploy`を採用。deploy scriptからremote migration前提を除去。
+- 同梱0001/0002 SQLを正本に、管理DBアクセス前の初期化とWrangler互換履歴を追加。失敗・再試行・同時初期化を一時D1で検証する。将来のALTER/backfillの自動化は対象外。
+- CLIの同名Worker生成エラーとLinux検証scriptの梱包漏れを修正。
+- Wrangler 4.130.0の同名メッセージはD1作成APIの7502応答由来。成功したWorkerのbinding継承実装は存在するが、削除後に7502が返る実アカウント側原因は未確認。Audit Logsと重複buildの確認が必要。リソース削除・本番deployは行っていない。
+- 非本番branch buildsは初期setupで無効にする。下記の古いremote migration前提の記述は本節で置き換える。
+- 検証: check成功（既存hint 9）、38テスト成功（空DB・同時初期化・失敗後retry・Published Astro buildを含む）、空サイトbuild、Worker dry-run成功。実npm tarballから同名project生成とLinux lock検査も成功。実Cloudflareの初回/再deployと削除後7502の原因確認は未完了。
+
 ## 現在地（2026-09-11）
 
 `packages/create-cloudflare-starlight-cms`に、rootアプリをrelease時に同梱templateへ変換する最小CLIを追加した。

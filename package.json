@@ -17,7 +17,7 @@
     "test": "vitest run",
     "migrate:local": "wrangler d1 migrations apply DB --local",
     "migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "npm run migrate:remote && wrangler deploy",
+    "deploy": "wrangler deploy",
     "typegen": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings",
     "dry-run": "wrangler deploy --dry-run"
   },

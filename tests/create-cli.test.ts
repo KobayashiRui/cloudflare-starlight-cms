@@ -49,3 +49,10 @@ it('allows . inside a Git worktree with no project files', async () => {
   await expect(execute(process.execPath, [cli, '.'], { cwd: destination })).rejects.toMatchObject({ stderr: expect.stringContaining('not empty') });
   expect(await readFile(join(destination, 'sentinel.txt'), 'utf8')).toBe('keep');
 });
+
+it('accepts the template Worker name and includes the generated check script', async () => {
+  const destination = join(temporaryRoot, 'cloudflare-starlight-cms');
+  await execute(process.execPath, [cli, destination]);
+  expect(await readFile(join(destination, 'wrangler.jsonc'), 'utf8')).toContain('"name": "cloudflare-starlight-cms"');
+  await execute(process.execPath, ['scripts/check-linux-bindings.mjs'], { cwd: destination });
+});

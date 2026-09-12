@@ -12,6 +12,7 @@ const entries = [
   'migrations',
   'scripts/dev.mjs',
   'scripts/build-admin.mjs',
+  'scripts/check-linux-bindings.mjs',
   'tests',
   'astro.config.mjs',
   'wrangler.jsonc',

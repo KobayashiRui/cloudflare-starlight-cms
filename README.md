@@ -37,7 +37,7 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 
 ## Production setup
 
-1. Set the Workers Builds build command to `npm run build` and deploy command to `npm run deploy`. With no public URL yet, the first build deploys an explicit empty site and provisions D1/R2, including the Admin Worker.
+1. Set the Workers Builds build command to `npm run build` and keep the default deploy command `npx wrangler deploy`. Disable non-production branch builds. With no public URL yet, the first build deploys an empty site and Admin Worker and provisions D1/R2. The first management API, export, or preview request applies the bundled initial schema automatically.
 2. Configure the custom domain. Set `CMS_ORIGIN` to its origin, such as `https://docs.example.com`, in Workers Builds Build Variables. It is public configuration, not a secret. Builds derive both the Astro site URL and CMS snapshot endpoint from this one value. [`src/site.config.ts`](src/site.config.ts) remains the fallback for local development, title, and locales.
 3. Set `MEDIA_PUBLIC_URL` in `wrangler.jsonc` to the R2 public/custom domain after the bucket is provisioned. It is public configuration, not a secret.
 4. Create one Access Self-hosted Application for `docs.example.com/admin/*`. Add a human `Allow` policy and a Workers Builds `Service Auth` policy.
@@ -48,6 +48,10 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
    ```
 
 Publishing updates the public revision and requests a build. A successful Hook request means the build was accepted, not that it has deployed. Without a Hook, local publishing still rebuilds the local static Docs.
+
+Initialization records the two bundled CREATE migrations in `d1_migrations`, shared with Wrangler. Failed initialization returns 503 and can be retried. Future ALTER/backfill migrations require an explicit upgrade procedure; adding a SQL file does not automatically enable runtime execution. Keep production data when upgrading.
+
+If provisioning reports an existing D1 after deletion, check Cloudflare Audit Logs for `DeleteDatabase` and subsequent `CreateDatabase` events and check overlapping builds. This error happens before schema initialization. Do not repeatedly delete databases or rename the Worker as a recovery procedure. Successful existing bindings are inherited by Wrangler; recovery of an unbound resource after a failed first deploy needs account-level verification.
 
 ## Commands
 

@@ -34,6 +34,7 @@
     "prepack": "node ../../scripts/prepare-create-template.mjs",
     "release:check": "node ../../scripts/release-check.mjs",
     "prepublishOnly": "npm run release:check",
+    "publish:public": "npm publish --access public",
     "release:dry-run": "npm publish --dry-run --access public"
   },
   "engines": {

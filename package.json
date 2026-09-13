@@ -22,7 +22,7 @@
     "dry-run": "wrangler deploy --dry-run",
     "release:check": "npm --prefix packages/create-starlight-cms run release:check",
     "release:dry-run": "npm --prefix packages/create-starlight-cms run release:dry-run",
-    "publish:cli": "npm --prefix packages/create-starlight-cms publish --access public"
+    "publish:cli": "npm --prefix packages/create-starlight-cms run publish:public"
   },
   "dependencies": {
     "@astrojs/check": "0.9.10",

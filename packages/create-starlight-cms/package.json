@@ -1,6 +1,6 @@
 {
   "name": "create-starlight-cms",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Create a self-hosted Astro Starlight documentation CMS for Cloudflare Workers.",
   "keywords": [
     "astro",

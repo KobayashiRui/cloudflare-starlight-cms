@@ -4,7 +4,7 @@ import { slug } from '../documents/validation.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
 
-const folderInput = z.object({ name: z.string().trim().min(1).max(120), slug, parentId: z.string().uuid().nullable().default(null), order: z.number().int().min(0).max(100000).default(0) });
+const folderInput = z.object({ name: z.string().trim().min(1).max(120), slug, parentId: z.uuid().nullable().default(null), order: z.number().int().min(0).max(100000).default(0) });
 export class FolderNotFoundError extends Error {}
 export class NavigationConflictError extends Error {}
 export type PublicationState = 'draft' | 'changes' | 'published';
@@ -114,7 +114,7 @@ export async function deleteFolder(env: RuntimeEnv, id: string) {
 }
 
 const treeChildId = z.string().regex(/^(folder|document):[0-9a-f-]{36}$/i);
-const childrenInput = z.object({ parentId: z.string().uuid().nullable(), childIds: z.array(treeChildId).max(10_000) });
+const childrenInput = z.object({ parentId: z.uuid().nullable(), childIds: z.array(treeChildId).max(10_000) });
 type NavigationRow = { id: string; kind: 'folder' | 'document'; slug: string; order: number };
 
 async function siblings(env: RuntimeEnv, parentId: string | null, excluded: NavigationRow | null = null): Promise<NavigationRow[]> {

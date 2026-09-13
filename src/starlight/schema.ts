@@ -13,9 +13,9 @@ export const documentSchema = z.object({
   order: z.number().int().nonnegative().default(0),
   body: z.object({ format: z.literal('markdown'), value: z.string() }).strict(),
   status: z.literal('published'),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  publishedAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  publishedAt: z.iso.datetime(),
 }).strict();
 export const snapshotSchema = z.object({ version: z.union([z.literal(1), z.literal(2), z.literal(3)]), documents: z.array(documentSchema) }).strict();
 export type Document = z.infer<typeof documentSchema>;

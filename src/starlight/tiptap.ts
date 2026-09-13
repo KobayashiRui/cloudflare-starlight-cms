@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-const tiptapNode = z.object({
+const tiptapNode = z.looseObject({
   type: z.string(),
   text: z.string().optional(),
   attrs: z.record(z.string(), z.unknown()).optional(),
   content: z.array(z.unknown()).optional(),
-}).passthrough();
+});
 
 export type TiptapNode = z.infer<typeof tiptapNode>;
 

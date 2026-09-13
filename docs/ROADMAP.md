@@ -1,5 +1,9 @@
 # Roadmap / terra引き継ぎ
 
+## P6: v0.9.1 Zod API cleanup（2026-09-14）
+
+- Zod 4.6.4のdeprecated APIを`z.looseObject()`、`z.uuid()`、`z.iso.datetime()`へ置き換え、型検査の9 hintを解消する。CLI packageを`0.9.1`へ更新する。
+
 ## P1–P2: secure setup and generated project hygiene（2026-09-14）
 
 - Production setupは、custom domainをWorkerへ接続する前に、予定hostnameの`admin/*`を保護する単一のCloudflare Access Applicationと人間向けAllow policyを作る順序へ変更した。接続時からAdmin APIを含む`/admin/*`がAccess配下になる。実Accessの設定・接続はP4で実アカウント検証を継続する。

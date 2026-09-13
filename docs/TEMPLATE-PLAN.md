@@ -4,11 +4,11 @@
 
 ## 決定する構成
 
-一般利用者は `npx create-cloudflare-starlight-cms@latest my-docs`、既存の空ディレクトリなら末尾に `.`。
+一般利用者は `npm create starlight-cms@latest my-docs`、既存の空ディレクトリなら末尾に `.`。
 生成後は `npm install` → `npm run dev` でAdminを開ける。Cloudflareアカウントはローカル起動に不要。
 OSS開発者は現repoをcloneする。生成先も1アプリ/1 Workerであり、CMS library化はしない。
 
-rootのアプリを唯一のテンプレート正本とする。`packages/create-cloudflare-starlight-cms/`だけを追加し、
+rootのアプリを唯一のテンプレート正本とする。`packages/create-starlight-cms/`だけを追加し、
 rootを移動せず、npm workspaces/Turbo/CMS本体packageは追加しない。
 CLIは依存ゼロのNode ESM（`bin/index.js`、shebang付き）で十分。TypeScript用ビルド工程は不要。
 `bin`は実ファイルを指せばよく、`dist/index.js`という名前に合わせる必要はない。

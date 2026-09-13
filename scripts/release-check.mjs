@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 const repositoryRoot = resolve(import.meta.dirname, '..');
-const packageRoot = join(repositoryRoot, 'packages', 'create-cloudflare-starlight-cms');
+const packageRoot = join(repositoryRoot, 'packages', 'create-starlight-cms');
 const temporaryRoot = await mkdtemp(join(tmpdir(), 'cloudflare-starlight-cms-release-'));
 
 async function run(command, arguments_, cwd = repositoryRoot) {
@@ -43,7 +43,7 @@ try {
   const runnerRoot = join(temporaryRoot, 'runner');
   await mkdir(runnerRoot);
   await run('npm', ['install', '--dry-run=false', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', '--prefix', runnerRoot, join(temporaryRoot, artifact.filename)]);
-  const cli = join(runnerRoot, 'node_modules', 'create-cloudflare-starlight-cms', 'bin', 'index.js');
+  const cli = join(runnerRoot, 'node_modules', 'create-starlight-cms', 'bin', 'index.js');
   const project = join(temporaryRoot, 'my-docs');
   await run(process.execPath, [cli, project]);
 

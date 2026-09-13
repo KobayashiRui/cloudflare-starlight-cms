@@ -15,7 +15,7 @@ Cloudflare / Astroの公式プロジェクトではありません。MIT License
 CLI公開後は以下でプロジェクトを作成できます。現時点ではこのrepositoryをcloneしてください。
 
 ```sh
-npx create-cloudflare-starlight-cms@latest my-docs
+npm create starlight-cms@latest my-docs
 cd my-docs
 npm install
 npm run dev

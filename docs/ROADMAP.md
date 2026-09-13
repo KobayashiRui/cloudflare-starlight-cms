@@ -2,7 +2,7 @@
 
 ## P5 npm release preparation（2026-09-13）
 
-- `create-cloudflare-starlight-cms`をv0.9.0として公開準備した。npm package metadata、public access、Node 22.19以上を明記した。
+- `create-starlight-cms`をv0.9.0として公開準備した。npm package metadata、public access、Node 22.19以上を明記した。
 - rootの`npm run release:check`はcheck/test/空サイトbuild/Worker dry-runに加え、実tgzを一時installしてCLI生成とLinux lock検査まで行う。`prepublishOnly`にも同じ検査を設定した。
 - `npm run release:dry-run`でnpm publish lifecycleを検証済み。実npm公開、package name所有権の最終確認、公開後のregistry経由smoke testはリリース担当者が行う。
 
@@ -17,8 +17,8 @@
 
 ## 現在地（2026-09-11）
 
-`packages/create-cloudflare-starlight-cms`に、rootアプリをrelease時に同梱templateへ変換する最小CLIを追加した。
-`npx create-cloudflare-starlight-cms@latest <directory>`（または`.`）で、My Docs / en-onlyの独立projectを作る。
+`packages/create-starlight-cms`に、rootアプリをrelease時に同梱templateへ変換する最小CLIを追加した。
+`npm create starlight-cms@latest <directory>`（または`.`）で、My Docs / en-onlyの独立projectを作る。
 CLIは未公開で、npm publishは別工程である。自動更新・install・Git初期化・deployは行わない。
 fresh local DBの非対話migration、`dist`を共有するAdmin/Public assets、実npm tgzからのproject生成とlocal Admin assetsの200応答まで検証済み。
 詳細は[TEMPLATE-PLAN.md](TEMPLATE-PLAN.md)を参照。

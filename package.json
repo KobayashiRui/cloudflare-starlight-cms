@@ -20,8 +20,8 @@
     "deploy": "wrangler deploy",
     "typegen": "wrangler types worker-configuration.d.ts --env-interface CloudflareBindings",
     "dry-run": "wrangler deploy --dry-run",
-    "release:check": "npm --prefix packages/create-cloudflare-starlight-cms run release:check",
-    "release:dry-run": "npm --prefix packages/create-cloudflare-starlight-cms run release:dry-run"
+    "release:check": "npm --prefix packages/create-starlight-cms run release:check",
+    "release:dry-run": "npm --prefix packages/create-starlight-cms run release:dry-run"
   },
   "dependencies": {
     "@astrojs/check": "0.9.10",

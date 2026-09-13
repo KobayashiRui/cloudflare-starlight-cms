@@ -25,7 +25,7 @@ SonicJS等の汎用CMSに依存しない。CloudCore/SonicJSは参考実装に�
 revision snapshot、build adapter、Hook接続とsetupに限定する。
 
 ## 構成
-1 repo / 1 Workerへ集約済み。`apps/`は復活させない。`packages/create-cloudflare-starlight-cms`だけは
+1 repo / 1 Workerへ集約済み。`apps/`は復活させない。`packages/create-starlight-cms`だけは
 新規projectを生成する依存ゼロのnpm CLIとして許可する。CMS runtime package、workspaces、monorepo化は追加しない。
 目標はsrc/admin、api、db、editor、media、starlight、src/index.ts、
 migrationsとrootのAstro/Wrangler設定。Astro固有のpages等は必要に応じて配置する。

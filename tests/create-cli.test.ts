@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 let temporaryRoot = '';
-const cli = resolve('packages/create-cloudflare-starlight-cms/bin/index.js');
+const cli = resolve('packages/create-starlight-cms/bin/index.js');
 
 beforeAll(async () => {
   await execute(process.execPath, ['scripts/prepare-create-template.mjs']);

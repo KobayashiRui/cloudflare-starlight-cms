@@ -1,9 +1,9 @@
-# create-cloudflare-starlight-cms
+# create-starlight-cms
 
 Creates a self-hosted Astro Starlight documentation CMS for Cloudflare Workers.
 
 ```sh
-npx create-cloudflare-starlight-cms@latest my-docs
+npm create starlight-cms@latest my-docs
 cd my-docs
 npm install
 npm run dev

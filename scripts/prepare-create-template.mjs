@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const packageRoot = join(repositoryRoot, 'packages', 'create-cloudflare-starlight-cms');
+const packageRoot = join(repositoryRoot, 'packages', 'create-starlight-cms');
 const templateRoot = join(packageRoot, 'template');
 const packageJsonPath = join(packageRoot, 'package.json');
 
@@ -37,7 +37,7 @@ export const siteConfig = {
 `;
 
 function fail(message) {
-  throw new Error(`Could not prepare create-cloudflare-starlight-cms template: ${message}`);
+  throw new Error(`Could not prepare create-starlight-cms template: ${message}`);
 }
 
 async function assertNoSymlink(path) {
@@ -93,7 +93,7 @@ const templateReadme = rootReadme
     'A documentation site created with cloudflare-starlight-cms.',
   )
   .replace(
-    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpx create-cloudflare-starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
+    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpm create starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
     'Install dependencies and start local development:\n\n```sh\nnpm install\nnpm run dev\n```',
   )
   .replace(

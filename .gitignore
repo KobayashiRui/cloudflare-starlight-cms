@@ -3,7 +3,7 @@ dist/
 .astro/
 .wrangler/
 .dev-assets/
-packages/create-cloudflare-starlight-cms/template/
+packages/create-starlight-cms/template/
 .env
 .env.*
 .dev.vars

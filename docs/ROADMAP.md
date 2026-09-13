@@ -1,5 +1,11 @@
 # Roadmap / terra引き継ぎ
 
+## P1–P2: secure setup and generated project hygiene（2026-09-14）
+
+- Production setupは、custom domainをWorkerへ接続する前に、予定hostnameの`admin/*`を保護する単一のCloudflare Access Applicationと人間向けAllow policyを作る順序へ変更した。接続時からAdmin APIを含む`/admin/*`がAccess配下になる。実Accessの設定・接続はP4で実アカウント検証を継続する。
+- CLI templateからrootリポジトリ専用の`release:check`、`release:dry-run`、`publish:cli`を除外した。生成projectには存在しないCLI packageへの参照を残さず、template testとnpm tarball release checkで混入を検査する。
+- `zod`を直接依存の`4.6.4`へ固定する。Astroなどの間接依存に依存しない。
+
 ## P5 npm release preparation（2026-09-13）
 
 - `create-starlight-cms`をv0.9.0として公開準備した。npm package metadata、public access、Node 22.19以上を明記した。

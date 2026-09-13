@@ -51,6 +51,9 @@ try {
   const generatedWrangler = await readFile(join(project, 'wrangler.jsonc'), 'utf8');
   if (generatedPackage.name !== 'my-docs') throw new Error('The packed CLI did not normalize the generated project name');
   if (!generatedWrangler.includes('"name": "my-docs"')) throw new Error('The packed CLI did not set the Worker name');
+  for (const script of ['release:check', 'release:dry-run', 'publish:cli']) {
+    if (script in generatedPackage.scripts) throw new Error(`The packed CLI included the root-only ${script} script`);
+  }
   await run(process.execPath, [join(project, 'scripts', 'check-linux-bindings.mjs')], project);
 
   console.log(`Release package check passed: ${artifact.filename}`);

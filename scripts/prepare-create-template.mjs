@@ -80,6 +80,9 @@ for (const name of await readdir(join(templateRoot, 'test-files'))) {
 
 const templatePackagePath = join(templateRoot, 'package.json');
 const templatePackage = JSON.parse(await readFile(templatePackagePath, 'utf8'));
+for (const script of ['release:check', 'release:dry-run', 'publish:cli']) {
+  delete templatePackage.scripts[script];
+}
 templatePackage.cloudflareStarlightCms = { templateVersion: cliPackage.version };
 await writeFile(templatePackagePath, `${JSON.stringify(templatePackage, null, 2)}\n`);
 await writeFile(join(templateRoot, 'src', 'site.config.ts'), templateSiteConfig);

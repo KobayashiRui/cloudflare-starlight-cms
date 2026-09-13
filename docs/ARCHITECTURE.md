@@ -77,7 +77,7 @@ Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF�
 `wrangler.jsonc`はaccount固有のD1 database ID、D1 database name、R2 bucket nameを持たず、`DB`と`MEDIA`のbindingだけを宣言する。
 Cloudflare Automatic Resource Provisioningが初回deploy時にD1/R2を作成してbindingする。GitHub経由のdeployでは作成後のIDはDashboardで管理され、repositoryへ書き戻されない。
 create CLIは出力先のproject名をWorker名へ設定するため、生成projectごとに自動作成リソースも分離される。
-Workers Buildsは`npm run build`と標準の`npx wrangler deploy`を実行する。初回は`siteConfig.url`が空のため空サイトを生成する。custom domain接続後に生成projectの`siteConfig.url`と`wrangler.jsonc`の`MEDIA_PUBLIC_URL`をcommitして通常buildへ移る。管理API・export・previewのDB利用前に同梱の0001/0002を適用し、Wrangler互換の`d1_migrations`へ記録する。各migrationのDDLと履歴はD1 batchでまとめ、失敗時は503を返して次回再試行する。現在のidempotent CREATE文のみが対象で、ALTER/backfillは別途更新手順が必要。成功済みbindingはWeakSetで記憶し、実行中Promiseはリクエスト間で共有しない。公開配信・Admin HTML/assets・/admin redirectではDB初期化しない。非本番ブランチbuildはDashboardで無効にする。
+Workers Buildsは`npm run build`と標準の`npx wrangler deploy`を実行する。初回は`siteConfig.url`が空のため空サイトを生成する。custom domainをWorkerへ接続する前に、予定hostnameの`admin/*`を保護する単一のAccess Applicationと人間向けAllow policyを作成する。domain接続後に生成projectの`siteConfig.url`と`wrangler.jsonc`の`MEDIA_PUBLIC_URL`をcommitして通常buildへ移り、同じApplicationへBuild用Service Auth policyを追加する。管理API・export・previewのDB利用前に同梱の0001/0002を適用し、Wrangler互換の`d1_migrations`へ記録する。各migrationのDDLと履歴はD1 batchでまとめ、失敗時は503を返して次回再試行する。現在のidempotent CREATE文のみが対象で、ALTER/backfillは別途更新手順が必要。成功済みbindingはWeakSetで記憶し、実行中Promiseはリクエスト間で共有しない。公開配信・Admin HTML/assets・/admin redirectではDB初期化しない。非本番ブランチbuildはDashboardで無効にする。
 まず単一repoで完成。薄いテンプレート/パッケージ公開はMVP後。
 Cloudflare/Astro非公式。無料運用は保証しない。
 

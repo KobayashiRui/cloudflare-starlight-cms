@@ -28,6 +28,9 @@ it('creates an en-only project without overwriting an existing directory', async
   const siteConfig = await readFile(join(destination, 'src', 'site.config.ts'), 'utf8');
   const wranglerConfig = await readFile(join(destination, 'wrangler.jsonc'), 'utf8');
   expect(projectPackage.name).toBe('my-documentation');
+  expect(projectPackage.scripts).not.toHaveProperty('release:check');
+  expect(projectPackage.scripts).not.toHaveProperty('release:dry-run');
+  expect(projectPackage.scripts).not.toHaveProperty('publish:cli');
   expect(lockfile.packages[''].name).toBe('my-documentation');
   expect(siteConfig).toContain("title: 'My Docs'");
   expect(siteConfig).not.toContain("code: 'ja'");

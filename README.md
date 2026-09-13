@@ -38,10 +38,10 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 ## Production setup
 
 1. Set the Workers Builds build command to `npm run build` and keep the default deploy command `npx wrangler deploy`. Disable non-production branch builds. With no public URL yet, the first build deploys an empty site and Admin Worker and provisions D1/R2. The first management API, export, or preview request applies the bundled initial schema automatically.
-2. Configure the custom domain, then set [`src/site.config.ts`](src/site.config.ts)'s `url` to its origin, such as `https://docs.example.com`, and commit it. Builds derive both the Astro site URL and CMS snapshot endpoint from this source-controlled value.
-3. After the bucket is provisioned, set `MEDIA_PUBLIC_URL` in [`wrangler.jsonc`](wrangler.jsonc) to the R2 public/custom-domain origin and commit it. It is public configuration, not a secret.
-4. Create one Access Self-hosted Application for `docs.example.com/admin/*`. Add a human `Allow` policy and a Workers Builds `Service Auth` policy.
-5. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets. Add the Workers Builds Deploy Hook URL as the production Worker runtime secret `WORKERS_DEPLOY_HOOK_URL` in **Worker → Settings → Variables and Secrets**. Do not add it to the Workers Builds variables: build variables are not available to the running CMS Worker. From a local authenticated terminal, the equivalent is:
+2. Before attaching the custom domain to the Worker, create one Access Self-hosted Application for the planned hostname and `admin/*` path, for example `docs.example.com/admin/*`. Add the human `Allow` policy. The hostname must belong to an active Cloudflare zone, but it does not need to be attached to the Worker yet.
+3. Attach the custom domain to the Worker, then set [`src/site.config.ts`](src/site.config.ts)'s `url` to its origin, such as `https://docs.example.com`, and commit it. Admin routes are protected from their first custom-domain request. Builds derive both the Astro site URL and CMS snapshot endpoint from this source-controlled value.
+4. Add a Workers Builds `Service Auth` policy to that same Access Application. Add the Service Token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` to Workers Builds Build Variables and Secrets.
+5. After the bucket is provisioned, set `MEDIA_PUBLIC_URL` in [`wrangler.jsonc`](wrangler.jsonc) to the R2 public/custom-domain origin and commit it. It is public configuration, not a secret. Add the Workers Builds Deploy Hook URL as the production Worker runtime secret `WORKERS_DEPLOY_HOOK_URL` in **Worker → Settings → Variables and Secrets**. Do not add it to the Workers Builds variables: build variables are not available to the running CMS Worker. From a local authenticated terminal, the equivalent is:
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL

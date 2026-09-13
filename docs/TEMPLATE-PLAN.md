@@ -96,7 +96,8 @@ READMEを一般利用者/コントリビューターの導線に分ける。未�
 CLI packageはnpm公開用のrepository、homepage、bugs、keywords、Node engine、public access設定を持つ。
 `npm run release:check`はrootのcheck/test/空サイトbuild/Worker dry-runに加え、実際にpackしたtgzを一時directoryへ
 installしてCLI生成とLinux binding lock検査まで行う。`prepublishOnly`も同じ検査を実行するため、公開時にsourceだけで
-検証した状態は許容しない。`npm run release:dry-run`はnpmへの公開を行わず、npm側の公開手順まで検査する。
+検証した状態は許容しない。`npm run release:dry-run`はnpmへの公開を行わず、npm側の公開手順まで検査する。実公開はrootから
+`npm run publish:cli`を実行する。root package自体はprivateのCMSアプリなので、rootで直接`npm publish`は使わない。
 
 ### 6. 別工程で公開
 

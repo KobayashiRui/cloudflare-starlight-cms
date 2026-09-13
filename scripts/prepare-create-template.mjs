@@ -93,7 +93,7 @@ const templateReadme = rootReadme
     'A documentation site created with cloudflare-starlight-cms.',
   )
   .replace(
-    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpm create starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
+    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpx create-starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
     'Install dependencies and start local development:\n\n```sh\nnpm install\nnpm run dev\n```',
   )
   .replace(

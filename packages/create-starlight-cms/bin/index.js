@@ -9,7 +9,7 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const templateRoot = join(packageRoot, 'template');
 const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
 
-const usage = `Usage: npm create starlight-cms@latest <directory>\n       npx create-starlight-cms@latest <directory>\n\nCreate a self-hosted Astro Starlight CMS project. Use . for the current directory.\nThe destination must be new or empty (apart from .git and .DS_Store).\n\nOptions:\n  --help       Show this help message\n  --version    Show the CLI version\n`;
+const usage = `Usage: npx create-starlight-cms@latest <directory>\n       npm create starlight-cms@latest <directory>\n\nCreate a self-hosted Astro Starlight CMS project. Use . for the current directory.\nThe destination must be new or empty (apart from .git and .DS_Store).\n\nOptions:\n  --help       Show this help message\n  --version    Show the CLI version\n`;
 
 function projectNameFromDirectory(directory) {
   const normalized = basename(directory)

@@ -18,7 +18,7 @@
 ## 現在地（2026-09-11）
 
 `packages/create-starlight-cms`に、rootアプリをrelease時に同梱templateへ変換する最小CLIを追加した。
-`npm create starlight-cms@latest <directory>`（または`.`）で、My Docs / en-onlyの独立projectを作る。
+`npx create-starlight-cms@latest <directory>`（または`.`）で、My Docs / en-onlyの独立projectを作る。
 CLIは未公開で、npm publishは別工程である。自動更新・install・Git初期化・deployは行わない。
 fresh local DBの非対話migration、`dist`を共有するAdmin/Public assets、実npm tgzからのproject生成とlocal Admin assetsの200応答まで検証済み。
 詳細は[TEMPLATE-PLAN.md](TEMPLATE-PLAN.md)を参照。

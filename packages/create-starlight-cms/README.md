@@ -3,7 +3,7 @@
 Creates a self-hosted Astro Starlight documentation CMS for Cloudflare Workers.
 
 ```sh
-npm create starlight-cms@latest my-docs
+npx create-starlight-cms@latest my-docs
 cd my-docs
 npm install
 npm run dev

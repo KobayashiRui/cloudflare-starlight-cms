@@ -4,7 +4,7 @@
 
 ## 決定する構成
 
-一般利用者は `npm create starlight-cms@latest my-docs`、既存の空ディレクトリなら末尾に `.`。
+一般利用者は `npx create-starlight-cms@latest my-docs`、既存の空ディレクトリなら末尾に `.`。
 生成後は `npm install` → `npm run dev` でAdminを開ける。Cloudflareアカウントはローカル起動に不要。
 OSS開発者は現repoをcloneする。生成先も1アプリ/1 Workerであり、CMS library化はしない。
 

@@ -1,8 +1,8 @@
 # Roadmap / terra引き継ぎ
 
-## P7: CLI tag release automation（2026-09-14）
+## P7: CLI main-branch release automation（2026-09-14）
 
-- `v*` tagを契機に`create-starlight-cms`だけを公開するGitHub Actions workflowを追加した。tagとCLI package versionの完全一致を確認し、既存release check後にpublishする。
+- `main`へのmergeを契機に`create-starlight-cms`だけを公開するGitHub Actions workflowを追加した。CLI package versionが直前の`main`と同じならskipし、変わった時だけ既存release check後にpublishする。
 - npm Trusted Publisher（GitHub Actions OIDC）を前提にし、npm access tokenをGitHub Secretsへ保存しない。初回はnpm package settingsでrepository / `publish.yml` / `npm publish`を設定する。
 
 ## P6: v0.9.1 Zod API cleanup（2026-09-14）

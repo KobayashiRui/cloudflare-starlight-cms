@@ -2,8 +2,10 @@ name: Publish CLI
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+    paths:
+      - packages/create-starlight-cms/package.json
 
 permissions:
   contents: read
@@ -14,13 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - run: npm ci
-      - name: Verify release tag
+      - name: Check CLI version
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
-          node --input-type=module -e "import { readFileSync } from 'node:fs'; const { version } = JSON.parse(readFileSync('packages/create-starlight-cms/package.json', 'utf8')); const expected = \`v\${version}\`; if (process.env.GITHUB_REF_NAME !== expected) { throw new Error(\`Tag \${process.env.GITHUB_REF_NAME} must match \${expected}\`); }"
+          current=$(node -p "require('./packages/create-starlight-cms/package.json').version")
+          previous=$(git show "$BEFORE:packages/create-starlight-cms/package.json" 2>/dev/null | node -e "let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => { input += chunk; }); process.stdin.on('end', () => process.stdout.write(input ? JSON.parse(input).version : ''));")
+          if [ "$current" = "$previous" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "CLI version $current is unchanged; skipping publish."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Publishing CLI version $current."
+          fi
       - run: npm run publish:cli
+        if: steps.version.outputs.publish == 'true'

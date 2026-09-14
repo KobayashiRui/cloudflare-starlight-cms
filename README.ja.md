@@ -58,7 +58,7 @@ npx create-starlight-cms@latest upgrade . --apply
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
    ```
 
-Publishは公開revisionを更新してbuildを要求します。Hookの成功はbuildの受理を意味し、公開完了ではありません。Hook未設定でもローカルでは公開Docsを再buildします。
+`Publish page`は現在のページ・言語だけを公開します。`Publish changes`は全言語の保存済みDraft／保存済み変更をまとめて公開し、buildを1回だけ要求します。Hookの成功はbuildの受理を意味し、公開完了ではありません。Hook未設定でもローカルでは公開Docsを再buildします。失敗したbuild要求はAdmin headerからretryできます。
 
 CMS snapshot取得時に`unexpected redirect`でbuildが失敗した場合は、Service TokenをAccess ApplicationのAction **Service Auth** policyへ含めているか確認してください。人間向けの`Allow` policyへ追加しただけでは、BuildはAccess login pageへredirectされます。
 

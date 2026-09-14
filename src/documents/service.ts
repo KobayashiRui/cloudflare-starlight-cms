@@ -137,6 +137,48 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
   return getDocument(env, id, locale);
 }
 
+type PublishableTranslation = { id: string; version: number };
+
+/**
+ * Publish every saved translation that differs from its current public revision.
+ * One site delivery is recorded for the whole set, so Workers Builds runs once.
+ */
+export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPublishDelivery) {
+  const candidates = await env.DB.prepare(`
+    SELECT t.id,t.version
+    FROM document_translation t
+    LEFT JOIN document_revision r ON r.id=t.published_revision_id
+    WHERE t.published_revision_id IS NULL
+      OR r.title IS NOT t.title
+      OR r.sidebar_label IS NOT t.sidebar_label
+      OR r.description IS NOT t.description
+      OR r.content_json IS NOT t.content_json
+    ORDER BY t.updated_at,t.id`).all<PublishableTranslation>();
+  if (candidates.results.length === 0) return 0;
+
+  const now = Date.now();
+  const statements = candidates.results.flatMap((candidate) => {
+    const revisionId = crypto.randomUUID();
+    return [
+      env.DB.prepare(`INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
+        SELECT ?,id,COALESCE((SELECT MAX(revision)+1 FROM document_revision WHERE document_translation_id=?),1),title,sidebar_label,description,content_json,?
+        FROM document_translation WHERE id=? AND version=?`)
+        .bind(revisionId, candidate.id, now, candidate.id, candidate.version),
+      env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
+        .bind(revisionId, now, now, candidate.id, candidate.version),
+    ];
+  });
+  statements.push(env.DB.prepare(`INSERT INTO publish_delivery
+    (id,trigger_kind,status,attempts,already_exists,requested_at)
+    VALUES (?,'site','pending',0,0,?)`).bind(delivery.id, delivery.requestedAt));
+
+  const results = await env.DB.batch(statements);
+  if (candidates.results.some((_, index) => results[index * 2 + 1]?.meta.changes !== 1)) {
+    throw new DocumentConflictError();
+  }
+  return candidates.results.length;
+}
+
 export async function listRevisions(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
   const rows = await env.DB.prepare('SELECT id,revision,created_at FROM document_revision WHERE document_translation_id=? ORDER BY revision DESC')

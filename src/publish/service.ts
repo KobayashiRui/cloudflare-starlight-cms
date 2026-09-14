@@ -1,6 +1,6 @@
 import type { RuntimeEnv } from '../env.ts';
 import { triggerDeployHook } from './deploy-hook.ts';
-import { publishDocument, type DocumentView } from '../documents/service.ts';
+import { publishDocument, publishSavedChanges, type DocumentView } from '../documents/service.ts';
 import type { SupportedLocale } from '../locales.ts';
 
 export type PublishDeliveryStatus = 'pending' | 'accepted' | 'failed' | 'skipped';
@@ -99,16 +99,19 @@ export async function deliverPublish(env: RuntimeEnv, id: string): Promise<Publi
   return toView(await getDelivery(env, id));
 }
 
-export async function requestPublish(env: RuntimeEnv, triggerKind: PublishDeliveryKind, documentTranslationId: string | null = null) {
-  const pending = await createPublishDelivery(env, triggerKind, documentTranslationId);
-  return deliverPublish(env, pending.id);
-}
-
 /** Publish the selected translation and create its delivery in one D1 batch. */
 export async function publishDocumentAndRequest(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale): Promise<{ document: DocumentView; delivery: PublishDelivery }> {
   const pending = { id: crypto.randomUUID(), requestedAt: Date.now() };
   const document = await publishDocument(env, id, version, locale, pending);
   return { document, delivery: await deliverPublish(env, pending.id) };
+}
+
+/** Publish all saved Drafts/changes and request exactly one public-site build. */
+export async function publishSavedChangesAndRequest(env: RuntimeEnv): Promise<{ publishedCount: number; delivery: PublishDelivery | null }> {
+  const pending = { id: crypto.randomUUID(), requestedAt: Date.now() };
+  const publishedCount = await publishSavedChanges(env, pending);
+  if (publishedCount === 0) return { publishedCount, delivery: null };
+  return { publishedCount, delivery: await deliverPublish(env, pending.id) };
 }
 
 export async function retryPublish(env: RuntimeEnv, id: string) {

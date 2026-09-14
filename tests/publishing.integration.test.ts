@@ -76,6 +76,7 @@ it('serves a saved Draft in the generated Starlight preview shell without reques
   expect(html).not.toContain('Overview');
   expect(html).not.toContain('canonical');
   expect(html).not.toContain('starlight-lang-select');
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
 });
 
 it('keeps drafts private and exports folder labels/order; records public moves and deletion', async () => {
@@ -119,6 +120,28 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   await buildDocs();
   await expect(access(join(output, 'install/index.html'))).rejects.toThrow();
 }, 30000);
+
+it('publishes all saved changes through one site delivery', async () => {
+  const first = identity.parse(await request('api/documents', 'POST', {
+    title: 'Bulk first', slug: 'bulk-first', folderId: null, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+  }));
+  const second = identity.parse(await request('api/documents', 'POST', {
+    title: 'Bulk second', slug: 'bulk-second', folderId: null, order: 1, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+  }));
+  const db = await mf.getD1Database('DB');
+  const before = await db.prepare("SELECT count(*) AS count FROM publish_delivery WHERE trigger_kind='site'").first<{ count: number }>();
+
+  const result = z.object({ publishedCount: z.number(), delivery: z.object({ triggerKind: z.literal('site'), status: z.string() }).nullable() })
+    .parse(await request('api/publish/changes', 'POST'));
+  expect(result.publishedCount).toBe(2);
+  expect(result.delivery).toMatchObject({ triggerKind: 'site', status: 'skipped' });
+  const publishedIds = publishedDocuments(await request('export/snapshot')).map((document) => document.id);
+  expect(publishedIds).toEqual(expect.arrayContaining([first.id, second.id]));
+  const after = await db.prepare("SELECT count(*) AS count FROM publish_delivery WHERE trigger_kind='site'").first<{ count: number }>();
+  expect(after?.count).toBe((before?.count ?? 0) + 1);
+
+  expect(await request('api/publish/changes', 'POST')).toMatchObject({ publishedCount: 0, delivery: null });
+});
 
 it('keeps navigation shared while folder names are translated per locale', async () => {
   if (!hasJapanese) return;

@@ -70,7 +70,7 @@ productionと同じStatic Assets shellを読む。失敗した内容を繰り返
 同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
 最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。`next_retry_at`はpending送信の30秒の占有期限として使用する（自動retry時刻ではない）。failedと期限切れpendingをAdminから手動retryできる。
 URL・Tree変更と削除は同じD1 batchにsite配送を記録し、更新成功後に送信する。
-Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送し、ヘッダーのRebuild public siteは手動の再要求として残す。実配送はP4で実Accessとともに検証する。
+Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送する。Document画面の`Publish page`は現在のtranslationだけを公開し、headerの`Publish changes`は保存済みのDraft／変更を全言語横断で公開して一つのsite配送を記録する。公開内容を変えない手動rebuild操作は持たず、失敗した配送だけをretryできる。実配送はP4で実Accessとともに検証する。
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、

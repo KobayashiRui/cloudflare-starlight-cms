@@ -60,7 +60,7 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
    ```
 
-Publishing updates the public revision and requests a build. A successful Hook request means the build was accepted, not that it has deployed. Without a Hook, local publishing still rebuilds the local static Docs.
+`Publish page` publishes the current page and language. `Publish changes` publishes every saved Draft or saved change across languages, then requests one build. A successful Hook request means the build was accepted, not that it has deployed. Without a Hook, local publishing still rebuilds the local static Docs. Failed build requests can be retried from the Admin header.
 
 If a build fails with `unexpected redirect` while loading the CMS snapshot, verify that the Service Token is covered by a **Service Auth** policy in the Access Application. Adding it only to a human `Allow` policy redirects the build to the Access login page.
 
@@ -84,4 +84,4 @@ npm run dry-run
 
 With an empty `siteConfig.url`, `build` creates the explicit empty site for an initial deploy. `build:empty` is available when an intentionally empty local build is needed. `dry-run` validates the Worker and Static Assets configuration without deploying.
 
-See [Architecture](docs/ARCHITECTURE.md) for design details and [Roadmap](docs/ROADMAP.md) for implementation status. Production configuration is designed but has not yet been verified against a real Cloudflare account.
+See [Architecture](docs/ARCHITECTURE.md) for design details and [Roadmap](docs/ROADMAP.md) for implementation status.

@@ -5,6 +5,11 @@
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
 - 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
 
+## Publish scopes（2026-09-14）
+
+- Document画面の`Publish page`はそのページ・言語だけを公開し、headerの`Publish changes`は保存済みDraft／変更を全言語横断で公開してDeploy Hookを一度だけ要求する。未保存のeditor内容は一括公開に含めない。
+- `Rebuild public site`を削除した。変更なしの手動再buildは通常運用に不要であり、失敗した配送だけを`Retry build`で再送する。
+
 ## Production setup documentation（2026-09-14）
 
 - READMEを実運用の順序へ更新した。初回空Deploy、Access Self-hosted public application、人間向けAllow policy、Build用Service Auth policy、Build Secrets、Worker custom domain、R2 custom domain、Runtime Deploy Hookを分離している。
@@ -166,7 +171,7 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 1. `publish_delivery`を追加。Document Publishでは公開revision pointerと同じD1 batchでpending配送を保存する。site rebuildは単独の配送を保存する。完了。
 2. `WORKERS_DEPLOY_HOOK_URL`がある場合にPOSTし、失敗回数・次回retry・最後のエラーを保存する。URL未設定のlocalは`skipped`。完了。
 3. Adminで「Build requested」と表示する。Hook 2xxを公開完了と表示しない。failedはheaderからretryできる。完了。
-4. TreeではtranslationごとにDraft／Changesを集約表示する。下書き保存は本文の操作、Publish & rebuildはheaderに分離した。完了。
+4. TreeではtranslationごとにDraft／Changesを集約表示する。下書き保存と`Publish page`は本文の操作、`Publish changes`はheaderに分離した。完了。
 5. build中の追加変更、unpublish/delete/slug/navigation変更による古いroute/searchの消去と、実Deploy Hookの受理はP4の実Cloudflare環境で検証する。
 
 ## P4: Self-host / Cloudflare Access

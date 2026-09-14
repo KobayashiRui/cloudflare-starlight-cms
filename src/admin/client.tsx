@@ -41,7 +41,8 @@ type PublishDelivery = {
   nextRetryAt: number | null;
 };
 type PublishDocumentResponse = { document: DocumentRecord; delivery: PublishDelivery };
-type PublishSiteResponse = { delivery: PublishDelivery };
+type PublishChangesResponse = { publishedCount: number; delivery: PublishDelivery | null };
+type PublishDeliveryResponse = { delivery: PublishDelivery };
 type DocumentFields = Pick<DocumentRecord, 'title' | 'slug' | 'description' | 'folderId' | 'order'>;
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -205,6 +206,10 @@ function App() {
   }, [refreshDeliveries, showNotice]);
 
   const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
+  const savedChangeCount = treeItems.reduce((count, item) => count + item.translationStates.filter((entry) => entry.state !== 'published').length, 0);
+  const currentPublicationState = current
+    ? treeItems.find((item) => item.documentId === current.id)?.translationStates.find((entry) => entry.locale === current.locale)?.state
+    : undefined;
 
   useEffect(() => {
     Promise.all([refreshDocuments(), refreshMedia(), refreshTree(), refreshDeliveries()])
@@ -507,12 +512,18 @@ function App() {
     }
   };
 
-  const rebuildPublishedSite = async () => {
+  const publishChanges = async () => {
+    if (isDirty) return showNotice('Save the current draft before publishing changes.', true);
+    if (savedChangeCount === 0) return showNotice('There are no saved changes to publish.');
+    const noun = savedChangeCount === 1 ? 'translation' : 'translations';
+    if (!window.confirm(`Publish ${savedChangeCount} saved ${noun}? The public documentation site will be rebuilt once.`)) return;
     setIsSaving(true);
     try {
-      const result = await api<PublishSiteResponse>('/publish/site', { method: 'POST' });
+      const result = await api<PublishChangesResponse>('/publish/changes', { method: 'POST' });
+      if (!result.delivery) return showNotice('There are no saved changes to publish.');
       setLatestDelivery(result.delivery);
-      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
+      showNotice(`Published ${result.publishedCount} ${result.publishedCount === 1 ? 'translation' : 'translations'}. ${describeDelivery(result.delivery)}`, result.delivery.status === 'failed');
     } catch (error) {
       showNotice(String(error), true);
     } finally {
@@ -521,10 +532,10 @@ function App() {
   };
 
   const retryBuild = async () => {
-    if (!latestDelivery || latestDelivery.status !== 'failed') return;
+    if (!latestDelivery || (latestDelivery.status !== 'failed' && latestDelivery.status !== 'pending')) return;
     setIsSaving(true);
     try {
-      const result = await api<PublishSiteResponse>(`/publish/deliveries/${encodeURIComponent(latestDelivery.id)}/retry`, { method: 'POST' });
+      const result = await api<PublishDeliveryResponse>(`/publish/deliveries/${encodeURIComponent(latestDelivery.id)}/retry`, { method: 'POST' });
       setLatestDelivery(result.delivery);
       showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
     } catch (error) {
@@ -700,7 +711,7 @@ function App() {
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
         {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
-        {current?.id ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
+        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || savedChangeCount === 0} onClick={() => void publishChanges()}>Publish changes{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -727,6 +738,7 @@ function App() {
             <div className="cms-document-action-buttons">
               {current.id && <button className="cms-button" type="button" disabled={isSaving} onClick={preview}>Preview draft</button>}
               <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+              {current.id && currentPublicationState !== 'published' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void publish()}>Publish page</button>}
               {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>
           </section>

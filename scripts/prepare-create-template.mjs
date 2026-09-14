@@ -10,6 +10,7 @@ const packageJsonPath = join(packageRoot, 'package.json');
 const entries = [
   'src',
   'migrations',
+  'docs',
   'scripts/dev.mjs',
   'scripts/build-admin.mjs',
   'scripts/check-linux-bindings.mjs',
@@ -77,6 +78,9 @@ await rm(join(templateRoot, 'test-files', 'create-cli.test.ts'), { force: true }
 for (const name of await readdir(join(templateRoot, 'test-files'))) {
   if (name.endsWith('.test.ts')) await rename(join(templateRoot, 'test-files', name), join(templateRoot, 'test-files', name.replace('.test.ts', '.test.template.ts')));
 }
+for (const name of ['ROADMAP.md', 'RELEASING.md', 'TEMPLATE-PLAN.md']) {
+  await rm(join(templateRoot, 'docs', name), { force: true });
+}
 
 const templatePackagePath = join(templateRoot, 'package.json');
 const templatePackage = JSON.parse(await readFile(templatePackagePath, 'utf8'));
@@ -92,15 +96,13 @@ const templateReadme = rootReadme
   .replace('# Cloudflare Starlight CMS', '# My Docs')
   .replace('[English](README.md) · [日本語](README.ja.md)\n\n', '')
   .replace(
-    'A self-hosted documentation CMS for Astro Starlight, built on Cloudflare Workers, D1, R2, and Access.',
+    'A Cloudflare-native CMS for Astro Starlight.',
     'A documentation site created with cloudflare-starlight-cms.',
   )
   .replace(
-    'Create a project after the CLI is published, or clone this repository today:\n\n```sh\nnpx create-starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
-    'Install dependencies and start local development:\n\n```sh\nnpm install\nnpm run dev\n```',
+    '```sh\nnpx create-starlight-cms@latest my-docs\ncd my-docs\nnpm install\nnpm run dev\n```',
+    '```sh\nnpm install\nnpm run dev\n```',
   )
-  .replace(
-    'See [Architecture](docs/ARCHITECTURE.md) for design details and [Roadmap](docs/ROADMAP.md) for implementation status. Production configuration is designed but has not yet been verified against a real Cloudflare account.',
-    'Configure the site title, locales, and public URL in `src/site.config.ts`. CMS updates are not automatic; selectively bring the changes you need into this project.',
-  );
+  .replace('- [Roadmap](docs/ROADMAP.md)\n', '')
+  .replace('[MIT](LICENSE). Cloudflare Starlight CMS is not an official Cloudflare or Astro project.', '[MIT](LICENSE). This project is not an official Cloudflare or Astro project.');
 await writeFile(join(templateRoot, 'README.md'), templateReadme);

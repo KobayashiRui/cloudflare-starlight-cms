@@ -8,6 +8,7 @@
 ## v1.0.1: navigation editing UX（2026-09-14）
 
 - `create-starlight-cms`を`1.0.1`へ更新する。Translation未作成時のTree選択表示、保存前Pageの一時Tree node、Folder/Page選択時の作成先、Navigation controlsとFolder chevronの表示を改善する。
+- READMEを初見向けの概要・Features・Quick Start・Upgradeに整理し、本番設定と障害対応を`docs/DEPLOYMENT.md`と`docs/TROUBLESHOOTING.md`へ分離する。
 
 ## Editor local drafts and locale continuity（2026-09-14）
 

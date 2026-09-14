@@ -14,6 +14,7 @@
 - HTML paste drops unsafe image/video nodes before they reach the saved document, preserving image alt text when available and guiding the editor to upload media instead.
 - 最後に選んだ編集localeをbrowser local storageに保持する。Navigation Treeの構造は共通のままで、PageやFolder選択後も編集localeを維持する。
 - Translation未作成のPageを選んでもTreeの選択状態を維持する。Save前のNew pageは親Folder内（rootの場合はroot）の一時nodeとして表示し、保存までTreeの並べ替えを停止する。
+- Sidebarの`New page`と`New folder`は、Folder選択中ならその直下、Page選択中ならそのPageと同じ親階層を作成先にする。
 
 ## Publish scopes（2026-09-14）
 

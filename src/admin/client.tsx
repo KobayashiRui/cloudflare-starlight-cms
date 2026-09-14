@@ -177,6 +177,7 @@ function App() {
   const [folderLocale, setFolderLocale] = useState<SupportedLocale>(defaultLocale);
   const [missingFolderTranslationSource, setMissingFolderTranslationSource] = useState<SupportedLocale | null>(null);
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
+  const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
   const [revisions, setRevisions] = useState<Revision[]>([]);
@@ -296,6 +297,9 @@ function App() {
   }, [refreshDeliveries, showNotice]);
 
   const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
+  const missingDocument = missingDocumentId ? treeItems.find((item) => item.documentId === missingDocumentId) : undefined;
+  const activeParentFolderId = selectedFolderId ?? current?.folderId ?? (missingDocument?.parentId ? missingDocument.parentId.slice('folder:'.length) : null);
+  const folderParent = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${folderParentId}`) ?? null;
   const savedChangeCount = treeItems.reduce((count, item) => count + item.translationStates.filter((entry) => entry.state !== 'published').length, 0);
   const currentPublicationState = current
     ? treeItems.find((item) => item.documentId === current.id)?.translationStates.find((entry) => entry.locale === current.locale)?.state
@@ -490,14 +494,14 @@ function App() {
     } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
   };
   const nextOrder = useCallback((parentId: string | null) => Math.max(-1, ...treeItems.filter((item) => item.parentId === (parentId ? `folder:${parentId}` : null)).map((item) => item.order)) + 1, [treeItems]);
-  const startNewDocument = useCallback((folderId = selectedFolderId) => {
+  const startNewDocument = useCallback((folderId = activeParentFolderId) => {
     void selectDocument({ ...emptyDocument, folderId, order: nextOrder(folderId) });
-  }, [nextOrder, selectedFolderId]);
-  const openNewFolder = useCallback((parentId = selectedFolderId) => {
-    setSelectedFolderId(parentId);
+  }, [activeParentFolderId, nextOrder]);
+  const openNewFolder = useCallback((parentId = activeParentFolderId) => {
+    setFolderParentId(parentId);
     setFolderDraft({ name: '', slug: '' });
     setIsFolderDialogOpen(true);
-  }, [selectedFolderId]);
+  }, [activeParentFolderId]);
   const createFolder = async () => {
     const name = folderDraft.name.trim();
     const slug = folderDraft.slug || slugify(name);
@@ -505,9 +509,10 @@ function App() {
     if (!validSlug.test(slug)) return showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
     setIsSaving(true);
     try {
-      const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: selectedFolderId, order: nextOrder(selectedFolderId) }) });
+      const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: folderParentId, order: nextOrder(folderParentId) }) });
       await refreshTree();
       setIsFolderDialogOpen(false);
+      setFolderParentId(null);
       setCurrent(null);
       setSelectedFolderId(created.id);
       setFolderName(created.name);
@@ -1088,7 +1093,7 @@ function App() {
         <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>Embed video</button></footer>
       </section>
     </div>}
-    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
+    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{folderParent ? `Create inside ${folderParent.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
   </div>;
 }
 

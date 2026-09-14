@@ -39,6 +39,7 @@ The first command only reports the plan. `--apply` updates files which are uncha
 ## Included
 
 - React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, locale-aware documents, and YouTube embeds
+- Browser-local editing buffers for saved pages: switching pages, changing language, or reloading does not discard unsaved work. `Save draft` remains the explicit D1 save operation.
 - D1 for content, R2 for PNG/JPEG/WebP/AVIF/MP4/WebM, and a media picker with safe unused-asset deletion
 - Astro Starlight, Pagefind, and Workers Static Assets for fully static public Docs
 - Cloudflare Access for `/admin/*`; no CMS users, passwords, or roles
@@ -54,6 +55,8 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 4. Create an Access Service Token for Workers Builds. In the same Access Application, add a separate policy with action **Service Auth** and include that Service Token. Keep this distinct from the human `Allow` policy. Add the token's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` as Secrets in **Workers Builds → Build Variables and Secrets**. Do not add them to Worker runtime variables.
 5. Set [`src/site.config.ts`](src/site.config.ts)'s `url` to the origin, such as `https://docs.example.com`, and commit it. Builds derive both the Astro site URL and CMS snapshot endpoint from this source-controlled value. Do not set `CMS_EXPORT_URL` for normal production builds.
 6. After the bucket is provisioned, connect an R2 custom domain such as `docs-media.example.com`. Set `MEDIA_PUBLIC_URL` in [`wrangler.jsonc`](wrangler.jsonc) to that origin and commit it. It is public configuration, not a secret. Keep the `r2.dev` development URL disabled. Standard image and video embeds need no CORS policy; add narrowly scoped CORS rules only when browser JavaScript must fetch media directly. Draft media is public at this domain once uploaded.
+
+Use the Media picker for document images and videos. Regular HTTP(S) links are supported, but external images and videos must use a public HTTPS origin; local-network and HTTP media cannot load from an HTTPS Docs site.
 7. Add the Workers Builds Deploy Hook URL as the production Worker runtime secret `WORKERS_DEPLOY_HOOK_URL` in **Worker → Settings → Variables and Secrets**. Do not add it to the Workers Builds variables: build variables are not available to the running CMS Worker. From a local authenticated terminal, the equivalent is:
 
    ```sh

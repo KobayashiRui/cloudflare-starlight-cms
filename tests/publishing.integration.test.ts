@@ -54,6 +54,19 @@ it('redirects the bare admin path to the Access-protected admin path', async () 
   expect(response.headers.get('location')).toBe('/admin/');
 });
 
+it('rejects HTTP and private-network media before storing a document', async () => {
+  const response = await mf.dispatchFetch('http://localhost/admin/api/documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+    body: JSON.stringify({
+      title: 'Unsafe media', slug: 'unsafe-media', folderId: null, order: 0, description: '',
+      contentJson: { type: 'doc', content: [{ type: 'image', attrs: { src: 'http://192.168.40.198:5201/image.webp' } }] },
+    }),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.text()).toContain('External document media URLs must use HTTPS');
+});
+
 it('serves a saved Draft in the generated Starlight preview shell without requesting a build', async () => {
   const page = identity.parse(await request('api/documents', 'POST', {
     title: 'Draft <title>', slug: 'preview-document', folderId: null, order: 0, description: 'Draft description',

@@ -87,6 +87,10 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-document-action-buttons { flex-wrap: wrap; }
 .cms-action-divider { width: 1px; align-self: stretch; margin: .15rem .05rem; background: var(--cms-border); }
 .cms-document-state > span:not(.cms-status) { overflow: hidden; color: var(--cms-text-muted); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.cms-local-draft-conflict { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.1rem; padding: .85rem 1rem; background: var(--cms-warning-subtle); border: 1px solid var(--cms-warning); border-radius: 8px; }
+.cms-local-draft-conflict strong { color: var(--cms-warning-text); font-size: .82rem; }
+.cms-local-draft-conflict p { margin: .2rem 0 0; color: var(--cms-text-muted); font-size: .76rem; }
+.cms-local-draft-conflict > div:last-child { display: flex; flex: 0 0 auto; gap: .5rem; }
 .cms-history-button { display: inline-flex; align-items: center; gap: .35rem; }
 .cms-history-button svg { width: .9rem; height: .9rem; }
 .cms-history-button.is-active { color: var(--cms-accent); background: var(--cms-accent-subtle); border-color: var(--cms-accent); box-shadow: 0 0 0 3px var(--cms-focus-ring); }
@@ -188,6 +192,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .cms-document-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
   .cms-main { padding: 1rem .85rem 2rem; }
   .cms-document-actions, .cms-danger-zone, .cms-folder-children-actions { align-items: flex-start; flex-direction: column; }
+  .cms-local-draft-conflict { align-items: flex-start; flex-direction: column; }
   .cms-document-action-buttons { width: 100%; justify-content: flex-end; }
   .cms-action-divider { align-self: auto; height: 1.5rem; }
   .cms-revision-backdrop { padding: 4rem .75rem .75rem; }

@@ -204,13 +204,15 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onEmbedYoutube, editable = true }: {
+export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onEmbedYoutube, isAllowedMediaUrl, onRejectedPastedMedia, editable = true }: {
   content: JSONContent
   extensions?: Extensions
   onEditorReady?: (editor: Editor) => void
   onUpdate?: (editor: Editor) => void
   uploadImage?: (file: File) => Promise<string>
   onEmbedYoutube?: () => void
+  isAllowedMediaUrl?: (url: string) => boolean
+  onRejectedPastedMedia?: (count: number) => void
   editable?: boolean
 }) {
   const isMobile = useIsBreakpoint()
@@ -226,6 +228,26 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
     immediatelyRender: false,
     editable,
     editorProps: {
+      transformPastedHTML: (html) => {
+        if (!isAllowedMediaUrl || typeof DOMParser === "undefined") return html
+        const pasted = new DOMParser().parseFromString(html, "text/html")
+        let rejected = 0
+        for (const element of pasted.body.querySelectorAll("img, video")) {
+          const source = element.getAttribute("src") ?? element.querySelector("source")?.getAttribute("src")
+          if (source && isAllowedMediaUrl(source)) {
+            if (!element.getAttribute("src")) element.setAttribute("src", source)
+            continue
+          }
+          rejected += 1
+          if (element instanceof HTMLImageElement && element.alt.trim()) {
+            element.replaceWith(pasted.createTextNode(element.alt.trim()))
+          } else {
+            element.remove()
+          }
+        }
+        if (rejected > 0) window.setTimeout(() => onRejectedPastedMedia?.(rejected), 0)
+        return pasted.body.innerHTML
+      },
       attributes: {
         autocomplete: "off",
         autocorrect: "off",

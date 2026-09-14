@@ -1,4 +1,4 @@
-import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
+import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 import GithubSlugger from 'github-slugger';
 
 export interface PreviewHeading {
@@ -27,7 +27,7 @@ function text(value: TiptapNode): string {
       case 'italic': output = `<em>${output}</em>`; break;
       case 'strike': output = `<s>${output}</s>`; break;
       case 'code': output = `<code>${output}</code>`; break;
-      case 'link': output = `<a href="${escapeHtml(documentUrl(typed.attrs?.href))}">${output}</a>`; break;
+      case 'link': output = `<a href="${escapeHtml(documentLinkUrl(typed.attrs?.href))}">${output}</a>`; break;
       default: throw new Error(`Unsupported Tiptap mark: ${String(typed.type)}`);
     }
   }
@@ -94,8 +94,8 @@ function createRenderer() {
       case 'codeBlock': return `<pre><code${codeLanguage(value.attrs?.language)}>${inline(value)}</code></pre>`;
       case 'hardBreak': return '<br>';
       case 'horizontalRule': return '<hr>';
-      case 'image': return `<img src="${escapeHtml(documentUrl(value.attrs?.src))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
-      case 'video': return `<video controls src="${escapeHtml(documentUrl(value.attrs?.src))}"></video>`;
+      case 'image': return `<img src="${escapeHtml(documentMediaUrl(value.attrs?.src))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
+      case 'video': return `<video controls src="${escapeHtml(documentMediaUrl(value.attrs?.src))}"></video>`;
       case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
       case 'callout': {
         const title = asideTitle(value.attrs?.title);

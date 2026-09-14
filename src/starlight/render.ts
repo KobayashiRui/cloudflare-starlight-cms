@@ -1,4 +1,4 @@
-import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
+import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 
 function decorateText(value: TiptapNode, output: string): string {
   const marks = Array.isArray(value.marks) ? value.marks : [];
@@ -9,7 +9,7 @@ function decorateText(value: TiptapNode, output: string): string {
     if (typed.type === 'italic') output = `*${output}*`;
     if (typed.type === 'strike') output = `~~${output}~~`;
     if (typed.type === 'code') output = `\`${output}\``;
-    if (typed.type === 'link') output = `[${output}](${documentUrl(typed.attrs?.href)})`;
+    if (typed.type === 'link') output = `[${output}](${documentLinkUrl(typed.attrs?.href)})`;
   }
   return output;
 }
@@ -33,8 +33,8 @@ export function render(nodeValue: unknown): string {
     case 'codeBlock': return `\`\`\`${typeof value.attrs?.language === 'string' ? value.attrs.language : ''}\n${text(value)}\n\`\`\``;
     case 'hardBreak': return '  \n';
     case 'horizontalRule': return '---';
-    case 'image': return `![${typeof value.attrs?.alt === 'string' ? value.attrs.alt : ''}](${documentUrl(value.attrs?.src)})`;
-    case 'video': return `<video controls src="${documentUrl(value.attrs?.src)}"></video>`;
+    case 'image': return `![${typeof value.attrs?.alt === 'string' ? value.attrs.alt : ''}](${documentMediaUrl(value.attrs?.src)})`;
+    case 'video': return `<video controls src="${documentMediaUrl(value.attrs?.src)}"></video>`;
     case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
     case 'callout': return `:::note[${asideTitle(value.attrs?.title)}]\n${tiptapChildren(value).map(render).join('\n\n')}\n:::`;
     case 'steps': return tiptapChildren(value).map((item, index) => `${index + 1}. ${text(item)}`).join('\n');

@@ -5,6 +5,15 @@
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
 - 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
 
+## Editor local drafts and locale continuity（2026-09-14）
+
+- Dexie 4.4.6を使い、保存済みPageの未保存編集をbrowser内のIndexedDBへ保持する。Page移動・言語切替・reloadでnativeのDiscard確認を出さず、同じD1 versionなら編集内容を復元する。
+- ローカル下書きはD1のrevisionやPublish対象にはならない。`Save draft`でのみD1へ保存し、D1更新とのversion不一致時はlocal/savedの選択を明示する。新規Pageは最初のD1保存後から対象にする。
+- Media deletionは、このbrowserのlocal draftがURLを参照している場合も拒否する。R2 blobやD1全体をIndexedDBへ複製しない。
+- Public media URLs reject HTTP and private-network hosts before persistence, while normal HTTP(S) links remain supported. This avoids Mixed Content and Private Network Access errors in the HTTPS Admin and public site.
+- HTML paste drops unsafe image/video nodes before they reach the saved document, preserving image alt text when available and guiding the editor to upload media instead.
+- 最後に選んだ編集localeをbrowser local storageに保持する。Navigation Treeの構造は共通のままで、PageやFolder選択後も編集localeを維持する。
+
 ## Publish scopes（2026-09-14）
 
 - Document画面の`Publish page`はそのページ・言語だけを公開し、headerの`Publish changes`は保存済みDraft／変更を全言語横断で公開してDeploy Hookを一度だけ要求する。未保存のeditor内容は一括公開に含めない。

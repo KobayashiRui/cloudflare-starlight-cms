@@ -37,6 +37,7 @@ npx create-starlight-cms@latest upgrade . --apply
 ## 含まれるもの
 
 - Tiptap Simple Editor、Draft、Revision、Preview、Navigation Tree、多言語ページ、YouTube埋め込みに対応したReact Admin
+- 保存済みページの未保存編集をbrowser内に保持するため、ページ移動・言語切替・reloadで作業を捨てません。D1への保存は`Save draft`だけで明示的に行います。
 - D1のコンテンツ、R2のPNG/JPEG/WebP/AVIF/MP4/WebM、未使用時のみ削除できるMedia Picker
 - 完全StaticなAstro Starlight、Pagefind、Workers Static Assetsの公開Docs
 - `/admin/*`を保護するCloudflare Access。CMS独自のユーザー、パスワード、ロールは持たない
@@ -52,6 +53,8 @@ npx create-starlight-cms@latest upgrade . --apply
 4. Workers Builds用のAccess Service Tokenを作成します。同じAccess Applicationに、そのService TokenをIncludeしたAction **Service Auth** のpolicyを別途追加します。人間向けの`Allow` policyとは分けてください。Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`は、**Workers Builds → Build Variables and Secrets**へSecretとして登録します。Worker Runtime Variablesには登録しません。
 5. [`src/site.config.ts`](src/site.config.ts)の`url`へ`https://docs.example.com`のようなoriginを設定してcommitします。このGit管理の値からAstroの公開URLとCMS snapshot endpointを導出します。通常のproduction buildでは`CMS_EXPORT_URL`を設定しません。
 6. bucket作成後、`docs-media.example.com`のようなR2 custom domainを接続します。[`wrangler.jsonc`](wrangler.jsonc)の`MEDIA_PUBLIC_URL`へそのoriginを設定してcommitします。これは公開設定でありsecretではありません。`r2.dev`の開発用URLは無効のままにします。通常の画像・動画埋め込みにはCORS policyは不要で、browser JavaScriptからmediaを直接fetchする場合だけ必要最小限のCORSを追加します。upload済みDraft mediaもこのpublic domainから取得できます。
+
+ドキュメントの画像・動画はMedia Pickerから追加します。通常のHTTP(S)リンクは使えますが、外部画像・動画は公開HTTPS originだけを使用できます。ローカルネットワークやHTTPのmediaはHTTPS Docsから読み込めないため保存時に拒否します。
 7. Workers BuildsのDeploy Hook URLは、production Workerの実行時Secret `WORKERS_DEPLOY_HOOK_URL`として **Worker → Settings → Variables and Secrets** へ登録します。Workers Buildsの変数へ登録しても、実行中のCMS Workerには渡りません。ローカルの認証済みterminalから登録する場合は次のとおりです。
 
    ```sh

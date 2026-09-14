@@ -85,6 +85,7 @@ const SEARCH_AND_REPLACE_SCROLL_OPTIONS: ScrollIntoViewOptions = {
 const MainToolbarContent = ({
   onHighlighterClick,
   onLinkClick,
+  onEmbedYoutube,
   onSearchAndReplaceClick,
   isSearchAndReplaceOpen,
   searchAndReplaceButtonRef,
@@ -92,6 +93,7 @@ const MainToolbarContent = ({
 }: {
   onHighlighterClick: () => void
   onLinkClick: () => void
+  onEmbedYoutube?: () => void
   onSearchAndReplaceClick: () => void
   isSearchAndReplaceOpen: boolean
   searchAndReplaceButtonRef: React.RefObject<HTMLButtonElement>
@@ -154,6 +156,7 @@ const MainToolbarContent = ({
 
       <ToolbarGroup>
         <ImageUploadButton text="Add" />
+        {onEmbedYoutube && <Button type="button" tooltip="Embed YouTube" onClick={onEmbedYoutube}><span className="tiptap-button-text">YouTube</span></Button>}
       </ToolbarGroup>
 
       <Spacer />
@@ -201,12 +204,13 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, editable = true }: {
+export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onEmbedYoutube, editable = true }: {
   content: JSONContent
   extensions?: Extensions
   onEditorReady?: (editor: Editor) => void
   onUpdate?: (editor: Editor) => void
   uploadImage?: (file: File) => Promise<string>
+  onEmbedYoutube?: () => void
   editable?: boolean
 }) {
   const isMobile = useIsBreakpoint()
@@ -316,6 +320,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
             <MainToolbarContent
               onHighlighterClick={() => setMobileView("highlighter")}
               onLinkClick={() => setMobileView("link")}
+              onEmbedYoutube={onEmbedYoutube}
               onSearchAndReplaceClick={toggleSearchAndReplace}
               isSearchAndReplaceOpen={isSearchAndReplaceOpen}
               searchAndReplaceButtonRef={searchAndReplaceButtonRef}

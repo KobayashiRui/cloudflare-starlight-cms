@@ -1,5 +1,13 @@
 # Roadmap / terra引き継ぎ
 
+## v0.9.2: YouTube embeds（2026-09-14）
+
+- Tiptap公式`@tiptap/extension-youtube`をAdminへ追加し、toolbarからYouTube / youtu.be URLを挿入できるようにした。
+- 公開Markdown rendererとAccess配下Preview rendererは同じURL検証を使い、11文字のvideo IDだけを
+  `youtube-nocookie.com` iframeへ正規化する。任意iframe・任意hostは受け付けない。
+- MiniflareのPreviewとAstro/Starlightの実静的buildで、生成HTMLにprivacy-enhanced iframeが含まれることを確認した。
+- CLI packageを`0.9.2`へ更新する。
+
 ## P7: CLI main-branch release automation（2026-09-14）
 
 - `main`へのCLI package manifest変更を契機に`create-starlight-cms`だけを公開するGitHub Actions workflowを追加した。npm registryに同一versionがある場合はskipし、未公開versionだけ既存release check後にpublishする。`workflow_dispatch`で失敗した未公開versionをversion変更なしでretryできる。

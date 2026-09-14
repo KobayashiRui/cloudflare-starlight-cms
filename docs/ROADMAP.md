@@ -5,6 +5,10 @@
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
 - 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
 
+## v1.0.1: navigation editing UX（2026-09-14）
+
+- `create-starlight-cms`を`1.0.1`へ更新する。Translation未作成時のTree選択表示、保存前Pageの一時Tree node、Folder/Page選択時の作成先、Navigation controlsとFolder chevronの表示を改善する。
+
 ## Editor local drafts and locale continuity（2026-09-14）
 
 - Dexie 4.4.6を使い、保存済みPageの未保存編集をbrowser内のIndexedDBへ保持する。Page移動・言語切替・reloadでnativeのDiscard確認を出さず、同じD1 versionなら編集内容を復元する。

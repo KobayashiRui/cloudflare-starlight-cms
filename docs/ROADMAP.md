@@ -5,6 +5,27 @@
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
 - 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
 
+## v1.0.1: navigation editing UX（2026-09-14）
+
+- `create-starlight-cms`を`1.0.1`へ更新する。Translation未作成時のTree選択表示、保存前Pageの一時Tree node、Folder/Page選択時の作成先、Navigation controlsとFolder chevronの表示を改善する。
+- READMEを初見向けの概要・Features・Quick Start・Upgradeに整理し、本番設定と障害対応を`docs/DEPLOYMENT.md`と`docs/TROUBLESHOOTING.md`へ分離する。
+
+## Editor local drafts and locale continuity（2026-09-14）
+
+- Dexie 4.4.6を使い、保存済みPageの未保存編集をbrowser内のIndexedDBへ保持する。Page移動・言語切替・reloadでnativeのDiscard確認を出さず、同じD1 versionなら編集内容を復元する。
+- ローカル下書きはD1のrevisionやPublish対象にはならない。`Save draft`でのみD1へ保存し、D1更新とのversion不一致時はlocal/savedの選択を明示する。新規Pageは最初のD1保存後から対象にする。
+- Media deletionは、このbrowserのlocal draftがURLを参照している場合も拒否する。R2 blobやD1全体をIndexedDBへ複製しない。
+- Public media URLs reject HTTP and private-network hosts before persistence, while normal HTTP(S) links remain supported. This avoids Mixed Content and Private Network Access errors in the HTTPS Admin and public site.
+- HTML paste drops unsafe image/video nodes before they reach the saved document, preserving image alt text when available and guiding the editor to upload media instead.
+- 最後に選んだ編集localeをbrowser local storageに保持する。Navigation Treeの構造は共通のままで、PageやFolder選択後も編集localeを維持する。
+- Translation未作成のPageを選んでもTreeの選択状態を維持する。Save前のNew pageは親Folder内（rootの場合はroot）の一時nodeとして表示し、保存までTreeの並べ替えを停止する。
+- Sidebarの`New page`と`New folder`は、Folder選択中ならその直下、Page選択中ならそのPageと同じ親階層を作成先にする。
+
+## Publish scopes（2026-09-14）
+
+- Document画面の`Publish page`はそのページ・言語だけを公開し、headerの`Publish changes`は保存済みDraft／変更を全言語横断で公開してDeploy Hookを一度だけ要求する。未保存のeditor内容は一括公開に含めない。
+- `Rebuild public site`を削除した。変更なしの手動再buildは通常運用に不要であり、失敗した配送だけを`Retry build`で再送する。
+
 ## Production setup documentation（2026-09-14）
 
 - READMEを実運用の順序へ更新した。初回空Deploy、Access Self-hosted public application、人間向けAllow policy、Build用Service Auth policy、Build Secrets、Worker custom domain、R2 custom domain、Runtime Deploy Hookを分離している。
@@ -166,7 +187,7 @@ keyboard D&D（Control+Shift+D、Arrow keys、Enter、Escape）を接続済み�
 1. `publish_delivery`を追加。Document Publishでは公開revision pointerと同じD1 batchでpending配送を保存する。site rebuildは単独の配送を保存する。完了。
 2. `WORKERS_DEPLOY_HOOK_URL`がある場合にPOSTし、失敗回数・次回retry・最後のエラーを保存する。URL未設定のlocalは`skipped`。完了。
 3. Adminで「Build requested」と表示する。Hook 2xxを公開完了と表示しない。failedはheaderからretryできる。完了。
-4. TreeではtranslationごとにDraft／Changesを集約表示する。下書き保存は本文の操作、Publish & rebuildはheaderに分離した。完了。
+4. TreeではtranslationごとにDraft／Changesを集約表示する。下書き保存と`Publish page`は本文の操作、`Publish changes`はheaderに分離した。完了。
 5. build中の追加変更、unpublish/delete/slug/navigation変更による古いroute/searchの消去と、実Deploy Hookの受理はP4の実Cloudflare環境で検証する。
 
 ## P4: Self-host / Cloudflare Access

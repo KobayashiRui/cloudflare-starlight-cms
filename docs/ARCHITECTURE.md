@@ -18,6 +18,16 @@ SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
 `published_revision_id IS NULL`が未公開を表す。保存とRestoreは`document_revision`を新規追加し、Publishも現在のTranslationからrevisionを新規追加して
 公開pointerを更新する。そのためDraftとPublishedは分離される。
 
+既存Pageの未保存編集はAdmin browser内のDexie/IndexedDBにだけ350ms debounceで保存する。保存対象は
+title、description、URL segment、Tiptap JSONと、その下書きが基づくD1 versionである。
+Page移動、言語切替、reloadではD1 versionが同じ場合にそのローカル下書きを復元する。D1側が先に更新されていた場合は
+ローカル変更を自動上書きせず、editorが「saved draftを使う」か「local changesを復元する」か選ぶ。
+`Save draft`だけがD1 revisionを追加し、`Publish page`と`Publish changes`はD1へ保存済みの内容だけを扱う。
+新規Pageは安定したdocument IDを持たないため、最初の`Save draft`まではbrowser下書きの対象外である。
+このbufferは端末・browser profileごとの補助であり、共有・同期・共同編集の機能ではない。
+Save前のNew pageはAdmin内だけの一時Tree nodeとして親Folder（rootを含む）に表示し、D1へ書き込むまではTreeの並べ替えを無効にする。選択localeのtranslationが未作成でも、既存のTree nodeを選択状態として保持する。
+Adminの`New page`と`New folder`は、選択中Folderの直下、または選択中Pageと同じ親階層へ作成する。rootのPageを選択している場合はrootへ作成する。
+
 Navigationはcontent revisionと分離した現在のTree状態である。`folder.parent_id IS NULL`と
 `document.folder_id IS NULL`はrootを表す。Folderは本文を持たないDocs専用のNavigation nodeで、
 FolderとDocumentは同じ親内でslugを共有できない。DBのpartial unique indexで各テーブル内の
@@ -70,8 +80,10 @@ productionと同じStatic Assets shellを読む。失敗した内容を繰り返
 同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
 最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。`next_retry_at`はpending送信の30秒の占有期限として使用する（自動retry時刻ではない）。failedと期限切れpendingをAdminから手動retryできる。
 URL・Tree変更と削除は同じD1 batchにsite配送を記録し、更新成功後に送信する。
-Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送し、ヘッダーのRebuild public siteは手動の再要求として残す。実配送はP4で実Accessとともに検証する。
+Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送する。Document画面の`Publish page`は現在のtranslationだけを公開し、headerの`Publish changes`は保存済みのDraft／変更を全言語横断で公開して一つのsite配送を記録する。公開内容を変えない手動rebuild操作は持たず、失敗した配送だけをretryできる。実配送はP4で実Accessとともに検証する。
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
+通常リンクはHTTP(S)・site-relative pathを許可する。一方、本文へ保存する画像・動画URLは公開HTTPS originまたはsite-relative pathだけを許可し、HTTP・private network・Admin media proxy URLは公開時に拒否する。これはHTTPS Admin/Public DocsでのMixed ContentとPrivate Network Access失敗を防ぐ。
+AdminはHTML貼り付け時に不正な画像・動画nodeを除外し、alt textだけを残せる場合は本文textへ戻す。保存時に失敗させず、Media uploadを案内する。
 6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、
 Admin専用URLを含むPublished snapshotはbuildを失敗させる。公開R2 URLはDraftでも秘匿されない。
@@ -88,5 +100,6 @@ Cloudflare/Astro非公式。無料運用は保証しない。
 別言語はDocumentのLanguageから既存translationをDraftとして複製する。Treeは言語によって切り替えず、
 Folder/Pageの構造は常に共通である。Published snapshotはlocaleごとの公開revisionだけを含むv3 DTOであり、
 Starlight loaderはdefault localeをunprefixed path、その他をlocale prefixのfilePathへ変換する。Draft本文は公開されない。未翻訳のURLにはStarlight標準の既定言語fallbackを使用する。
+Adminが最後に選んだ編集localeをbrowser local storageに保持し、別PageやFolderを選んでもdefault localeへ戻さない。
 
 公開exportはFolder・翻訳名・Published revisionを同一D1 batchで読む。更新日時は公開revisionの日時を使う。Navigation祖先のラベル・翻訳・順序を小さなDTOとして送り、Starlight標準sidebarへ変換する。Astro configとContent Loaderは同じbuildプロセス内で一度取得したsnapshotを共有する。

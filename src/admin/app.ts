@@ -9,7 +9,7 @@ import { publishedSnapshot } from '../starlight/snapshot.ts';
 import { adminHtml } from './html.ts';
 import { previewDocument } from './preview.ts';
 import { createFolder, createFolderTranslation, deleteFolder, FolderNotFoundError, listTree, NavigationConflictError, replaceTreeChildren, updateFolder } from '../navigation/service.ts';
-import { PublishDeliveryConflictError, PublishDeliveryNotFoundError, deliverPendingChanges, listPublishDeliveries, publishDocumentAndRequest, requestPublish, retryPublish } from '../publish/service.ts';
+import { PublishDeliveryConflictError, PublishDeliveryNotFoundError, deliverPendingChanges, listPublishDeliveries, publishDocumentAndRequest, publishSavedChangesAndRequest, retryPublish } from '../publish/service.ts';
 
 type AdminEnv = { Bindings: RuntimeEnv };
 const app = new Hono<AdminEnv>();
@@ -99,7 +99,7 @@ app.post('/admin/api/documents/:id/publish', async (c) => {
   const result = await publishDocumentAndRequest(c.env, c.req.param('id'), version!, locale(c));
   return c.json(result, 200, jsonHeaders);
 });
-app.post('/admin/api/publish/site', async (c) => c.json({ delivery: await requestPublish(c.env, 'site') }, 200, jsonHeaders));
+app.post('/admin/api/publish/changes', async (c) => c.json(await publishSavedChangesAndRequest(c.env), 200, jsonHeaders));
 app.get('/admin/api/publish/deliveries', async (c) => c.json(await listPublishDeliveries(c.env), 200, jsonHeaders));
 app.post('/admin/api/publish/deliveries/:id/retry', async (c) => c.json({ delivery: await retryPublish(c.env, c.req.param('id')) }, 200, jsonHeaders));
 app.get('/admin/api/documents/:id/revisions', async (c) => c.json(await listRevisions(c.env, c.req.param('id'), locale(c)), 200, jsonHeaders));

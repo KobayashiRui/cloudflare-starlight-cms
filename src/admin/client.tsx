@@ -1,12 +1,14 @@
 import { siteConfig } from '../site.config.ts';
+import { assertDocumentContentUrls, documentMediaUrl } from '../documents/content-urls.ts';
 import { Node, type JSONContent } from '@tiptap/core';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
+import { listLocalDocumentDrafts, localDocumentKey, readLocalDocumentDraft, removeLocalDocumentDraft, writeLocalDocumentDraft, type LocalDocumentDraft } from './local-drafts';
 import { localeLabel, defaultLocale, isSupportedLocale, supportedLocales, type SupportedLocale } from '../locales';
 import logoUrl from '../assets/logo.svg';
 import './styles/_variables.scss';
@@ -41,7 +43,8 @@ type PublishDelivery = {
   nextRetryAt: number | null;
 };
 type PublishDocumentResponse = { document: DocumentRecord; delivery: PublishDelivery };
-type PublishSiteResponse = { delivery: PublishDelivery };
+type PublishChangesResponse = { publishedCount: number; delivery: PublishDelivery | null };
+type PublishDeliveryResponse = { delivery: PublishDelivery };
 type DocumentFields = Pick<DocumentRecord, 'title' | 'slug' | 'description' | 'folderId' | 'order'>;
 type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -52,6 +55,15 @@ const emptyDocument: DocumentRecord = {
 };
 const mediaTypes = 'image/png,image/jpeg,image/webp,image/avif,video/mp4,video/webm';
 const validSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function isAllowedPastedMediaUrl(url: string) {
+  try {
+    documentMediaUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function SunIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>;
@@ -149,6 +161,11 @@ function setEditorDocument(editor: Editor | null, content: JSONContent) {
   editor.commands.setContent(content || emptyContent, { emitUpdate: false });
 }
 
+function hasDocumentChanges(document: DocumentRecord, fields: DocumentFields, contentJson: JSONContent) {
+  return document.title !== fields.title || document.slug !== fields.slug || document.description !== fields.description ||
+    document.folderId !== fields.folderId || document.order !== fields.order || JSON.stringify(document.contentJson) !== JSON.stringify(contentJson);
+}
+
 function App() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [treeItems, setTreeItems] = useState<NavigationItem[]>([]);
@@ -160,6 +177,7 @@ function App() {
   const [folderLocale, setFolderLocale] = useState<SupportedLocale>(defaultLocale);
   const [missingFolderTranslationSource, setMissingFolderTranslationSource] = useState<SupportedLocale | null>(null);
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
+  const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
   const [revisions, setRevisions] = useState<Revision[]>([]);
@@ -171,9 +189,14 @@ function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [localSaveState, setLocalSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [localDraftConflict, setLocalDraftConflict] = useState<LocalDocumentDraft | null>(null);
   const [search, setSearch] = useState('');
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [locale, setLocale] = useState<SupportedLocale>(defaultLocale);
+  const [locale, setLocale] = useState<SupportedLocale>(() => {
+    const saved = window.localStorage.getItem('docs-cms-locale');
+    return saved && isSupportedLocale(saved) ? saved : defaultLocale;
+  });
   const [missingDocumentId, setMissingDocumentId] = useState<string | null>(null);
   const [missingTranslationSource, setMissingTranslationSource] = useState<SupportedLocale | null>(null);
   const [latestDelivery, setLatestDelivery] = useState<PublishDelivery | null>(null);
@@ -182,16 +205,85 @@ function App() {
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
   });
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const pendingLocalDraft = useRef<LocalDocumentDraft | null>(null);
+  const localDraftTimer = useRef<number | null>(null);
+  const localWrite = useRef(Promise.resolve());
+  const selectionVersion = useRef(0);
+  const savedDocument = useRef<DocumentRecord | null>(null);
+  const fieldsRef = useRef(fields);
+  const editVersion = useRef(0);
 
   const showNotice = useCallback((message: string, error = false) => {
     setNotice(message);
     setNoticeIsError(error);
   }, []);
+  const applyFields = (nextFields: DocumentFields) => {
+    fieldsRef.current = nextFields;
+    setFields(nextFields);
+  };
+  const setEditingLocale = (nextLocale: SupportedLocale) => {
+    setLocale(nextLocale);
+    setFolderLocale(nextLocale);
+    window.localStorage.setItem('docs-cms-locale', nextLocale);
+  };
+  const removeQueuedLocalDraft = async (documentId: string, draftLocale: SupportedLocale) => {
+    localWrite.current = localWrite.current
+      .catch(() => undefined)
+      .then(() => removeLocalDocumentDraft(documentId, draftLocale))
+      .then(() => undefined);
+    await localWrite.current;
+  };
+  const flushLocalDraft = async () => {
+    if (localDraftTimer.current !== null) {
+      window.clearTimeout(localDraftTimer.current);
+      localDraftTimer.current = null;
+    }
+    const draft = pendingLocalDraft.current;
+    pendingLocalDraft.current = null;
+    if (!draft) return true;
+    try {
+      localWrite.current = localWrite.current.catch(() => undefined).then(() => writeLocalDocumentDraft(draft)).then(() => undefined);
+      await localWrite.current;
+      if (!pendingLocalDraft.current) setLocalSaveState('saved');
+      return true;
+    } catch (error) {
+      setLocalSaveState('error');
+      showNotice(`Local save failed: ${error instanceof Error ? error.message : String(error)}`, true);
+      return false;
+    }
+  };
+  const queueLocalDraft = (document: DocumentRecord, nextFields: DocumentFields, nextContent: JSONContent) => {
+    const baseline = savedDocument.current ?? document;
+    if (!baseline.id) return;
+    if (!hasDocumentChanges(baseline, nextFields, nextContent)) {
+      pendingLocalDraft.current = null;
+      if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+      localDraftTimer.current = null;
+      localWrite.current = localWrite.current.catch(() => undefined).then(() => removeLocalDocumentDraft(baseline.id, baseline.locale));
+      setLocalSaveState('idle');
+      return;
+    }
+    pendingLocalDraft.current = {
+      key: localDocumentKey(baseline.id, baseline.locale), documentId: baseline.id, locale: baseline.locale,
+      baseVersion: baseline.version, ...nextFields, contentJson: nextContent, updatedAt: Date.now(),
+    };
+    setLocalSaveState('saving');
+    if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+    localDraftTimer.current = window.setTimeout(() => { void flushLocalDraft(); }, 350);
+  };
   const refreshDocuments = useCallback(async () => {
     setDocuments(await api<DocumentRecord[]>('/documents'));
   }, []);
   const refreshMedia = useCallback(async () => {
-    setMedia(await api<Media[]>('/media'));
+    const [serverMedia, localDrafts] = await Promise.all([
+      api<Media[]>('/media'),
+      listLocalDocumentDrafts().catch(() => []),
+    ]);
+    const localContent = localDrafts.map((draft) => JSON.stringify(draft.contentJson));
+    setMedia(serverMedia.map((item) => ({
+      ...item,
+      isUsed: item.isUsed || localContent.some((content) => content.includes(item.url)),
+    })));
   }, []);
   const refreshTree = useCallback(async () => { setTreeItems(await api<NavigationItem[]>('/tree')); }, []);
   const refreshDeliveries = useCallback(async () => {
@@ -205,6 +297,13 @@ function App() {
   }, [refreshDeliveries, showNotice]);
 
   const selectedFolder = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${selectedFolderId}`) ?? null;
+  const missingDocument = missingDocumentId ? treeItems.find((item) => item.documentId === missingDocumentId) : undefined;
+  const activeParentFolderId = selectedFolderId ?? current?.folderId ?? (missingDocument?.parentId ? missingDocument.parentId.slice('folder:'.length) : null);
+  const folderParent = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${folderParentId}`) ?? null;
+  const savedChangeCount = treeItems.reduce((count, item) => count + item.translationStates.filter((entry) => entry.state !== 'published').length, 0);
+  const currentPublicationState = current
+    ? treeItems.find((item) => item.documentId === current.id)?.translationStates.find((entry) => entry.locale === current.locale)?.state
+    : undefined;
 
   useEffect(() => {
     Promise.all([refreshDocuments(), refreshMedia(), refreshTree(), refreshDeliveries()])
@@ -226,6 +325,14 @@ function App() {
     return () => mediaQuery.removeEventListener('change', applyTheme);
   }, [theme]);
 
+  useEffect(() => {
+    if (!isSupportedLocale(locale)) setEditingLocale(defaultLocale);
+  }, [locale]);
+
+  useEffect(() => () => {
+    void flushLocalDraft();
+  }, []);
+
   const displayedTheme = theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : theme;
 
   useEffect(() => {
@@ -242,33 +349,64 @@ function App() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isRevisionOpen]);
 
-  const selectDocument = useCallback(async (document: DocumentRecord, targetLocale: SupportedLocale = document.locale) => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
-    try {
-      const loaded = document.id ? await api<DocumentRecord>(`/documents/${encodeURIComponent(document.id)}`, {}, targetLocale) : document;
-      setCurrent(loaded);
-      setLocale(loaded.locale);
+  const selectDocument = async (document: DocumentRecord, targetLocale: SupportedLocale = document.locale) => {
+    const selection = ++selectionVersion.current;
+    if (!await flushLocalDraft()) return;
+    if (!document.id) {
+      savedDocument.current = null;
+      setCurrent(document);
       setMissingDocumentId(null);
       setMissingTranslationSource(null);
       setSelectedFolderId(null);
-      setFields(documentFields(loaded));
+      applyFields(documentFields(document));
       setRevisions([]);
       setIsRevisionOpen(false);
       setIsDirty(false);
-      showNotice(`${loaded.status === 'published' ? 'Published' : 'Draft'} · revision ${loaded.version}`);
+      setLocalSaveState('idle');
+      setLocalDraftConflict(null);
+      showNotice('New page. Save draft to keep it.');
+      return;
+    }
+    try {
+      const loaded = await api<DocumentRecord>(`/documents/${encodeURIComponent(document.id)}`, {}, targetLocale);
+      let localDraft: LocalDocumentDraft | undefined;
+      try {
+        localDraft = await readLocalDocumentDraft(loaded.id, loaded.locale);
+      } catch (error) {
+        setLocalSaveState('error');
+        showNotice(`Browser storage is unavailable: ${error instanceof Error ? error.message : String(error)}`, true);
+      }
+      if (selection !== selectionVersion.current) return;
+      savedDocument.current = loaded;
+      const canRestore = localDraft?.baseVersion === loaded.version;
+      const displayed = canRestore && localDraft ? {
+        ...loaded, title: localDraft.title, slug: localDraft.slug, description: localDraft.description,
+        folderId: localDraft.folderId, order: localDraft.order, contentJson: localDraft.contentJson,
+      } : loaded;
+      setCurrent(displayed);
+      setMissingDocumentId(null);
+      setMissingTranslationSource(null);
+      setSelectedFolderId(null);
+      applyFields(documentFields(displayed));
+      setRevisions([]);
+      setIsRevisionOpen(false);
+      setLocalDraftConflict(localDraft && !canRestore ? localDraft : null);
+      setIsDirty(Boolean(canRestore));
+      setLocalSaveState(canRestore ? 'saved' : 'idle');
+      showNotice(canRestore ? 'Local changes restored.' : `${loaded.status === 'published' ? 'Published' : 'Draft'} · revision ${loaded.version}`);
     } catch (error) {
       showNotice(String(error), true);
     }
-  }, [editor, isDirty, showNotice]);
+  };
 
-  const selectFolder = useCallback((folderId: string) => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+  const selectFolder = async (folderId: string) => {
+    const selection = ++selectionVersion.current;
+    if (!await flushLocalDraft()) return;
     const folder = treeItems.find((item) => item.id === `folder:${folderId}`);
     if (!folder) return;
     setEditor(null);
     setCurrent(null);
-    setLocale(defaultLocale);
-    setFolderLocale(defaultLocale);
+    savedDocument.current = null;
     setMissingFolderTranslationSource(null);
     setMissingDocumentId(null);
     setMissingTranslationSource(null);
@@ -276,30 +414,57 @@ function App() {
     setFolderName(folder.name);
     setFolderSlug(folder.slug);
     setIsDirty(false);
-    showNotice('');
-  }, [isDirty, showNotice, treeItems]);
-  const selectNavigationRoot = () => {
-    if (isDirty && !window.confirm('Discard unsaved changes?')) return;
+    setLocalSaveState('idle');
+    setLocalDraftConflict(null);
+    setFolderLocale(locale);
+    if (!folder.translationLocales.includes(locale)) {
+      const source = folder.translationLocales.includes(defaultLocale) ? defaultLocale : folder.translationLocales[0] as SupportedLocale | undefined;
+      setMissingFolderTranslationSource(source ?? null);
+    } else if (locale !== defaultLocale) {
+      try {
+        const localizedTree = await api<NavigationItem[]>('/tree', {}, locale);
+        if (selection !== selectionVersion.current) return;
+        const localizedFolder = localizedTree.find((item) => item.id === `folder:${folderId}`);
+        if (localizedFolder) setFolderName(localizedFolder.name);
+      } catch (error) {
+        showNotice(String(error), true);
+      }
+    }
+    showNotice('Folder selected.');
+  };
+  const selectNavigationRoot = async () => {
+    selectionVersion.current += 1;
+    if (!await flushLocalDraft()) return;
     setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(null); setMissingTranslationSource(null); setMissingFolderTranslationSource(null);
-    setLocale(defaultLocale); setIsDirty(false); showNotice('');
+    savedDocument.current = null;
+    setIsDirty(false); setLocalSaveState('idle'); setLocalDraftConflict(null); showNotice('');
   };
 
-  const selectTreeDocument = (id: string) => {
+  const selectTreeDocument = async (id: string) => {
     const treeItem = treeItems.find((item) => item.documentId === id);
+    if (treeItem?.translationLocales.includes(locale)) { void selectDocument({ ...emptyDocument, id, locale }, locale); return; }
+    selectionVersion.current += 1;
+    if (!await flushLocalDraft()) return;
     const source = treeItem?.translationLocales.includes(defaultLocale) ? defaultLocale : treeItem?.translationLocales[0] as SupportedLocale | undefined;
-    if (source) { void selectDocument({ ...emptyDocument, id, locale: source }, source); return; }
     setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(id); setMissingTranslationSource(null); setIsDirty(false);
-    showNotice('No translation exists for this page.');
+    savedDocument.current = null;
+    setMissingTranslationSource(source ?? null);
+    showNotice(`No ${locale} translation yet.`);
   };
-  const selectDocumentLocale = (targetLocale: SupportedLocale) => {
+  const selectDocumentLocale = async (targetLocale: SupportedLocale) => {
     if (!current?.id) return;
+    const selection = selectionVersion.current;
+    if (!await flushLocalDraft()) return;
+    if (selection !== selectionVersion.current) return;
     const treeItem = treeItems.find((item) => item.documentId === current.id);
     if (treeItem?.translationLocales.includes(targetLocale)) {
+      setEditingLocale(targetLocale);
       void selectDocument({ ...current, locale: targetLocale }, targetLocale);
       return;
     }
     const source = treeItem?.translationLocales.includes(defaultLocale) ? defaultLocale : treeItem?.translationLocales[0] as SupportedLocale | undefined;
-    setEditor(null); setCurrent(null); setSelectedFolderId(null); setLocale(targetLocale);
+    selectionVersion.current += 1;
+    setEditor(null); setCurrent(null); setSelectedFolderId(null); savedDocument.current = null; setEditingLocale(targetLocale);
     setMissingDocumentId(current.id); setMissingTranslationSource(source ?? null); setIsDirty(false);
     showNotice(`No ${targetLocale} translation yet.`);
   };
@@ -307,11 +472,13 @@ function App() {
     if (!missingDocumentId) return;
     const treeItem = treeItems.find((item) => item.documentId === missingDocumentId);
     if (treeItem?.translationLocales.includes(targetLocale)) {
+      setEditingLocale(targetLocale);
       void selectDocument({ ...emptyDocument, id: missingDocumentId, locale: targetLocale }, targetLocale);
       return;
     }
     const source = treeItem?.translationLocales.includes(defaultLocale) ? defaultLocale : treeItem?.translationLocales[0] as SupportedLocale | undefined;
-    setLocale(targetLocale);
+    setEditingLocale(targetLocale);
+    selectionVersion.current += 1;
     setMissingTranslationSource(source ?? null);
     showNotice(`No ${targetLocale} translation yet.`);
   };
@@ -327,15 +494,14 @@ function App() {
     } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
   };
   const nextOrder = useCallback((parentId: string | null) => Math.max(-1, ...treeItems.filter((item) => item.parentId === (parentId ? `folder:${parentId}` : null)).map((item) => item.order)) + 1, [treeItems]);
-  const startNewDocument = useCallback((folderId = selectedFolderId) => {
-    setLocale(defaultLocale);
+  const startNewDocument = useCallback((folderId = activeParentFolderId) => {
     void selectDocument({ ...emptyDocument, folderId, order: nextOrder(folderId) });
-  }, [nextOrder, selectDocument, selectedFolderId]);
-  const openNewFolder = useCallback((parentId = selectedFolderId) => {
-    setSelectedFolderId(parentId);
+  }, [activeParentFolderId, nextOrder]);
+  const openNewFolder = useCallback((parentId = activeParentFolderId) => {
+    setFolderParentId(parentId);
     setFolderDraft({ name: '', slug: '' });
     setIsFolderDialogOpen(true);
-  }, [selectedFolderId]);
+  }, [activeParentFolderId]);
   const createFolder = async () => {
     const name = folderDraft.name.trim();
     const slug = folderDraft.slug || slugify(name);
@@ -343,9 +509,10 @@ function App() {
     if (!validSlug.test(slug)) return showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
     setIsSaving(true);
     try {
-      const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: selectedFolderId, order: nextOrder(selectedFolderId) }) });
+      const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: folderParentId, order: nextOrder(folderParentId) }) });
       await refreshTree();
       setIsFolderDialogOpen(false);
+      setFolderParentId(null);
       setCurrent(null);
       setSelectedFolderId(created.id);
       setFolderName(created.name);
@@ -368,6 +535,7 @@ function App() {
   };
   const selectFolderLocale = async (targetLocale: SupportedLocale) => {
     if (!selectedFolder || !selectedFolderId) return;
+    setEditingLocale(targetLocale);
     if (targetLocale === defaultLocale) {
       setFolderLocale(targetLocale);
       setFolderName(selectedFolder.name);
@@ -423,19 +591,37 @@ function App() {
   };
 
   const updateField = (field: keyof DocumentFields, value: string | number | null) => {
-    setFields((currentFields) => ({ ...currentFields, [field]: value }));
-    setIsDirty(true);
+    editVersion.current += 1;
+    setFields((currentFields) => {
+      const nextFields = { ...currentFields, [field]: value };
+      const contentJson = editor?.getJSON() ?? current?.contentJson ?? emptyContent;
+      const baseline = savedDocument.current;
+      const changed = baseline ? hasDocumentChanges(baseline, nextFields, contentJson) : true;
+      fieldsRef.current = nextFields;
+      setIsDirty(changed);
+      if (baseline) queueLocalDraft(baseline, nextFields, contentJson);
+      return nextFields;
+    });
   };
   const updateTitle = (title: string) => {
+    editVersion.current += 1;
     const suggestedSlug = slugify(title);
-    setFields((currentFields) => ({
-      ...currentFields,
-      title,
-      // A title only suggests the initial URL segment. It never overwrites a
-      // value chosen by the editor, and non-Latin titles leave it blank.
-      slug: current?.id || currentFields.slug || !suggestedSlug ? currentFields.slug : suggestedSlug,
-    }));
-    setIsDirty(true);
+    setFields((currentFields) => {
+      const nextFields = {
+        ...currentFields,
+        title,
+        // A title only suggests the initial URL segment. It never overwrites a
+        // value chosen by the editor, and non-Latin titles leave it blank.
+        slug: current?.id || currentFields.slug || !suggestedSlug ? currentFields.slug : suggestedSlug,
+      };
+      const contentJson = editor?.getJSON() ?? current?.contentJson ?? emptyContent;
+      const baseline = savedDocument.current;
+      const changed = baseline ? hasDocumentChanges(baseline, nextFields, contentJson) : true;
+      fieldsRef.current = nextFields;
+      setIsDirty(changed);
+      if (baseline) queueLocalDraft(baseline, nextFields, contentJson);
+      return nextFields;
+    });
   };
   const updateSlug = (slug: string) => {
     updateField('slug', normalizeSlugInput(slug));
@@ -443,27 +629,96 @@ function App() {
 
   const save = async (): Promise<DocumentRecord | undefined> => {
     if (!editor || !current) return undefined;
-    if (!validSlug.test(fields.slug)) {
+    if (!validSlug.test(fieldsRef.current.slug)) {
       showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
+      return undefined;
+    }
+    try {
+      assertDocumentContentUrls(editor.getJSON());
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : 'Invalid document URL', true);
       return undefined;
     }
     setIsSaving(true);
     try {
-      const body = { ...fields, contentJson: editor.getJSON(), version: current.version };
+      const saveSelection = selectionVersion.current;
+      await flushLocalDraft();
+      if (selectionVersion.current !== saveSelection) return undefined;
+      const saveVersion = editVersion.current;
+      const body = { ...fieldsRef.current, contentJson: editor.getJSON(), version: current.version };
       const saved = current.id
         ? await api<DocumentRecord>(`/documents/${encodeURIComponent(current.id)}`, { method: 'PUT', body: JSON.stringify(body) }, current.locale)
         : await api<DocumentRecord>('/documents', { method: 'POST', body: JSON.stringify(body) });
-      setCurrent(saved);
-      setFields(documentFields(saved));
-      setIsDirty(false);
+      if (selectionVersion.current !== saveSelection) {
+        await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
+        return saved;
+      }
+      savedDocument.current = saved;
+      setLocalDraftConflict(null);
+      if (editVersion.current === saveVersion) {
+        setCurrent(saved);
+        applyFields(documentFields(saved));
+        setIsDirty(false);
+        pendingLocalDraft.current = null;
+        if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+        localDraftTimer.current = null;
+        await removeQueuedLocalDraft(saved.id, saved.locale);
+        setLocalSaveState('idle');
+      } else {
+        const latestFields = fieldsRef.current;
+        const latestContent = editor.getJSON();
+        const displayed = { ...saved, ...latestFields, contentJson: latestContent };
+        const changed = hasDocumentChanges(saved, latestFields, latestContent);
+        setCurrent(displayed);
+        applyFields(latestFields);
+        setIsDirty(changed);
+        if (changed) queueLocalDraft(saved, latestFields, latestContent);
+      }
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-      showNotice('Draft saved.');
+      showNotice(editVersion.current === saveVersion ? 'Draft saved.' : 'Draft saved. Newer local changes are still kept in this browser.');
       return saved;
     } catch (error) {
       showNotice(String(error), true);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const discardLocalChanges = async () => {
+    const baseline = savedDocument.current;
+    if (!baseline) return;
+    pendingLocalDraft.current = null;
+    if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+    localDraftTimer.current = null;
+    await removeQueuedLocalDraft(baseline.id, baseline.locale);
+    setCurrent(baseline);
+    applyFields(documentFields(baseline));
+    setEditorDocument(editor, baseline.contentJson);
+    setIsDirty(false);
+    setLocalDraftConflict(null);
+    setLocalSaveState('idle');
+    showNotice('Local changes discarded.');
+  };
+
+  const restoreConflictingLocalChanges = () => {
+    const baseline = savedDocument.current;
+    if (!baseline || !localDraftConflict) return;
+    const restored = {
+      ...baseline,
+      title: localDraftConflict.title,
+      slug: localDraftConflict.slug,
+      description: localDraftConflict.description,
+      folderId: localDraftConflict.folderId,
+      order: localDraftConflict.order,
+      contentJson: localDraftConflict.contentJson,
+    };
+    setCurrent(restored);
+    applyFields(documentFields(restored));
+    setEditorDocument(editor, restored.contentJson);
+    setIsDirty(true);
+    setLocalDraftConflict(null);
+    queueLocalDraft(baseline, documentFields(restored), restored.contentJson);
+    showNotice('Local changes restored. Save draft to keep them in the CMS.');
   };
 
   const preview = () => {
@@ -484,19 +739,47 @@ function App() {
 
   const publish = async () => {
     if (!current?.id) return showNotice('Save the document before publishing.', true);
+    const publishSelection = selectionVersion.current;
     let documentToPublish = current;
     if (isDirty) {
       const saved = await save();
       if (!saved) return;
+      if (selectionVersion.current !== publishSelection) return;
       documentToPublish = saved;
+      const latestContent = editor?.getJSON() ?? emptyContent;
+      if (hasDocumentChanges(saved, fieldsRef.current, latestContent)) {
+        showNotice('Newer local changes are still open. Save draft again before publishing.', true);
+        return;
+      }
     }
+    const publishEditVersion = editVersion.current;
     setIsSaving(true);
     try {
       const result = await api<PublishDocumentResponse>(`/documents/${encodeURIComponent(documentToPublish.id)}/publish`, {
         method: 'POST', body: JSON.stringify({ version: documentToPublish.version }),
       }, documentToPublish.locale);
-      setCurrent(result.document);
-      setFields(documentFields(result.document));
+      if (selectionVersion.current !== publishSelection) {
+        await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
+        return;
+      }
+      savedDocument.current = result.document;
+      if (editVersion.current === publishEditVersion) {
+        setCurrent(result.document);
+        applyFields(documentFields(result.document));
+        setIsDirty(false);
+        pendingLocalDraft.current = null;
+        await removeQueuedLocalDraft(result.document.id, result.document.locale);
+        setLocalSaveState('idle');
+      } else {
+        const latestFields = fieldsRef.current;
+        const latestContent = editor?.getJSON() ?? emptyContent;
+        const displayed = { ...result.document, ...latestFields, contentJson: latestContent };
+        const changed = hasDocumentChanges(result.document, latestFields, latestContent);
+        setCurrent(displayed);
+        applyFields(latestFields);
+        setIsDirty(changed);
+        if (changed) queueLocalDraft(result.document, latestFields, latestContent);
+      }
       setLatestDelivery(result.delivery);
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
@@ -507,12 +790,18 @@ function App() {
     }
   };
 
-  const rebuildPublishedSite = async () => {
+  const publishChanges = async () => {
+    if (isDirty) return showNotice('Save the current draft before publishing changes.', true);
+    if (savedChangeCount === 0) return showNotice('There are no saved changes to publish.');
+    const noun = savedChangeCount === 1 ? 'translation' : 'translations';
+    if (!window.confirm(`Publish ${savedChangeCount} saved ${noun}? The public documentation site will be rebuilt once.`)) return;
     setIsSaving(true);
     try {
-      const result = await api<PublishSiteResponse>('/publish/site', { method: 'POST' });
+      const result = await api<PublishChangesResponse>('/publish/changes', { method: 'POST' });
+      if (!result.delivery) return showNotice('There are no saved changes to publish.');
       setLatestDelivery(result.delivery);
-      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
+      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
+      showNotice(`Published ${result.publishedCount} ${result.publishedCount === 1 ? 'translation' : 'translations'}. ${describeDelivery(result.delivery)}`, result.delivery.status === 'failed');
     } catch (error) {
       showNotice(String(error), true);
     } finally {
@@ -521,10 +810,10 @@ function App() {
   };
 
   const retryBuild = async () => {
-    if (!latestDelivery || latestDelivery.status !== 'failed') return;
+    if (!latestDelivery || (latestDelivery.status !== 'failed' && latestDelivery.status !== 'pending')) return;
     setIsSaving(true);
     try {
-      const result = await api<PublishSiteResponse>(`/publish/deliveries/${encodeURIComponent(latestDelivery.id)}/retry`, { method: 'POST' });
+      const result = await api<PublishDeliveryResponse>(`/publish/deliveries/${encodeURIComponent(latestDelivery.id)}/retry`, { method: 'POST' });
       setLatestDelivery(result.delivery);
       showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
     } catch (error) {
@@ -559,9 +848,13 @@ function App() {
         method: 'POST', body: JSON.stringify({ version: current.version }),
       }, current.locale);
       setCurrent(restored);
-      setFields(documentFields(restored));
+      savedDocument.current = restored;
+      applyFields(documentFields(restored));
       setEditorDocument(editor, restored.contentJson);
       setIsDirty(false);
+      pendingLocalDraft.current = null;
+      await removeQueuedLocalDraft(restored.id, restored.locale);
+      setLocalSaveState('idle');
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice(`Revision ${revision.revision} restored as a draft.`);
     } catch (error) {
@@ -576,10 +869,14 @@ function App() {
         method: 'DELETE', body: JSON.stringify({ version: current.version }),
       }, current.locale);
       setCurrent(null);
-      setFields(documentFields(emptyDocument));
+      savedDocument.current = null;
+      applyFields(documentFields(emptyDocument));
       setRevisions([]);
       setEditorDocument(editor, emptyContent);
       setIsDirty(false);
+      pendingLocalDraft.current = null;
+      await removeQueuedLocalDraft(current.id, current.locale);
+      setLocalSaveState('idle');
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice('Document deleted.');
     } catch (error) {
@@ -605,6 +902,12 @@ function App() {
   const removeMedia = async (item: Media) => {
     if (item.isUsed || !window.confirm(`Delete ${item.fileName}? This cannot be undone.`)) return;
     try {
+      const localDrafts = await listLocalDocumentDrafts().catch(() => []);
+      if (localDrafts.some((draft) => JSON.stringify(draft.contentJson).includes(item.url))) {
+        showNotice('This media is used by local changes in this browser. Save or discard those changes before deleting it.', true);
+        await refreshMedia();
+        return;
+      }
       setIsSaving(true);
       await api<void>(`/media/${item.id}`, { method: 'DELETE' });
       await refreshMedia();
@@ -623,7 +926,6 @@ function App() {
     } else {
       editor.chain().focus().insertContent({ type: 'video', attrs: { src: item.url, mediaId: item.id } }).run();
     }
-    setIsDirty(true);
     setIsMediaPickerOpen(false);
     showNotice(`${item.fileName} inserted.`);
   };
@@ -641,7 +943,6 @@ function App() {
       showNotice('Enter a valid YouTube URL.', true);
       return;
     }
-    setIsDirty(true);
     setIsYoutubeDialogOpen(false);
     showNotice('YouTube video inserted.');
   };
@@ -700,7 +1001,7 @@ function App() {
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
         {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
-        {current?.id ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void publish()}>Publish & rebuild</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void rebuildPublishedSite()}>Rebuild public site</button>}
+        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || savedChangeCount === 0} onClick={() => void publishChanges()}>Publish changes{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -713,7 +1014,7 @@ function App() {
         <div className="cms-sidebar-heading"><span>Documents</span><span className="cms-count">{documents.length}</span></div>
         <label className="cms-search"><span className="sr-only">Search documents</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search documents" /></label>
         <div className="cms-navigation-actions"><button className="cms-new-document" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-new-folder" type="button" onClick={() => openNewFolder()}>New folder</button></div>
-        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id} selectedFolderId={selectedFolderId} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
+        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id || missingDocumentId || undefined} selectedFolderId={selectedFolderId} temporaryDocument={current && !current.id ? { name: fields.title.trim() || 'Untitled page', parentId: current.folderId ? `folder:${current.folderId}` : null } : undefined} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
       </aside>
 
       <main className="cms-main">
@@ -721,15 +1022,19 @@ function App() {
           {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
           <section className="cms-document-actions" aria-label="Document actions">
             <div className="cms-document-state">
-              <span className={`cms-status cms-status-${current.status}`}>{isDirty ? 'Unsaved changes' : current.status}</span>
-              <span>{isDirty ? 'Draft changes are not saved.' : 'Saved draft.'}</span>
+              <span className={`cms-status cms-status-${!current.id || isDirty ? 'draft' : current.status}`}>{!current.id ? 'New page' : isDirty ? 'Local changes' : current.status}</span>
+              <span>{!current.id ? 'Save draft to create this page.' : isDirty ? localSaveState === 'saving' ? 'Saving locally…' : localSaveState === 'error' ? 'Local save failed.' : 'Saved locally.' : 'Saved draft.'}</span>
             </div>
             <div className="cms-document-action-buttons">
               {current.id && <button className="cms-button" type="button" disabled={isSaving} onClick={preview}>Preview draft</button>}
               <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+              {isDirty && current.id && <button className="cms-button cms-button-quiet" type="button" disabled={isSaving} onClick={() => void discardLocalChanges()}>Discard local changes</button>}
+              {current.id && <span className="cms-action-divider" aria-hidden="true" />}
+              {current.id && currentPublicationState !== 'published' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void publish()}>Publish page</button>}
               {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>
           </section>
+          {localDraftConflict && <section className="cms-local-draft-conflict" aria-label="Local draft conflict"><div><strong>A newer saved draft exists.</strong><p>Your browser has local changes from an older saved draft.</p></div><div><button className="cms-button" type="button" onClick={() => void discardLocalChanges()}>Keep saved draft</button><button className="cms-button cms-button-primary" type="button" onClick={restoreConflictingLocalChanges}>Restore local changes</button></div></section>}
           <section className="cms-editor-surface" aria-label="Document editor">
             <div className="cms-document-fields">
               <label className="cms-meta-field">
@@ -737,7 +1042,7 @@ function App() {
                 <input className="cms-slug-input" value={fields.slug} onChange={(event) => updateSlug(event.target.value)} onBlur={() => updateField('slug', slugify(fields.slug))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} aria-invalid={Boolean(fields.slug) && !validSlug.test(fields.slug)} placeholder="getting-started" />
                 <small className="cms-field-help">Required. Lowercase letters, numbers, and hyphens. English titles suggest a value while this field is empty.</small>
               </label>
-              {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
+              {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => void selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
               <label className="cms-meta-field">
                 <span>Title</span>
                 <input className="cms-title-input" value={fields.title} onChange={(event) => updateTitle(event.target.value)} placeholder="Untitled document" />
@@ -749,7 +1054,18 @@ function App() {
             </div>
             <section className="cms-editor-field" aria-label="Content">
               <header className="cms-editor-field-header"><span>Content</span></header>
-              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={() => setIsDirty(true)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
+              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
+                const contentJson = updatedEditor.getJSON();
+                const baseline = savedDocument.current;
+                if (!baseline) {
+                  setIsDirty(true);
+                  return;
+                }
+                const changed = hasDocumentChanges(baseline, fields, contentJson);
+                if (changed) editVersion.current += 1;
+                setIsDirty(changed);
+                queueLocalDraft(baseline, fields, contentJson);
+              }} isAllowedMediaUrl={isAllowedPastedMediaUrl} onRejectedPastedMedia={(count) => showNotice(`${count} pasted ${count === 1 ? 'image or video was' : 'images or videos were'} skipped because the URL is local or insecure. Upload media to include it.`)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
@@ -777,7 +1093,7 @@ function App() {
         <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>Embed video</button></footer>
       </section>
     </div>}
-    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
+    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{folderParent ? `Create inside ${folderParent.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
   </div>;
 }
 

@@ -25,6 +25,17 @@ The local Admin is at `http://127.0.0.1:8787/admin/`; static Docs are at `http:/
 
 The CLI writes the normalized project name to `wrangler.jsonc` as the Worker name. Its `DB` and `MEDIA` bindings have no resource IDs or names, so Cloudflare provisions their D1 database and R2 bucket during the first deploy.
 
+## Upgrade a generated project
+
+Use the latest CLI to compare a project with the template version recorded when it was created:
+
+```sh
+npx create-starlight-cms@latest upgrade .
+npx create-starlight-cms@latest upgrade . --apply
+```
+
+The first command only reports the plan. `--apply` updates files which are unchanged from the old template, preserves project settings and custom files, and stops before changing anything if both the project and the new template changed the same file. It never deletes files. When dependencies change, run `npm install` afterwards to refresh `package-lock.json`.
+
 ## Included
 
 - React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, locale-aware documents, and YouTube embeds

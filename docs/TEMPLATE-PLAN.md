@@ -52,7 +52,7 @@ CLI packageの `prepack` から実行し、rootソースの編集だけで次の
 `.gitignore`は `_gitignore`、lockfileは `package-lock.json.template` にrenameして同梱。
 CLI packageの `files` はbinとtemplate等の必要ファイルだけ。LICENSE/第三者noticeを失わない。
 root packageへ追加する配布用scriptを生成packageへ残さない。dependenciesとlockfileは同期させる。
-生成packageへ `cloudflareStarlightCms.templateVersion` を記録する（更新機能は作らない）。
+生成packageへ `cloudflareStarlightCms.templateVersion` を記録し、CLIの`upgrade`が旧templateと最新版を比較するために使う。
 
 ## 実装順序と完了条件
 
@@ -107,14 +107,18 @@ Workers Buildsは生成先の利用者Git repoへ接続するため、ローカ�
 
 ## 更新ポリシー
 
-create CLI更新は次の新規生成にだけ影響する。既存生成先への自動同期・上書きはしない。
-Astro等の依存更新と、コピー済みCMSソース更新は別物。npm updateだけでCMS側の修正は届かない。
-release notesに変更ファイル・必要migration・手動移行手順を掲載する。
+`npx create-starlight-cms@latest upgrade .`は、作成元versionのtemplateをnpmから一時取得し、
+旧template・最新template・利用者projectを比較する。既存projectはこのdry-runでは変更しない。
+競合がなければ`--apply`で、旧templateから未変更のmanaged fileだけを更新する。利用者と新templateの
+両方が変更したfileは上書きせず、一覧を表示して終了する。削除は自動で行わない。
+`package.json`はscripts・dependencies・enginesだけを同じ3者比較で更新し、Worker名などの利用者設定を保持する。
+lockfileは自動上書きせず、dependencyに変更があった場合は利用者が`npm install`で更新する。
+旧templateを取得できない、作成元versionがない、または競合があるprojectは手動移行する。
 新規用templateには累積migrationを含め、リリース後の既存migrationを改変/一本化しない。
-テンプレート方式は更新保守を利用者へ委ねる選択であり、library方式と同等の更新容易性を約束しない。
 
 ## 引き継ぎ指示
 
 この計画の1〜4を順に実装し、各工程でROADMAPを更新してください。現在の既存DBを変更/削除せず、
-受け入れ検証は生成した一時projectで行ってください。独立したCMS packageや自動upgradeは追加しません。
+受け入れ検証は生成した一時projectで行ってください。独立したCMS packageは追加しません。上記の限定的な`upgrade`以外に、
+汎用同期・自動merge・自動deployは追加しません。
 実npm publish・remote Cloudflare操作は次工程です。完了報告では実tgz検証とfresh local起動の結果を区別してください。

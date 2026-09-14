@@ -25,6 +25,7 @@ Page移動、言語切替、reloadではD1 versionが同じ場合にそのロー
 `Save draft`だけがD1 revisionを追加し、`Publish page`と`Publish changes`はD1へ保存済みの内容だけを扱う。
 新規Pageは安定したdocument IDを持たないため、最初の`Save draft`まではbrowser下書きの対象外である。
 このbufferは端末・browser profileごとの補助であり、共有・同期・共同編集の機能ではない。
+Save前のNew pageはAdmin内だけの一時Tree nodeとして親Folder（rootを含む）に表示し、D1へ書き込むまではTreeの並べ替えを無効にする。選択localeのtranslationが未作成でも、既存のTree nodeを選択状態として保持する。
 
 Navigationはcontent revisionと分離した現在のTree状態である。`folder.parent_id IS NULL`と
 `document.folder_id IS NULL`はrootを表す。Folderは本文を持たないDocs専用のNavigation nodeで、

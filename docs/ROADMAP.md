@@ -3,7 +3,7 @@
 ## P7: CLI main-branch release automation（2026-09-14）
 
 - `main`へのmergeを契機に`create-starlight-cms`だけを公開するGitHub Actions workflowを追加した。CLI package versionが直前の`main`と同じならskipし、変わった時だけ既存release check後にpublishする。
-- npm Trusted Publisher（GitHub Actions OIDC）を前提にし、npm access tokenをGitHub Secretsへ保存しない。初回はnpm package settingsでrepository / `publish.yml` / `npm publish`を設定する。OIDC要件を満たすnpm 11.5.2をworkflowで明示する。
+- npm Trusted Publisher（GitHub Actions OIDC）を前提にし、npm access tokenをGitHub Secretsへ保存しない。初回はnpm package settingsでrepository / `publish.yml` / `npm publish`を設定する。OIDC要件を満たすnpm 11.5.2と、空のlegacy認証設定を生成しないsetup-node v7をworkflowで明示する。
 
 ## P6: v0.9.1 Zod API cleanup（2026-09-14）
 

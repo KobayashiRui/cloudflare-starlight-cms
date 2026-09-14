@@ -14,7 +14,7 @@ In the npm package settings, add a GitHub Actions Trusted Publisher with:
 The workflow uses GitHub OIDC and does not need an npm access token. Configure the npm package to require 2FA and disallow traditional publish tokens after confirming the first automated release.
 Protect `main` in GitHub so only release maintainers can merge a version change.
 
-Trusted publishing requires a GitHub-hosted runner, Node 22.14 or later, and npm 11.5.1 or later. The workflow pins npm 11.5.2 explicitly. Leave the Trusted Publisher environment blank because this workflow does not use a GitHub Environment.
+Trusted publishing requires a GitHub-hosted runner, Node 22.14 or later, and npm 11.5.1 or later. The workflow uses setup-node v7 and pins npm 11.5.2 explicitly. Leave the Trusted Publisher environment blank because this workflow does not use a GitHub Environment.
 
 ## Release
 

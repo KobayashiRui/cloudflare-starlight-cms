@@ -1,5 +1,10 @@
 # Roadmap / terra引き継ぎ
 
+## v1.0.0: first stable release（2026-09-14）
+
+- `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
+- 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
+
 ## Production setup documentation（2026-09-14）
 
 - READMEを実運用の順序へ更新した。初回空Deploy、Access Self-hosted public application、人間向けAllow policy、Build用Service Auth policy、Build Secrets、Worker custom domain、R2 custom domain、Runtime Deploy Hookを分離している。

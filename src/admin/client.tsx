@@ -28,6 +28,7 @@ type DocumentRecord = {
 type Media = { id: string; fileName: string; contentType: string; url: string; isUsed: boolean };
 type Revision = { id: string; revision: number; createdAt: number };
 type Folder = { id: string; name: string; slug: string; parentId: string | null; order: number };
+type FolderTranslation = Pick<Folder, 'id' | 'name'>;
 type PublishDelivery = {
   id: string;
   status: 'pending' | 'accepted' | 'failed' | 'skipped';
@@ -156,6 +157,8 @@ function App() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState('');
   const [folderSlug, setFolderSlug] = useState('');
+  const [folderLocale, setFolderLocale] = useState<SupportedLocale>(defaultLocale);
+  const [missingFolderTranslationSource, setMissingFolderTranslationSource] = useState<SupportedLocale | null>(null);
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
   const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
@@ -265,6 +268,8 @@ function App() {
     setEditor(null);
     setCurrent(null);
     setLocale(defaultLocale);
+    setFolderLocale(defaultLocale);
+    setMissingFolderTranslationSource(null);
     setMissingDocumentId(null);
     setMissingTranslationSource(null);
     setSelectedFolderId(folderId);
@@ -275,7 +280,7 @@ function App() {
   }, [isDirty, showNotice, treeItems]);
   const selectNavigationRoot = () => {
     if (isDirty && !window.confirm('Discard unsaved changes?')) return;
-    setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(null); setMissingTranslationSource(null);
+    setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(null); setMissingTranslationSource(null); setMissingFolderTranslationSource(null);
     setLocale(defaultLocale); setIsDirty(false); showNotice('');
   };
 
@@ -344,6 +349,8 @@ function App() {
       setSelectedFolderId(created.id);
       setFolderName(created.name);
       setFolderSlug(created.slug);
+      setFolderLocale(defaultLocale);
+      setMissingFolderTranslationSource(null);
       showNotice('Folder created.');
     } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
   };
@@ -353,8 +360,46 @@ function App() {
     if (!name || !slug) return showNotice('Folder name is required.', true);
     setIsSaving(true);
     try {
-      await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) });
+      await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) }, folderLocale);
       await refreshTree(); showNotice('Folder saved.');
+    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+  };
+  const selectFolderLocale = async (targetLocale: SupportedLocale) => {
+    if (!selectedFolder || !selectedFolderId) return;
+    if (targetLocale === defaultLocale) {
+      setFolderLocale(targetLocale);
+      setFolderName(selectedFolder.name);
+      setFolderSlug(selectedFolder.slug);
+      setMissingFolderTranslationSource(null);
+      return;
+    }
+    if (!selectedFolder.translationLocales.includes(targetLocale)) {
+      const source = selectedFolder.translationLocales.find((value): value is SupportedLocale => isSupportedLocale(value));
+      setFolderLocale(targetLocale);
+      setFolderName('');
+      setFolderSlug(selectedFolder.slug);
+      setMissingFolderTranslationSource(selectedFolder.translationLocales.includes(defaultLocale) ? defaultLocale : source ?? null);
+      return;
+    }
+    try {
+      const translatedTree = await api<NavigationItem[]>('/tree', {}, targetLocale);
+      const translatedFolder = translatedTree.find((item) => item.id === `folder:${selectedFolderId}`);
+      if (!translatedFolder) throw new Error('Folder translation was not found.');
+      setFolderLocale(targetLocale);
+      setFolderName(translatedFolder.name);
+      setFolderSlug(translatedFolder.slug);
+      setMissingFolderTranslationSource(null);
+    } catch (error) { showNotice(String(error), true); }
+  };
+  const createFolderTranslation = async () => {
+    if (!selectedFolderId || !missingFolderTranslationSource) return;
+    setIsSaving(true);
+    try {
+      const created = await api<FolderTranslation>(`/folders/${encodeURIComponent(selectedFolderId)}/translations`, { method: 'POST', body: JSON.stringify({ sourceLocale: missingFolderTranslationSource }) }, folderLocale);
+      await refreshTree();
+      setFolderName(created.name);
+      setMissingFolderTranslationSource(null);
+      showNotice(`${folderLocale} folder translation created from ${missingFolderTranslationSource}.`);
     } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
   };
   const deleteFolder = async () => {
@@ -619,6 +664,32 @@ function App() {
       {items.map((item) => <span className="cms-breadcrumb-item" key={`${item.id}:${item.name}`}><ChevronRightIcon />{item.id ? <button type="button" onClick={() => selectFolder(item.id)}>{item.name}</button> : <strong>{item.name}</strong>}</span>)}
     </nav>;
   };
+  const renderFolderPanel = () => {
+    if (!selectedFolder) return null;
+    const translationMissing = Boolean(missingFolderTranslationSource);
+    return <section className="cms-folder-panel" aria-label="Folder settings">
+      {renderBreadcrumb(selectedFolderId)}
+      <header>
+        <div><p>Folder</p><h1>{folderName || selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div>
+      </header>
+      <section className="cms-document-actions" aria-label="Folder actions">
+        <div className="cms-document-state"><span className="cms-status cms-status-folder">Folder</span><span>{translationMissing ? 'Translation needs to be created.' : 'Navigation changes publish with the next rebuild.'}</span></div>
+        {translationMissing ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolderTranslation()}>Create {folderLocale} translation</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button>}
+      </section>
+      <div className="cms-folder-fields">
+        <label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} disabled={folderLocale !== defaultLocale} onChange={(event) => setFolderSlug(slugify(event.target.value))} /><small className="cms-field-help">Shared across all languages.</small></label>
+      </div>
+      <label className="cms-content-locale"><span>Language</span><select value={folderLocale} onChange={(event) => void selectFolderLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>
+      {translationMissing ? <section className="cms-folder-translation-empty">
+        <h2>Translation not created</h2>
+        <p>This folder has no {folderLocale} translation. Create one by copying the {missingFolderTranslationSource} name.</p>
+      </section> : <div className="cms-folder-fields">
+        <label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); if (folderLocale === defaultLocale) setFolderSlug((value) => value || slugify(event.target.value)); }} /></label>
+      </div>}
+      <section className="cms-folder-children-actions" aria-label="Add to folder"><div><h2>Add to folder</h2><p>Create a page or nested folder at this location.</p></div><div><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></section>
+      <section className="cms-danger-zone" aria-label="Danger zone"><div><h2>Delete folder</h2><p>Move or delete its contents before removing this folder.</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></section>
+    </section>;
+  };
 
   return <div className="cms-shell">
     <header className="cms-topbar">
@@ -644,7 +715,7 @@ function App() {
       </aside>
 
       <main className="cms-main">
-        {selectedFolder ? <section className="cms-folder-panel" aria-label="Folder settings">{renderBreadcrumb(selectedFolderId)}<header><div><p>Folder</p><h1>{selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div><div className="cms-folder-panel-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></header><div className="cms-folder-fields"><label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); setFolderSlug((value) => value || slugify(event.target.value)); }} /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} onChange={(event) => setFolderSlug(slugify(event.target.value))} /></label></div><footer><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button><button className="cms-button cms-button-danger" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></footer></section> : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
+        {selectedFolder ? renderFolderPanel() : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
           {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
           <section className="cms-document-actions" aria-label="Document actions">
             <div className="cms-document-state">

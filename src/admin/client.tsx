@@ -738,6 +738,7 @@ function App() {
             <div className="cms-document-action-buttons">
               {current.id && <button className="cms-button" type="button" disabled={isSaving} onClick={preview}>Preview draft</button>}
               <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+              {current.id && <span className="cms-action-divider" aria-hidden="true" />}
               {current.id && currentPublicationState !== 'published' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void publish()}>Publish page</button>}
               {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>

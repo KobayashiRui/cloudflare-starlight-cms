@@ -84,6 +84,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-breadcrumb strong { overflow: hidden; color: var(--cms-text); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .cms-document-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 0 0 1.1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--cms-border); }
 .cms-document-state, .cms-document-action-buttons { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+.cms-document-action-buttons { flex-wrap: wrap; }
+.cms-action-divider { width: 1px; align-self: stretch; margin: .15rem .05rem; background: var(--cms-border); }
 .cms-document-state > span:not(.cms-status) { overflow: hidden; color: var(--cms-text-muted); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
 .cms-history-button { display: inline-flex; align-items: center; gap: .35rem; }
 .cms-history-button svg { width: .9rem; height: .9rem; }
@@ -187,6 +189,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .cms-main { padding: 1rem .85rem 2rem; }
   .cms-document-actions, .cms-danger-zone, .cms-folder-children-actions { align-items: flex-start; flex-direction: column; }
   .cms-document-action-buttons { width: 100%; justify-content: flex-end; }
+  .cms-action-divider { align-self: auto; height: 1.5rem; }
   .cms-revision-backdrop { padding: 4rem .75rem .75rem; }
   .cms-revision-drawer { max-height: calc(100vh - 4.75rem); }
   .cms-simple-editor .simple-editor-wrapper { min-height: 450px; }

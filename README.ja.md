@@ -23,6 +23,17 @@ npm run dev
 
 Adminは`http://127.0.0.1:8787/admin/`、公開Docsは`http://127.0.0.1:4321/`です。ローカルのD1/R2はMiniflareを使うため、Cloudflareアカウントは不要です。
 
+## 生成済みプロジェクトの更新
+
+作成時のtemplate versionと最新版を比較します。
+
+```sh
+npx create-starlight-cms@latest upgrade .
+npx create-starlight-cms@latest upgrade . --apply
+```
+
+最初のコマンドは更新内容を表示するだけです。`--apply`は旧templateから未変更のfileだけを更新し、設定や独自fileを保持します。利用者側と新template側の両方が同じfileを変更している場合は、変更せず競合一覧を表示します。fileの自動削除は行いません。dependency変更が表示された場合は、続けて`npm install`で`package-lock.json`を更新してください。
+
 ## 含まれるもの
 
 - Tiptap Simple Editor、Draft、Revision、Preview、Navigation Tree、多言語ページ、YouTube埋め込みに対応したReact Admin

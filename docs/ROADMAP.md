@@ -1,5 +1,10 @@
 # Roadmap / terra引き継ぎ
 
+## v0.10.0: safe template upgrades（2026-09-14）
+
+- `create-starlight-cms upgrade [directory]`を追加する。生成projectが記録したtemplate versionのCLIをnpmから一時取得し、旧template・最新template・projectを比較する。
+- 初回はdry-run。`--apply`は未変更fileのみ更新し、競合があれば一切変更しない。package.jsonのmanaged dependency/scriptだけを3者比較し、lockfileは利用者が`npm install`で更新する。
+
 ## v0.9.2: YouTube embeds（2026-09-14）
 
 - Tiptap公式`@tiptap/extension-youtube`をAdminへ追加し、toolbarからYouTube / youtu.be URLを挿入できるようにした。

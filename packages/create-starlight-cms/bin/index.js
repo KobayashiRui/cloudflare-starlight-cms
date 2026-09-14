@@ -4,12 +4,13 @@ import { constants } from 'node:fs';
 import { access, copyFile, lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { upgradeProject } from '../lib/upgrade.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const templateRoot = join(packageRoot, 'template');
 const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
 
-const usage = `Usage: npx create-starlight-cms@latest <directory>\n       npm create starlight-cms@latest <directory>\n\nCreate a self-hosted Astro Starlight CMS project. Use . for the current directory.\nThe destination must be new or empty (apart from .git and .DS_Store).\n\nOptions:\n  --help       Show this help message\n  --version    Show the CLI version\n`;
+const usage = `Usage: npx create-starlight-cms@latest <directory>\n       npx create-starlight-cms@latest upgrade [directory] [--apply]\n\nCreate a self-hosted Astro Starlight CMS project. Use . for the current directory.\nThe destination must be new or empty (apart from .git and .DS_Store).\n\nUpgrade compares the project with its recorded template version. It shows a safe plan by\ndefault; use --apply only after the plan reports no conflicts.\n\nOptions:\n  --apply      Apply a conflict-free upgrade\n  --help       Show this help message\n  --version    Show the CLI version\n`;
 
 function projectNameFromDirectory(directory) {
   const normalized = basename(directory)
@@ -120,11 +121,66 @@ function printSuccess(destination) {
   console.log(`\nCreated ${basename(destination)}.\n\nNext steps:${changeDirectory}\n  npm install\n  npm run dev\n\nThen edit src/site.config.ts and follow README.md for Cloudflare setup.\n`);
 }
 
-const [argument] = process.argv.slice(2);
+function upgradeArguments(arguments_) {
+  let destination = '.';
+  let apply = false;
+  for (const argument of arguments_) {
+    if (argument === '--apply') {
+      if (apply) throw new Error('--apply was provided more than once');
+      apply = true;
+    } else if (argument.startsWith('-') || destination !== '.') {
+      throw new Error('Expected one optional project directory');
+    } else {
+      destination = argument;
+    }
+  }
+  return { destination, apply };
+}
+
+function printUpgrade(result, apply) {
+  if (result.status === 'current') {
+    console.log(`This project is already on template ${result.toVersion}.`);
+    return;
+  }
+  console.log(`\nTemplate upgrade ${result.fromVersion} → ${result.toVersion}`);
+  if (result.conflicts.length > 0) {
+    console.log('\nNo files changed. Resolve these conflicts, then run upgrade again:');
+    for (const conflict of result.conflicts) console.log(`  ${conflict}`);
+    return;
+  }
+  if (result.changes.length === 0) {
+    console.log('\nNo managed files need updating.');
+  } else {
+    console.log(`\n${apply ? 'Updated' : 'Would update'} managed files:`);
+    for (const change of result.changes) console.log(`  ${change.type.padEnd(6)} ${change.file}`);
+  }
+  if (result.dependenciesChanged) console.log('\nRun npm install to update package-lock.json and dependencies.');
+  if (!apply) console.log('\nReview this plan, then run the same command with --apply.');
+}
+
+const arguments_ = process.argv.slice(2);
+const [argument] = arguments_;
 if (argument === '--help' || argument === '-h') {
   process.stdout.write(usage);
 } else if (argument === '--version' || argument === '-v') {
   console.log(packageJson.version);
+} else if (argument === 'upgrade') {
+  try {
+    if (!await exists(templateRoot)) throw new Error('The packaged template is missing. Reinstall the CLI package.');
+    await assertNoSymlink(templateRoot);
+    const { destination, apply } = upgradeArguments(arguments_.slice(1));
+    const result = await upgradeProject({
+      projectRoot: resolve(process.cwd(), destination),
+      targetTemplateRoot: templateRoot,
+      targetVersion: packageJson.version,
+      apply,
+    });
+    printUpgrade(result, apply);
+    if (result.status === 'conflict') process.exitCode = 1;
+  } catch (error) {
+    console.error(`Could not upgrade project: ${error.message}`);
+    process.exitCode = 1;
+  }
 } else if (!argument || argument.startsWith('-') || process.argv.length !== 3) {
   process.stderr.write(usage);
   process.exitCode = 1;

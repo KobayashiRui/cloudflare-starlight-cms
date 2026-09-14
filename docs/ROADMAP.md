@@ -1,5 +1,22 @@
 # Roadmap / terra引き継ぎ
 
+## v1.0.0: first stable release（2026-09-14）
+
+- `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。
+- 大容量動画のmultipart upload、非公開Draft media、共同編集、汎用workflowは意図的に含めない。Worker経由のmedia uploadは10 MiBまでとする。
+
+## Production setup documentation（2026-09-14）
+
+- READMEを実運用の順序へ更新した。初回空Deploy、Access Self-hosted public application、人間向けAllow policy、Build用Service Auth policy、Build Secrets、Worker custom domain、R2 custom domain、Runtime Deploy Hookを分離している。
+- Build用Service Tokenを人間向けAllow policyへ追加するだけではAccess loginへredirectされる。Service Auth policyを同じApplicationに追加する。
+- R2公開mediaは`docs-media.example.com`のようなDocs Workerと別のcustom domainを使う。通常の画像・動画埋め込みにCORS policyは不要で、Draft mediaは公開URLから秘匿されない。
+
+## Folder translation UI（2026-09-14）
+
+- Folderを選択した画面にLanguage selectorを追加した。Navigation Treeはdefault localeで共通のまま、Folderの表示名だけをlocaleごとに切り替え、未作成localeは既存の名前をコピーして作成できる。
+- URL segment・親子関係・順序は全localeで共有し、非default localeでURL segmentを変更できないようにした。
+- Miniflare integration testで`en`/`ja`のFolder名が独立し、共通slugを維持することを確認した。
+
 ## v0.10.0: safe template upgrades（2026-09-14）
 
 - `create-starlight-cms upgrade [directory]`を追加する。生成projectが記録したtemplate versionのCLIをnpmから一時取得し、旧template・最新template・projectを比較する。

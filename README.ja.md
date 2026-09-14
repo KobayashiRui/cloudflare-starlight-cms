@@ -47,16 +47,20 @@ npx create-starlight-cms@latest upgrade . --apply
 ## Production setup
 
 1. Workers BuildsのBuild commandを`npm run build`、Deploy commandを標準の`npx wrangler deploy`にします。非本番ブランチbuildは無効にしてください。公開URL未設定の初回buildは空の公開サイトとAdmin Workerをdeployし、D1/R2をprovisionします。最初の管理API・export・previewアクセス時に同梱schemaを適用します。
-2. Workerへcustom domainを接続する**前に**、予定しているhostnameと`admin/*` path、例えば`docs.example.com/admin/*`向けのAccess Self-hosted Applicationを1つ作成し、人間向けの`Allow` policyを追加します。hostnameはactiveなCloudflare zoneに属している必要がありますが、この時点でWorkerへ接続済みである必要はありません。
-3. custom domainをWorkerへ接続してから、[`src/site.config.ts`](src/site.config.ts)の`url`へ`https://docs.example.com`のようなoriginを設定してcommitします。Admin routeはcustom domainの最初のrequestから保護されます。このGit管理の値からAstroの公開URLとCMS snapshot endpointを導出します。
-4. 同じAccess ApplicationにWorkers Builds向けの`Service Auth` policyを追加します。Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`をWorkers BuildsのBuild Variables and Secretsへ登録します。
-5. bucket作成後、R2 public/custom domainを[`wrangler.jsonc`](wrangler.jsonc)の`MEDIA_PUBLIC_URL`へ設定してcommitします。これは公開設定でありsecretではありません。Workers BuildsのDeploy Hook URLは、production Workerの実行時Secret `WORKERS_DEPLOY_HOOK_URL`として **Worker → Settings → Variables and Secrets** へ登録します。Workers Buildsの変数へ登録しても、実行中のCMS Workerには渡りません。ローカルの認証済みterminalから登録する場合は次のとおりです。
+2. Workerへcustom domainを接続する**前に**、Cloudflare Accessで**Self-hosted public application**を1つ作成します。予定しているhostnameと`admin/*` path、例えば`docs.example.com/admin/*`を設定し、許可するemail、domain、またはAccess Groupを含むAction **Allow** の人間向けpolicyを追加します。hostnameはactiveなCloudflare zoneに属している必要がありますが、この時点でWorkerへ接続済みである必要はありません。
+3. custom domainをWorkerへ接続します。公開DocsとAdminは同じpublic hostnameを共有し、`/`は誰でも閲覧でき、`/admin/*`だけをAccessが保護します。
+4. Workers Builds用のAccess Service Tokenを作成します。同じAccess Applicationに、そのService TokenをIncludeしたAction **Service Auth** のpolicyを別途追加します。人間向けの`Allow` policyとは分けてください。Service Tokenの`CF_ACCESS_CLIENT_ID`と`CF_ACCESS_CLIENT_SECRET`は、**Workers Builds → Build Variables and Secrets**へSecretとして登録します。Worker Runtime Variablesには登録しません。
+5. [`src/site.config.ts`](src/site.config.ts)の`url`へ`https://docs.example.com`のようなoriginを設定してcommitします。このGit管理の値からAstroの公開URLとCMS snapshot endpointを導出します。通常のproduction buildでは`CMS_EXPORT_URL`を設定しません。
+6. bucket作成後、`docs-media.example.com`のようなR2 custom domainを接続します。[`wrangler.jsonc`](wrangler.jsonc)の`MEDIA_PUBLIC_URL`へそのoriginを設定してcommitします。これは公開設定でありsecretではありません。`r2.dev`の開発用URLは無効のままにします。通常の画像・動画埋め込みにはCORS policyは不要で、browser JavaScriptからmediaを直接fetchする場合だけ必要最小限のCORSを追加します。upload済みDraft mediaもこのpublic domainから取得できます。
+7. Workers BuildsのDeploy Hook URLは、production Workerの実行時Secret `WORKERS_DEPLOY_HOOK_URL`として **Worker → Settings → Variables and Secrets** へ登録します。Workers Buildsの変数へ登録しても、実行中のCMS Workerには渡りません。ローカルの認証済みterminalから登録する場合は次のとおりです。
 
    ```sh
    npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
    ```
 
 Publishは公開revisionを更新してbuildを要求します。Hookの成功はbuildの受理を意味し、公開完了ではありません。Hook未設定でもローカルでは公開Docsを再buildします。
+
+CMS snapshot取得時に`unexpected redirect`でbuildが失敗した場合は、Service TokenをAccess ApplicationのAction **Service Auth** policyへ含めているか確認してください。人間向けの`Allow` policyへ追加しただけでは、BuildはAccess login pageへredirectされます。
 
 root直下でURL segmentを`index`にしたDocumentがホームページです。通常のCMS Documentとして扱われ、`/`へ公開されます。翻訳は`/ja/`のように各言語のrootへ公開されます。
 

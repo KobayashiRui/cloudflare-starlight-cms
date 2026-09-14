@@ -120,6 +120,17 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   await expect(access(join(output, 'install/index.html'))).rejects.toThrow();
 }, 30000);
 
+it('keeps navigation shared while folder names are translated per locale', async () => {
+  if (!hasJapanese) return;
+  const folder = z.object({ id: z.string() }).parse(await request('api/folders', 'POST', { name: 'Guides', slug: 'translated-guides', order: 9 }));
+  await request(`api/folders/${folder.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' });
+  await request(`api/folders/${folder.id}?locale=ja`, 'PUT', { name: 'ガイド', slug: 'translated-guides', parentId: null, order: 9 });
+  const japaneseTree = await request('api/tree?locale=ja') as Array<{ id: string; name: string; slug: string }>;
+  const englishTree = await request('api/tree?locale=en') as Array<{ id: string; name: string; slug: string }>;
+  expect(japaneseTree).toContainEqual(expect.objectContaining({ id: `folder:${folder.id}`, name: 'ガイド', slug: 'translated-guides' }));
+  expect(englishTree).toContainEqual(expect.objectContaining({ id: `folder:${folder.id}`, name: 'Guides', slug: 'translated-guides' }));
+});
+
 it('recovers an interrupted delivery but rejects a retry while a sender holds the lease', async () => {
   const db = await mf.getD1Database('DB');
   await db.batch([

@@ -1,4 +1,4 @@
-import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode } from './tiptap.ts';
+import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 import GithubSlugger from 'github-slugger';
 
 export interface PreviewHeading {
@@ -96,6 +96,7 @@ function createRenderer() {
       case 'horizontalRule': return '<hr>';
       case 'image': return `<img src="${escapeHtml(documentUrl(value.attrs?.src))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
       case 'video': return `<video controls src="${escapeHtml(documentUrl(value.attrs?.src))}"></video>`;
+      case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
       case 'callout': {
         const title = asideTitle(value.attrs?.title);
         return `<aside aria-label="${escapeHtml(title)}" class="starlight-aside starlight-aside--note"><p class="starlight-aside__title" aria-hidden="true">${escapeHtml(title)}</p><div class="starlight-aside__content">${inline(value)}</div></aside>`;

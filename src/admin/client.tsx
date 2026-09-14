@@ -1,6 +1,7 @@
 import { siteConfig } from '../site.config.ts';
 import { Node, type JSONContent } from '@tiptap/core';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
 import { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -112,6 +113,7 @@ const Video = Node.create({
 const documentExtensions: Extensions = [
   Table.configure({ resizable: true }), TableRow, TableHeader, TableCell,
   Callout, Steps, Tabs, Tab, Video,
+  Youtube.configure({ nocookie: true, width: 640, height: 360 }),
 ];
 
 async function api<T>(path: string, init: RequestInit = {}, locale?: SupportedLocale): Promise<T> {
@@ -162,6 +164,8 @@ function App() {
   const [noticeIsError, setNoticeIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
+  const [isYoutubeDialogOpen, setIsYoutubeDialogOpen] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [search, setSearch] = useState('');
@@ -577,6 +581,24 @@ function App() {
     showNotice(`${item.fileName} inserted.`);
   };
 
+  const openYoutubeDialog = () => {
+    if (!editor) return;
+    setYoutubeUrl('');
+    setIsYoutubeDialogOpen(true);
+  };
+
+  const insertYoutube = () => {
+    if (!editor) return;
+    const inserted = editor.chain().focus().setYoutubeVideo({ src: youtubeUrl.trim(), width: 640, height: 360 }).run();
+    if (!inserted) {
+      showNotice('Enter a valid YouTube URL.', true);
+      return;
+    }
+    setIsDirty(true);
+    setIsYoutubeDialogOpen(false);
+    showNotice('YouTube video inserted.');
+  };
+
   const breadcrumbItems = (folderId: string | null, leaf?: string) => {
     const folders: { id: string; name: string }[] = [];
     const seen = new Set<string>();
@@ -654,7 +676,7 @@ function App() {
             </div>
             <section className="cms-editor-field" aria-label="Content">
               <header className="cms-editor-field-header"><span>Content</span></header>
-              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={() => setIsDirty(true)} uploadImage={async (file) => {
+              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={() => setIsDirty(true)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
@@ -673,6 +695,13 @@ function App() {
         <header><div><h1 id="media-library-title">Media library</h1><p>Select an image or video to add it at the cursor.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsMediaPickerOpen(false)} aria-label="Close media library">×</button></header>
         <div className="cms-media-dialog-actions"><label className="cms-upload">Upload media<input type="file" accept={mediaTypes} onChange={(event) => void upload(event.currentTarget.files?.[0])} /></label></div>
         <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">No media uploaded yet.</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? 'Image' : 'Video'}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? 'Used' : 'Unused'}</span>{!item.isUsed && <button type="button" className="cms-media-delete" disabled={isSaving} onClick={() => void removeMedia(item)}>Delete</button>}</footer></article>)}</div>
+      </section>
+    </div>}
+    {isYoutubeDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsYoutubeDialogOpen(false)}>
+      <section className="cms-youtube-dialog" role="dialog" aria-modal="true" aria-labelledby="youtube-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header><div><h1 id="youtube-dialog-title">Embed YouTube video</h1><p>Paste a YouTube or youtu.be URL.</p></div><button className="cms-close-settings" type="button" onClick={() => setIsYoutubeDialogOpen(false)} aria-label="Close">×</button></header>
+        <label className="cms-meta-field"><span>YouTube URL</span><input autoFocus type="url" value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') insertYoutube(); }} placeholder="https://www.youtube.com/watch?v=…" /></label>
+        <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>Embed video</button></footer>
       </section>
     </div>}
     {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: slugify(event.target.value) }))} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}

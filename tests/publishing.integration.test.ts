@@ -83,6 +83,7 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   const input = { title: 'Install', slug: 'install', folderId: folder.id, order: 0, description: '', contentJson: { type: 'doc', content: [
     { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Install steps' }] },
     { type: 'paragraph', content: [{ type: 'text', text: 'Public text' }] },
+    { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } },
   ] } };
   let page = identity.parse(await request('api/documents', 'POST', input));
   expect(publishedDocuments(await request('export/snapshot'))).toEqual([]);
@@ -96,6 +97,7 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   const publicPage = await readFile(join(output, 'guides/install/index.html'), 'utf8');
   expect(publicPage).toContain('Getting Started');
   expect(publicPage).toContain('id="install-steps"');
+  expect(publicPage).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
   if (hasJapanese) expect(await readFile(join(output, 'ja/guides/install/index.html'), 'utf8')).toContain('Public text');
   await access(join(output, 'pagefind/pagefind.js'));
   page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'Draft title', version: page.version }));

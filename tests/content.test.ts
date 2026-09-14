@@ -31,17 +31,20 @@ describe('Tiptap renderer', () => {
       { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Guide', marks: [{ type: 'bold' }] }] },
       { type: 'paragraph', content: [{ type: 'text', text: 'Read ', marks: [] }, { type: 'text', text: 'this', marks: [{ type: 'link', attrs: { href: '/guide' } }] }] },
       { type: 'image', attrs: { src: '/media/image.png', alt: 'Image' } },
+      { type: 'youtube', attrs: { src: 'https://youtu.be/dQw4w9WgXcQ' } },
       { type: 'callout', attrs: { title: 'Note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Safe.' }] }] },
     ] });
     expect(markdown).toContain('## **Guide**');
     expect(markdown).toContain('[this](/guide)');
     expect(markdown).toContain('![Image](/media/image.png)');
+    expect(markdown).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
     expect(markdown).toContain(':::note[Note]');
   });
   it('rejects unknown nodes and unsafe URLs instead of silently dropping them', () => {
     expect(() => renderDocumentContent({ type: 'doc', content: [{ type: 'script' }] })).toThrow('Unsupported');
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: 'javascript:alert(1)' } })).toThrow('Unsafe');
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: '/admin/api/media/object/media/example.png' } })).toThrow('MEDIA_PUBLIC_URL');
+    expect(() => renderDocumentContent({ type: 'youtube', attrs: { src: 'https://example.com/video' } })).toThrow('Invalid YouTube URL');
   });
   it('renders task lists and rules created by the Simple Editor toolbar', () => {
     const markdown = renderDocumentContent({ type: 'doc', content: [
@@ -55,10 +58,12 @@ describe('Tiptap renderer', () => {
     const html = renderPreviewContent({ type: 'doc', content: [
       { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Draft <guide>' }] },
       { type: 'paragraph', content: [{ type: 'text', text: 'Read ', marks: [] }, { type: 'text', text: 'this', marks: [{ type: 'link', attrs: { href: '/guide' } }] }] },
+      { type: 'youtube', attrs: { src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } },
       { type: 'callout', attrs: { title: 'Note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Safe.' }] }] },
     ] });
     expect(html).toContain('<h2 id="draft-guide">Draft &lt;guide&gt;</h2>');
     expect(html).toContain('<a href="/guide">this</a>');
+    expect(html).toContain('src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"');
     expect(html).toContain('starlight-aside--note');
     expect(() => renderPreviewContent({ type: 'doc', content: [{ type: 'script' }] })).toThrow('Unsupported');
     expect(() => renderPreviewContent({ type: 'doc', content: [{ type: 'image', attrs: { src: 'javascript:alert(1)' } }] })).toThrow('Unsafe');

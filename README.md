@@ -27,7 +27,7 @@ The CLI writes the normalized project name to `wrangler.jsonc` as the Worker nam
 
 ## Included
 
-- React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, and locale-aware documents
+- React Admin with Tiptap Simple Editor, drafts, revisions, preview, navigation tree, locale-aware documents, and YouTube embeds
 - D1 for content, R2 for PNG/JPEG/WebP/AVIF/MP4/WebM, and a media picker with safe unused-asset deletion
 - Astro Starlight, Pagefind, and Workers Static Assets for fully static public Docs
 - Cloudflare Access for `/admin/*`; no CMS users, passwords, or roles

@@ -1,4 +1,4 @@
-import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode } from './tiptap.ts';
+import { documentUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 
 function decorateText(value: TiptapNode, output: string): string {
   const marks = Array.isArray(value.marks) ? value.marks : [];
@@ -35,6 +35,7 @@ export function render(nodeValue: unknown): string {
     case 'horizontalRule': return '---';
     case 'image': return `![${typeof value.attrs?.alt === 'string' ? value.attrs.alt : ''}](${documentUrl(value.attrs?.src)})`;
     case 'video': return `<video controls src="${documentUrl(value.attrs?.src)}"></video>`;
+    case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
     case 'callout': return `:::note[${asideTitle(value.attrs?.title)}]\n${tiptapChildren(value).map(render).join('\n\n')}\n:::`;
     case 'steps': return tiptapChildren(value).map((item, index) => `${index + 1}. ${text(item)}`).join('\n');
     case 'tabs': return tiptapChildren(value).map((item) => `#### ${typeof item.attrs?.label === 'string' ? item.attrs.label : 'Tab'}\n\n${text(item)}`).join('\n\n');

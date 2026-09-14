@@ -33,7 +33,9 @@ Folder作成・rename・削除、Page作成、pointer D&Dとkeyboard D&Dを実�
 `dragAndDropFeature`／`keyboardDragAndDropFeature`のtarget semanticsを使い、Workerが移動先の
 slug衝突、循環、同階層の順序再採番を検査する。独自Tree engineは作らない。
 Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs、
-Video→静的videoの不足だけを実装する。Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
+Video→静的video、YouTube→privacy-enhanced iframeの不足だけを実装する。YouTubeは公式extensionを使い、
+公開・Previewともに許可済みURLから抽出したvideo IDを`youtube-nocookie.com`へ正規化する。任意iframeは扱わない。
+Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
 未知nodeの黙殺や本文のMDX/JS実行は禁止。
 
 Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを表示する。Astro buildは

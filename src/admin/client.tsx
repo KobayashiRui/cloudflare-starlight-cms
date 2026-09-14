@@ -340,6 +340,7 @@ function App() {
     const name = folderDraft.name.trim();
     const slug = folderDraft.slug || slugify(name);
     if (!name || !slug) return showNotice('Folder name is required.', true);
+    if (!validSlug.test(slug)) return showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
     setIsSaving(true);
     try {
       const created = await api<Folder>('/folders', { method: 'POST', body: JSON.stringify({ name, slug, parentId: selectedFolderId, order: nextOrder(selectedFolderId) }) });
@@ -358,6 +359,7 @@ function App() {
     if (!selectedFolder) return;
     const name = folderName.trim(); const slug = folderSlug || slugify(name);
     if (!name || !slug) return showNotice('Folder name is required.', true);
+    if (!validSlug.test(slug)) return showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
     setIsSaving(true);
     try {
       await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) }, folderLocale);
@@ -677,7 +679,7 @@ function App() {
         {translationMissing ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolderTranslation()}>Create {folderLocale} translation</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button>}
       </section>
       <div className="cms-folder-fields">
-        <label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} disabled={folderLocale !== defaultLocale} onChange={(event) => setFolderSlug(slugify(event.target.value))} /><small className="cms-field-help">Shared across all languages.</small></label>
+        <label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} disabled={folderLocale !== defaultLocale} onChange={(event) => setFolderSlug(normalizeSlugInput(event.target.value))} onBlur={() => setFolderSlug((value) => slugify(value))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} /><small className="cms-field-help">Shared across all languages.</small></label>
       </div>
       <label className="cms-content-locale"><span>Language</span><select value={folderLocale} onChange={(event) => void selectFolderLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>
       {translationMissing ? <section className="cms-folder-translation-empty">
@@ -775,7 +777,7 @@ function App() {
         <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>Embed video</button></footer>
       </section>
     </div>}
-    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: slugify(event.target.value) }))} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
+    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{selectedFolder ? `Create inside ${selectedFolder.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
   </div>;
 }
 

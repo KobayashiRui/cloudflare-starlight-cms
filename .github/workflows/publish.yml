@@ -23,6 +23,8 @@ jobs:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - run: npm install --global npm@11.5.2
+      - run: npm --version
       - run: npm ci
       - name: Check CLI version
         id: version

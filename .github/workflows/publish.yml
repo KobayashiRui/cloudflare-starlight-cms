@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - packages/create-starlight-cms/package.json
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,8 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -26,19 +25,16 @@ jobs:
       - run: npm install --global npm@11.5.2
       - run: npm --version
       - run: npm ci
-      - name: Check CLI version
+      - name: Check npm registry
         id: version
-        env:
-          BEFORE: ${{ github.event.before }}
         run: |
           current=$(node -p "require('./packages/create-starlight-cms/package.json').version")
-          previous=$(git show "$BEFORE:packages/create-starlight-cms/package.json" 2>/dev/null | node -e "let input = ''; process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => { input += chunk; }); process.stdin.on('end', () => process.stdout.write(input ? JSON.parse(input).version : ''));")
-          if [ "$current" = "$previous" ]; then
+          if npm view "create-starlight-cms@$current" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "CLI version $current is unchanged; skipping publish."
+            echo "create-starlight-cms@$current is already published; skipping."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Publishing CLI version $current."
+            echo "create-starlight-cms@$current is not published; publishing."
           fi
       - run: npm run publish:cli
         if: steps.version.outputs.publish == 'true'

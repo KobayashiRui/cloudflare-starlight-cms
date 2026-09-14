@@ -1,6 +1,6 @@
 # Releasing the CLI
 
-`create-starlight-cms` is published only by [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) after a merge to `main` that changes the CLI version.
+`create-starlight-cms` is published by [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) after a merge to `main` that changes the CLI version. It can also be run manually to retry an unpublished version.
 
 ## One-time setup
 
@@ -22,4 +22,4 @@ Trusted publishing requires a GitHub-hosted runner, Node 22.14 or later, and npm
 2. Run `npm run publish:cli -- --dry-run` locally.
 3. Commit, push, and merge the version change into `main`.
 
-The workflow runs only when the CLI package manifest changes. It compares the version with the previous `main` commit, skips an unchanged version, and otherwise runs the complete release check before publishing the CLI. It does not deploy a CMS instance.
+The workflow runs automatically only when the CLI package manifest changes. It checks whether the exact local CLI version already exists on npm, skips it if it does, and otherwise runs the complete release check before publishing. To retry a failed publish without changing the version, run **Publish CLI** from the GitHub Actions tab on `main`. It does not deploy a CMS instance.

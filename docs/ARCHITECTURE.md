@@ -84,6 +84,8 @@ Hook URLがないlocalは`skipped`として記録し、外部へは送信しな�
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 通常リンクはHTTP(S)・site-relative pathを許可する。一方、本文へ保存する画像・動画URLは公開HTTPS originまたはsite-relative pathだけを許可し、HTTP・private network・Admin media proxy URLは公開時に拒否する。これはHTTPS Admin/Public DocsでのMixed ContentとPrivate Network Access失敗を防ぐ。
 AdminはHTML貼り付け時に不正な画像・動画nodeを除外し、alt textだけを残せる場合は本文textへ戻す。保存時に失敗させず、Media uploadを案内する。
+旧版で保存されたHTTPまたはlocal-network mediaは、Adminで開く際にHTTPSが必要である旨の通常textへ置換する。新規入力は引き続き拒否し、
+editorは置換結果を`Save draft`して恒久化できる。既存値のためにPage全体を開けなくしない。
 6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
 R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、
 Admin専用URLを含むPublished snapshotはbuildを失敗させる。公開R2 URLはDraftでも秘匿されない。

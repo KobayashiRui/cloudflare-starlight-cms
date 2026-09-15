@@ -67,6 +67,34 @@ it('rejects HTTP and private-network media before storing a document', async () 
   expect(await response.text()).toContain('External document media URLs must use HTTPS');
 });
 
+it('repairs legacy insecure media while keeping new writes strict', async () => {
+  const id = crypto.randomUUID();
+  const translationId = crypto.randomUUID();
+  const now = Date.now();
+  const db = await mf.getD1Database('DB');
+  await db.batch([
+    db.prepare('INSERT INTO document (id,folder_id,slug,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+      .bind(id, null, 'legacy-media', 0, now, now),
+    db.prepare('INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+      .bind(translationId, id, 'en', 'Legacy media', null, '', JSON.stringify({ type: 'doc', content: [{ type: 'image', attrs: { src: 'http://192.168.40.198/image.webp', alt: 'Old diagram' } }] }), null, 1, now, now, null),
+  ]);
+  const response = await mf.dispatchFetch(`http://localhost/admin/api/documents/${id}?locale=en`);
+  expect(response.status).toBe(200);
+  const document = z.object({ contentJson: z.any(), version: z.number() }).parse(await response.json());
+  expect(document.contentJson).toEqual({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Media omitted because its source must use HTTPS.' }] }] });
+  const saved = z.object({ contentJson: z.any() }).parse(await request(`api/documents/${id}`, 'PUT', {
+    title: 'Legacy media', slug: 'legacy-media', folderId: null, order: 0, description: '',
+    contentJson: document.contentJson, version: document.version,
+  }));
+  expect(saved.contentJson).toEqual(document.contentJson);
+  expect((await db.prepare('SELECT content_json FROM document_translation WHERE id=?').bind(translationId).first<{ content_json: string }>())?.content_json)
+    .not.toContain('http://192.168.40.198');
+  await db.batch([
+    db.prepare('DELETE FROM document_translation WHERE id=?').bind(translationId),
+    db.prepare('DELETE FROM document WHERE id=?').bind(id),
+  ]);
+});
+
 it('serves a saved Draft in the generated Starlight preview shell without requesting a build', async () => {
   const page = identity.parse(await request('api/documents', 'POST', {
     title: 'Draft <title>', slug: 'preview-document', folderId: null, order: 0, description: 'Draft description',

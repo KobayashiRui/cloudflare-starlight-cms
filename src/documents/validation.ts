@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { assertDocumentContentUrls } from './content-urls.ts';
+import { assertDocumentContentUrls, repairLegacyDocumentMedia } from './content-urls.ts';
 export const slug = z.string().min(1).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must use lowercase URL segments').refine((value) => !['admin', 'api', 'auth', '_astro', 'pagefind', '404'].includes(value), 'Reserved route');
 const jsonNode = z.looseObject({ type: z.string().min(1) });
-export const contentJson = z.looseObject({ type: z.literal('doc'), content: z.array(jsonNode).optional() }).superRefine((value, context) => {
+const storedContentJson = z.looseObject({ type: z.literal('doc'), content: z.array(jsonNode).optional() });
+export const contentJson = storedContentJson.superRefine((value, context) => {
   try {
     assertDocumentContentUrls(value);
   } catch (error) {
@@ -13,4 +14,6 @@ export const documentInput = z.object({ title: z.string().trim().min(1).max(200)
 export const documentUpdate = documentInput.extend({ version: z.number().int().positive() });
 export type DocumentInput = z.infer<typeof documentInput>;
 export function serializeContent(content: z.infer<typeof contentJson>) { return JSON.stringify(content); }
-export function parseContent(input: string) { return contentJson.parse(JSON.parse(input)); }
+export function parseContent(input: string) {
+  return storedContentJson.parse(repairLegacyDocumentMedia(storedContentJson.parse(JSON.parse(input))));
+}

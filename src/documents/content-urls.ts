@@ -85,6 +85,23 @@ type ContentNode = {
   content?: unknown;
 };
 
+/**
+ * Older CMS versions could persist HTTP or local-network media. Do not send
+ * those nodes to the browser: they fail under HTTPS and make the whole page
+ * impossible to save. Replace them with ordinary text; a later Save draft
+ * persists the safe replacement.
+ */
+export function repairLegacyDocumentMedia(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(repairLegacyDocumentMedia);
+  const node = value as ContentNode;
+  if (node.type === 'image' || node.type === 'video') {
+    try { documentMediaUrl(node.attrs?.src, { allowAdminMediaProxy: true }); }
+    catch { return { type: 'paragraph', content: [{ type: 'text', text: 'Media omitted because its source must use HTTPS.' }] }; }
+  }
+  return { ...node, ...(Array.isArray(node.content) ? { content: node.content.map(repairLegacyDocumentMedia) } : {}) };
+}
+
 /** Validate URLs in the supported Tiptap node and mark shapes. */
 export function assertDocumentContentUrls(value: unknown): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;

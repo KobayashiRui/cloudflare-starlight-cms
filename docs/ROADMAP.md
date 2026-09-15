@@ -10,6 +10,11 @@
 - `create-starlight-cms`を`1.0.1`へ更新する。Translation未作成時のTree選択表示、保存前Pageの一時Tree node、Folder/Page選択時の作成先、Navigation controlsとFolder chevronの表示を改善する。
 - READMEを初見向けの概要・Features・Quick Start・Upgradeに整理し、本番設定と障害対応を`docs/DEPLOYMENT.md`と`docs/TROUBLESHOOTING.md`へ分離する。
 
+## v1.0.2: legacy insecure media recovery（2026-09-15）
+
+- `create-starlight-cms`を`1.0.2`へ更新する。旧版で保存されたHTTP／local-network画像・動画が存在しても、そのPageを開けるようにした。Adminは該当nodeをHTTPSが必要である旨の通常textへ置換し、次の`Save draft`で安全な内容として保存する。
+- 新規のunsafe media URLは引き続きAPIで拒否する。既存データの救済によってMixed Content／Private Network Access対策を緩めない。
+
 ## Editor local drafts and locale continuity（2026-09-14）
 
 - Dexie 4.4.6を使い、保存済みPageの未保存編集をbrowser内のIndexedDBへ保持する。Page移動・言語切替・reloadでnativeのDiscard確認を出さず、同じD1 versionなら編集内容を復元する。

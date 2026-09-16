@@ -4,6 +4,10 @@
 
 # create-starlight-cms
 
+[![npm version](https://img.shields.io/npm/v/create-starlight-cms?logo=npm&label=npm)](https://www.npmjs.com/package/create-starlight-cms)
+[![Node.js requirement](https://img.shields.io/node/v/create-starlight-cms?logo=nodedotjs&label=node)](https://www.npmjs.com/package/create-starlight-cms)
+[![MIT License](https://img.shields.io/github/license/KobayashiRui/cloudflare-starlight-cms)](https://github.com/KobayashiRui/cloudflare-starlight-cms/blob/main/LICENSE)
+
 Create a Cloudflare-native CMS for Astro Starlight.
 
 ```sh

@@ -95,6 +95,7 @@ const rootReadme = await readFile(join(repositoryRoot, 'README.md'), 'utf8');
 const templateReadme = rootReadme
   .replace('# Cloudflare Starlight CMS', '# My Docs')
   .replace('[English](README.md) · [日本語](README.ja.md)\n\n', '')
+  .replace(/<!-- badges:start -->[\s\S]*?<!-- badges:end -->\n\n/, '')
   .replace(
     'A Cloudflare-native CMS for Astro Starlight.',
     'A documentation site created with cloudflare-starlight-cms.',

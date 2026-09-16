@@ -6,7 +6,16 @@
 
 [English](README.md) · [日本語](README.ja.md)
 
-A Cloudflare-native CMS for Astro Starlight.
+<!-- badges:start -->
+<p align="center">
+  <a href="https://www.npmjs.com/package/create-starlight-cms"><img src="https://img.shields.io/npm/v/create-starlight-cms?logo=npm&label=npm" alt="npm version"></a>
+  <a href="https://github.com/KobayashiRui/cloudflare-starlight-cms/actions/workflows/publish.yml"><img src="https://github.com/KobayashiRui/cloudflare-starlight-cms/actions/workflows/publish.yml/badge.svg" alt="Publish CLI"></a>
+  <a href="https://www.npmjs.com/package/create-starlight-cms"><img src="https://img.shields.io/node/v/create-starlight-cms?logo=nodedotjs&label=node" alt="Node.js requirement"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/KobayashiRui/cloudflare-starlight-cms" alt="MIT License"></a>
+</p>
+<!-- badges:end -->
+
+A self-hosted, Cloudflare-native CMS for Astro Starlight.
 
 Manage documentation from a web-based Admin and publish it as a fast, fully static Starlight site. Powered by Cloudflare Workers, D1, R2, and Access.
 

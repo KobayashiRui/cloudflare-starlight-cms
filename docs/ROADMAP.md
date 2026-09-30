@@ -1,5 +1,22 @@
 # Roadmap / terra引き継ぎ
 
+## v1.1.0: Adminの日英対応と保存・公開UI（2026-09-30）
+
+- CMS自体のEnglish／日本語切替、独立したAdmin言語設定、保存・公開状態の整理をまとめてminor versionへ更新する。Save／Publishの修正は既存コミットを含める。`release:check`で型check、55 tests（Published buildを含む）、空サイトbuild、dry-run、rootから生成した`create-starlight-cms-1.1.0.tgz`のpackとCLI project生成が成功した。issue #7の要件を満たす。npm公開・pushは行っていない。
+
+## 状態表示の整理（2026-09-30）
+
+- Treeの新規／更新／未保存バッジを削除し、状態表示を編集画面の1か所へ集約した。日英とも同じ構成にする。全体公開の対象件数は右上に維持する。
+- 左側の作成ボタンはフォルダーの文字幅を確保し、折り返さないようにした。`check:admin`とAdmin assets buildが成功し、サイドバーが表示される1024px幅で日英両方の1行表示と状態バッジの重複解消を確認した。
+
+## Admin表示言語（2026-09-30）
+
+- 日英READMEに表示言語の設定先・追加手順・再buildの必要性を記載し、`defaultLanguage`の変更例と選択の優先順を補足した。
+- 文書のlocaleと独立した表示言語を`src/admin.config.ts`で管理し、右上でEnglish／日本語を即時切替できるようにした。初回は保存済み選択→対応するブラウザ言語→既定のenの順で選ぶ。選択をlocalStorageへ保存し、保存領域を利用できない場合も画面の切替は動く。DB migration・追加依存はない。
+- 翻訳を`src/admin/i18n/en.ts`／`ja.ts`へ分離した。保存・公開状態、競合復旧、履歴、Folder／Media／YouTube、Editorのtoolbar・検索置換・画像upload・Tree操作説明も翻訳した。予期しないサーバー詳細は元の文言を保持する。追加言語は完全な辞書を登録しconfigへ追加する。型とテストで辞書・placeholderの欠落を検出する。
+- React Contextで表示だけを更新する。言語切替でEditorを再生成せず、未保存のtitle／本文と文書localeを保持する。通知は表示時に翻訳するため、切替時にAPIを再実行しない。
+- `npm run check`（0 errors）、55 tests（Publishedの実Astro buildを含む）、空サイトbuild、Worker dry-runを確認。実Adminでブラウザ言語による日本語の初回表示、未保存編集を保持した英語切替、選択の再読み込み後の保持、日本語画像upload欄を確認した。本番deployは行っていない。
+
 ## 保存・公開UIとエラー修正（2026-09-30）
 
 - `Save draft`で最新下書きを更新し、公開は右上の紫の`Publish`へ一本化した。確認画面で全ページ・全言語の保存済み対象を示す。未保存編集がある間は公開できず、公開操作で裏のSaveを行わない。単一translationの公開APIは維持するが、ページ内の公開ボタンは削除した。

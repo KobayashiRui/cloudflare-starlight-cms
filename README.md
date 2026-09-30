@@ -68,3 +68,11 @@ Replace [`src/assets/logo.svg`](src/assets/logo.svg) and [`src/assets/favicon.sv
 ## License
 
 [MIT](LICENSE). Cloudflare Starlight CMS is not an official Cloudflare or Astro project.
+
+## Admin display language
+
+Choose **English** or **日本語** in the Admin header. On first use, the UI follows the first supported browser language; an explicit selection is saved in this browser. The document language is a separate setting, and switching the UI keeps unsaved edits.
+
+The display language is chosen in this order: saved selection → first supported browser language → `defaultLanguage` in `src/admin.config.ts`. The default is `'en'`; change it to `'ja'` for a Japanese fallback. This fallback does not override a saved selection or a supported browser language.
+
+Configure available display languages and the fallback in `src/admin.config.ts`. Translations live in `src/admin/i18n/en.ts` and `ja.ts`. To add a language, add its complete translation file, register it in `src/admin/i18n/language.ts`, and add it to `admin.config.ts`. The dictionary type and tests check translation completeness. Changing these static files requires rebuilding the Admin assets.

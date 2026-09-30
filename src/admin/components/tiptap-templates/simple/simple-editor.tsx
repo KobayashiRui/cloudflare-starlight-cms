@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -99,6 +100,7 @@ const MainToolbarContent = ({
   searchAndReplaceButtonRef: React.RefObject<HTMLButtonElement>
   isMobile: boolean
 }) => {
+  const { t } = useAdminI18n();
   return (
     <>
       <Spacer />
@@ -155,8 +157,8 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <ImageUploadButton text="Add" />
-        {onEmbedYoutube && <Button type="button" tooltip="Embed YouTube" onClick={onEmbedYoutube}><span className="tiptap-button-text">YouTube</span></Button>}
+        <ImageUploadButton text={t("Add")} />
+        {onEmbedYoutube && <Button type="button" tooltip={t("Embed YouTube")} onClick={onEmbedYoutube}><span className="tiptap-button-text">YouTube</span></Button>}
       </ToolbarGroup>
 
       <Spacer />
@@ -216,6 +218,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
   onRejectedPastedMedia?: (count: number) => void
   editable?: boolean
 }) {
+  const { t } = useAdminI18n();
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
@@ -255,7 +258,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
         autocomplete: "off",
         autocorrect: "off",
         autocapitalize: "off",
-        "aria-label": editable ? "Main content area, start typing to enter text." : "Document preview content.",
+        "aria-label": t(editable ? "Main content area, start typing to enter text." : "Document preview content."),
         class: "simple-editor",
       },
     },

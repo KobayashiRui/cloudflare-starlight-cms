@@ -107,3 +107,7 @@ Starlight loaderはdefault localeをunprefixed path、その他をlocale prefix�
 Adminが最後に選んだ編集localeをbrowser local storageに保持し、別PageやFolderを選んでもdefault localeへ戻さない。
 
 公開exportはFolder・翻訳名・Published revisionを同一D1 batchで読む。更新日時は公開revisionの日時を使う。Navigation祖先のラベル・翻訳・順序を小さなDTOとして送り、Starlight標準sidebarへ変換する。Astro configとContent Loaderは同じbuildプロセス内で一度取得したsnapshotを共有する。
+
+## Adminの表示言語
+
+AdminのReact UIは`src/admin.config.ts`と`src/admin/i18n/`の静的辞書を使う。文書locale／Starlightの言語設定とは独立する。保存した表示言語を優先し、未設定時はブラウザの対応言語、次に既定値を使う。React Contextの切替は文書の選択・編集内容・公開操作を変更しない。設定・翻訳ファイルの変更後はAdmin assetsを再buildする。

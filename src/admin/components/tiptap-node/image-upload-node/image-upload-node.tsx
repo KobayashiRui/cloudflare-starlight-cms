@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 "use client"
 
 import { useRef, useState } from "react"
@@ -83,12 +84,13 @@ export interface UploadOptions {
  * Custom hook for managing multiple file uploads with progress tracking and cancellation
  */
 function useFileUpload(options: UploadOptions) {
+  const { t } = useAdminI18n();
   const [fileItems, setFileItems] = useState<FileItem[]>([])
 
   const uploadFile = async (file: File): Promise<string | null> => {
     if (file.size > options.maxSize) {
       const error = new Error(
-        `File size exceeds maximum allowed (${options.maxSize / 1024 / 1024}MB)`
+        t('File size exceeds maximum allowed ({size}MB)', { size: options.maxSize / 1024 / 1024 })
       )
       options.onError?.(error)
       return null
@@ -165,7 +167,7 @@ function useFileUpload(options: UploadOptions) {
     if (options.limit && files.length > options.limit) {
       options.onError?.(
         new Error(
-          `Maximum ${options.limit} file${options.limit === 1 ? "" : "s"} allowed`
+          t('Maximum {count} files allowed', { count: options.limit })
         )
       )
       return []
@@ -411,7 +413,9 @@ const ImageUploadPreview: React.FC<ImageUploadPreviewProps> = ({
 const DropZoneContent: React.FC<{ maxSize: number; limit: number }> = ({
   maxSize,
   limit,
-}) => (
+}) => {
+  const { t } = useAdminI18n();
+  return (
   <>
     <div className="tiptap-image-upload-dropzone">
       <FileIcon />
@@ -423,17 +427,18 @@ const DropZoneContent: React.FC<{ maxSize: number; limit: number }> = ({
 
     <div className="tiptap-image-upload-content">
       <span className="tiptap-image-upload-text">
-        <em>Click to upload</em> or drag and drop
+        <em>{t('Click to upload')}</em> {t('or drag and drop')}
       </span>
       <span className="tiptap-image-upload-subtext">
-        Maximum {limit} file{limit === 1 ? "" : "s"}, {maxSize / 1024 / 1024}MB
-        each.
+        {t('Maximum {count} files, {size}MB each.', { count: limit, size: maxSize / 1024 / 1024 })}
       </span>
     </div>
   </>
-)
+);
+}
 
 export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
+  const { t } = useAdminI18n();
   const { accept, limit, maxSize } = props.node.attrs
   const inputRef = useRef<HTMLInputElement>(null)
   const extension = props.extension
@@ -521,7 +526,7 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
         <div className="tiptap-image-upload-previews">
           {fileItems.length > 1 && (
             <div className="tiptap-image-upload-header">
-              <span>Uploading {fileItems.length} files</span>
+              <span>{t('Uploading {count} files', { count: fileItems.length })}</span>
               <Button
                 type="button"
                 variant="ghost"

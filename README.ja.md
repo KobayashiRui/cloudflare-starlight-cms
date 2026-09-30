@@ -68,3 +68,11 @@ npx create-starlight-cms@latest upgrade . --apply
 ## License
 
 [MIT](LICENSE)。CloudflareおよびAstroの公式プロジェクトではありません。
+
+## Adminの表示言語
+
+Admin右上で **English / 日本語** を切り替えられます。初回はブラウザの言語設定から対応する言語を選び、手動で選択した言語はこのブラウザに保存します。文書の編集言語とは独立しており、切り替えても未保存の編集内容は保持されます。
+
+表示言語の優先順は「保存した選択 → ブラウザの対応言語 → `src/admin.config.ts` の `defaultLanguage`」です。既定値は `'en'` で、日本語を予備の言語にする場合は `'ja'` に変更します。保存した選択や対応するブラウザ言語がある場合は、そちらを優先します。
+
+表示言語と既定値は `src/admin.config.ts`、翻訳は `src/admin/i18n/en.ts` と `ja.ts` で管理します。言語を追加する場合は、全項目の翻訳ファイルを追加し、`src/admin/i18n/language.ts` に登録して `admin.config.ts` に追加します。型とテストで翻訳項目の不足を検出します。静的ファイルの変更後はAdmin assetsを再buildしてください。

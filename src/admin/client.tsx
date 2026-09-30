@@ -1,3 +1,6 @@
+import { adminConfig } from '../admin.config';
+import { message, type AdminMessage, isAdminLanguage } from './i18n/language';
+import { AdminLanguageProvider, useAdminI18n } from './i18n';
 import { siteConfig } from '../site.config.ts';
 import { assertDocumentContentUrls, documentMediaUrl, hasPendingImageUpload } from '../documents/content-urls.ts';
 import { Node, type JSONContent } from '@tiptap/core';
@@ -171,6 +174,7 @@ function hasDocumentChanges(document: DocumentRecord, fields: DocumentFields, co
 }
 
 function App() {
+  const { language, setLanguage, t } = useAdminI18n();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [treeItems, setTreeItems] = useState<NavigationItem[]>([]);
   const [media, setMedia] = useState<Media[]>([]);
@@ -185,7 +189,7 @@ function App() {
   const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
   const [revisions, setRevisions] = useState<Revision[]>([]);
-  const [notice, setNotice] = useState('Loading documents…');
+  const [notice, setNotice] = useState<AdminMessage>('Loading documents…');
   const [noticeIsError, setNoticeIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
@@ -201,14 +205,16 @@ function App() {
   const [search, setSearch] = useState('');
   const [editor, setEditor] = useState<Editor | null>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => {
-    const saved = window.localStorage.getItem('docs-cms-locale');
+    let saved: string | null = null;
+    try { saved = window.localStorage.getItem('docs-cms-locale'); } catch { /* Preferences are optional. */ }
     return saved && isSupportedLocale(saved) ? saved : defaultLocale;
   });
   const [missingDocumentId, setMissingDocumentId] = useState<string | null>(null);
   const [missingTranslationSource, setMissingTranslationSource] = useState<SupportedLocale | null>(null);
   const [latestDelivery, setLatestDelivery] = useState<PublishDelivery | null>(null);
   const [theme, setTheme] = useState<ThemePreference>(() => {
-    const saved = window.localStorage.getItem('docs-cms-theme');
+    let saved: string | null = null;
+    try { saved = window.localStorage.getItem('docs-cms-theme'); } catch { /* Preferences are optional. */ }
     return saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
   });
   const [systemPrefersDark, setSystemPrefersDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -220,7 +226,9 @@ function App() {
   const fieldsRef = useRef(fields);
   const editVersion = useRef(0);
 
-  const showNotice = useCallback((message: string, error = false) => {
+  const noticeText = typeof notice === 'string' ? t(notice) : t(notice.text, Object.fromEntries(Object.entries(notice.values).map(([key, value]) => [key, key === 'delivery' || key === 'error' ? t(String(value)) : value])));
+
+  const showNotice = useCallback((message: AdminMessage, error = false) => {
     setNotice(message);
     setNoticeIsError(error);
   }, []);
@@ -237,7 +245,7 @@ function App() {
   const setEditingLocale = (nextLocale: SupportedLocale) => {
     setLocale(nextLocale);
     setFolderLocale(nextLocale);
-    window.localStorage.setItem('docs-cms-locale', nextLocale);
+    try { window.localStorage.setItem('docs-cms-locale', nextLocale); } catch { /* Switching still works. */ }
   };
   const removeQueuedLocalDraft = async (documentId: string, draftLocale: SupportedLocale) => {
     localWrite.current = localWrite.current
@@ -261,7 +269,7 @@ function App() {
       return true;
     } catch (error) {
       setLocalSaveState('error');
-      showNotice(`Local save failed: ${error instanceof Error ? error.message : String(error)}`, true);
+      showNotice(message('Local save failed: {error}', { error: error instanceof Error ? error.message : String(error) }), true);
       return false;
     }
   };
@@ -304,7 +312,7 @@ function App() {
     setLatestDelivery(deliveries.find((item) => item.status === 'failed' || (item.status === 'pending' && (!item.nextRetryAt || item.nextRetryAt <= Date.now()))) ?? deliveries[0] ?? null);
   }, []);
   useEffect(() => {
-    const refresh = () => { void refreshDeliveries().catch((error) => showNotice(String(error), true)); };
+    const refresh = () => { void refreshDeliveries().catch((error) => showNotice(error instanceof Error ? error.message : String(error), true)); };
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, [refreshDeliveries, showNotice]);
@@ -320,7 +328,7 @@ function App() {
   useEffect(() => {
     Promise.all([refreshDocuments(), refreshMedia(), refreshTree(), refreshDeliveries()])
       .then(() => showNotice('Ready.'))
-      .catch((error: unknown) => showNotice(String(error), true));
+      .catch((error: unknown) => showNotice(error instanceof Error ? error.message : String(error), true));
   }, [refreshDeliveries, refreshDocuments, refreshMedia, refreshTree, showNotice]);
 
   useEffect(() => {
@@ -333,7 +341,7 @@ function App() {
     };
     applyTheme();
     mediaQuery.addEventListener('change', applyTheme);
-    window.localStorage.setItem('docs-cms-theme', theme);
+    try { window.localStorage.setItem('docs-cms-theme', theme); } catch { /* Switching still works. */ }
     return () => mediaQuery.removeEventListener('change', applyTheme);
   }, [theme]);
 
@@ -387,7 +395,7 @@ function App() {
         localDraft = await readLocalDocumentDraft(loaded.id, loaded.locale);
       } catch (error) {
         setLocalSaveState('error');
-        showNotice(`Browser storage is unavailable: ${error instanceof Error ? error.message : String(error)}`, true);
+        showNotice(message('Browser storage is unavailable: {error}', { error: error instanceof Error ? error.message : String(error) }), true);
       }
       if (selection !== selectionVersion.current) return;
       savedDocument.current = loaded;
@@ -409,7 +417,7 @@ function App() {
       setLocalSaveState(canRestore ? 'saved' : 'idle');
       showNotice(canRestore ? 'Your unsaved edits were restored.' : 'Saved draft loaded.');
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
     }
   };
 
@@ -441,7 +449,7 @@ function App() {
         const localizedFolder = localizedTree.find((item) => item.id === `folder:${folderId}`);
         if (localizedFolder) setFolderName(localizedFolder.name);
       } catch (error) {
-        showNotice(String(error), true);
+        showNotice(error instanceof Error ? error.message : String(error), true);
       }
     }
     showNotice('Folder selected.');
@@ -463,7 +471,7 @@ function App() {
     setEditor(null); setCurrent(null); setSelectedFolderId(null); setMissingDocumentId(id); setMissingTranslationSource(null); setIsDirty(false);
     savedDocument.current = null;
     setMissingTranslationSource(source ?? null);
-    showNotice(`No ${locale} translation yet.`);
+    showNotice(message('No {locale} translation yet.', { locale: localeLabel(locale) }));
   };
   const selectDocumentLocale = async (targetLocale: SupportedLocale) => {
     if (!current?.id) return;
@@ -480,7 +488,7 @@ function App() {
     selectionVersion.current += 1;
     setEditor(null); setCurrent(null); setSelectedFolderId(null); savedDocument.current = null; setEditingLocale(targetLocale);
     setMissingDocumentId(current.id); setMissingTranslationSource(source ?? null); setIsDirty(false);
-    showNotice(`No ${targetLocale} translation yet.`);
+    showNotice(message('No {locale} translation yet.', { locale: localeLabel(targetLocale) }));
   };
   const selectMissingDocumentLocale = (targetLocale: SupportedLocale) => {
     if (!missingDocumentId) return;
@@ -494,7 +502,7 @@ function App() {
     setEditingLocale(targetLocale);
     selectionVersion.current += 1;
     setMissingTranslationSource(source ?? null);
-    showNotice(`No ${targetLocale} translation yet.`);
+    showNotice(message('No {locale} translation yet.', { locale: localeLabel(targetLocale) }));
   };
   const createDocumentTranslation = async () => {
     if (!missingDocumentId) return;
@@ -504,8 +512,8 @@ function App() {
       const created = await api<DocumentRecord>(`/documents/${encodeURIComponent(missingDocumentId)}/translations`, { method: 'POST', body: JSON.stringify({ sourceLocale: missingTranslationSource }) }, locale);
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       await selectDocument(created);
-      showNotice(`${locale} translation created from ${missingTranslationSource}.`);
-    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+      showNotice(message('{locale} translation created from {source}.', { locale: localeLabel(locale), source: missingTranslationSource ?? '' }));
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
   const nextOrder = useCallback((parentId: string | null) => Math.max(-1, ...treeItems.filter((item) => item.parentId === (parentId ? `folder:${parentId}` : null)).map((item) => item.order)) + 1, [treeItems]);
   const startNewDocument = useCallback((folderId = activeParentFolderId) => {
@@ -534,7 +542,7 @@ function App() {
       setFolderLocale(defaultLocale);
       setMissingFolderTranslationSource(null);
       showNotice('Folder created.');
-    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
   const saveFolder = async () => {
     if (!selectedFolder) return;
@@ -545,7 +553,7 @@ function App() {
     try {
       await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) }, folderLocale);
       await refreshTree(); showNotice('Folder saved.');
-    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
   const selectFolderLocale = async (targetLocale: SupportedLocale) => {
     if (!selectedFolder || !selectedFolderId) return;
@@ -573,7 +581,7 @@ function App() {
       setFolderName(translatedFolder.name);
       setFolderSlug(translatedFolder.slug);
       setMissingFolderTranslationSource(null);
-    } catch (error) { showNotice(String(error), true); }
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); }
   };
   const createFolderTranslation = async () => {
     if (!selectedFolderId || !missingFolderTranslationSource) return;
@@ -583,21 +591,21 @@ function App() {
       await refreshTree();
       setFolderName(created.name);
       setMissingFolderTranslationSource(null);
-      showNotice(`${folderLocale} folder translation created from ${missingFolderTranslationSource}.`);
-    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+      showNotice(message('{locale} folder translation created from {source}.', { locale: localeLabel(folderLocale), source: missingFolderTranslationSource ?? '' }));
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
   const deleteFolder = async () => {
-    if (!selectedFolderId || !selectedFolder || !window.confirm(`Delete empty folder “${selectedFolder.name}”?`)) return;
+    if (!selectedFolderId || !selectedFolder || !window.confirm(t('Delete empty folder “{name}”?', { name: selectedFolder.name }))) return;
     setIsSaving(true);
     try {
       await api<void>(`/folders/${encodeURIComponent(selectedFolderId)}`, { method: 'DELETE' });
       setSelectedFolderId(null); await refreshTree(); showNotice('Folder deleted.');
-    } catch (error) { showNotice(String(error), true); } finally { setIsSaving(false); }
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
   const replaceTreeChildren = async (parentId: string | null, childIds: string[]) => {
     try {
       await api('/tree/children', { method: 'PUT', body: JSON.stringify({ parentId, childIds }) });
-    } catch (error) { showNotice(String(error), true); throw error; }
+    } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); throw error; }
   };
   const treeChanged = async () => {
     await Promise.all([refreshTree(), refreshDocuments(), refreshDeliveries()]);
@@ -757,9 +765,8 @@ function App() {
     if (mutationInFlight.current || localDraftConflict || hasVersionConflict) return;
     if (isDirty) return showNotice('Save the current draft before publishing changes.', true);
     if (savedChangeCount === 0) return showNotice('There are no saved changes to publish.');
-    const noun = savedChangeCount === 1 ? 'translation' : 'translations';
     const targets = treeItems.flatMap((item) => item.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${item.name} · ${localeLabel(entry.locale)}`));
-    if (!window.confirm(`Publish ${savedChangeCount} saved ${noun}?\n\n${targets.join('\n')}\n\nOnly saved drafts are included. The site update will be requested once.`)) return;
+    if (!window.confirm(t('Publish {count} saved translations?\n\n{targets}\n\nOnly saved drafts are included. The site update will be requested once.', { count: savedChangeCount, targets: targets.join('\n') }))) return;
     const publishSelection = selectionVersion.current;
     mutationInFlight.current = true;
     setIsSaving(true);
@@ -785,9 +792,9 @@ function App() {
       if (!result.delivery) return showNotice('There are no saved changes to publish.');
       setLatestDelivery(result.delivery);
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-      showNotice(`Published ${result.publishedCount} ${result.publishedCount === 1 ? 'translation' : 'translations'}. ${describeDelivery(result.delivery)}`, result.delivery.status === 'failed');
+      showNotice(message('Published {count} translations. {delivery}', { count: result.publishedCount, delivery: describeDelivery(result.delivery) }), result.delivery.status === 'failed');
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
     } finally {
       mutationInFlight.current = false;
       setIsSaving(false);
@@ -802,7 +809,7 @@ function App() {
       setLatestDelivery(result.delivery);
       showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
     } finally {
       setIsSaving(false);
     }
@@ -814,7 +821,7 @@ function App() {
       setRevisions(await api<Revision[]>(`/documents/${encodeURIComponent(current.id)}/revisions`, {}, current.locale));
       setIsRevisionOpen(true);
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
     }
   };
 
@@ -858,7 +865,7 @@ function App() {
         queueLocalDraft(restored, latestFields, latestContent);
       }
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-      showNotice(`Revision ${revision.revision} restored as a draft.`);
+      showNotice(message('Revision {revision} restored as a draft.', { revision: revision.revision }));
     } catch (error) {
       showDocumentError(error, current);
     } finally {
@@ -868,7 +875,7 @@ function App() {
   };
 
   const remove = async () => {
-    if (!current?.id || !window.confirm(`Delete “${current.title}”?`)) return;
+    if (!current?.id || !window.confirm(t('Delete “{name}”?', { name: current.title }))) return;
     try {
       await api<void>(`/documents/${encodeURIComponent(current.id)}`, {
         method: 'DELETE', body: JSON.stringify({ version: current.version }),
@@ -885,7 +892,7 @@ function App() {
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice('Document deleted.');
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
     }
   };
 
@@ -899,13 +906,13 @@ function App() {
       showNotice('Media uploaded. Select it to insert it.');
       return uploaded;
     } catch (error) {
-      showNotice(String(error), true);
+      showNotice(error instanceof Error ? error.message : String(error), true);
       return undefined;
     }
   };
 
   const removeMedia = async (item: Media) => {
-    if (item.isUsed || !window.confirm(`Delete ${item.fileName}? This cannot be undone.`)) return;
+    if (item.isUsed || !window.confirm(t('Delete {name}? This cannot be undone.', { name: item.fileName }))) return;
     try {
       const localDrafts = await listLocalDocumentDrafts().catch(() => []);
       if (localDrafts.some((draft) => JSON.stringify(draft.contentJson).includes(item.url))) {
@@ -932,7 +939,7 @@ function App() {
       editor.chain().focus().insertContent({ type: 'video', attrs: { src: item.url, mediaId: item.id } }).run();
     }
     setIsMediaPickerOpen(false);
-    showNotice(`${item.fileName} inserted.`);
+    showNotice(message('{fileName} inserted.', { fileName: item.fileName }));
   };
 
   const openYoutubeDialog = () => {
@@ -967,35 +974,35 @@ function App() {
   };
   const renderBreadcrumb = (folderId: string | null, leaf?: string) => {
     const items = breadcrumbItems(folderId, leaf);
-    return <nav className="cms-breadcrumb" aria-label="Document hierarchy">
-      <button className="cms-breadcrumb-root" type="button" onClick={selectNavigationRoot}>Documents</button>
+    return <nav className="cms-breadcrumb" aria-label={t("Document hierarchy")}>
+      <button className="cms-breadcrumb-root" type="button" onClick={selectNavigationRoot}>{t("Documents")}</button>
       {items.map((item) => <span className="cms-breadcrumb-item" key={`${item.id}:${item.name}`}><ChevronRightIcon />{item.id ? <button type="button" onClick={() => selectFolder(item.id)}>{item.name}</button> : <strong>{item.name}</strong>}</span>)}
     </nav>;
   };
   const renderFolderPanel = () => {
     if (!selectedFolder) return null;
     const translationMissing = Boolean(missingFolderTranslationSource);
-    return <section className="cms-folder-panel" aria-label="Folder settings">
+    return <section className="cms-folder-panel" aria-label={t("Folder settings")}>
       {renderBreadcrumb(selectedFolderId)}
       <header>
-        <div><p>Folder</p><h1>{folderName || selectedFolder.name}</h1><span>Pages and nested folders inherit this location.</span></div>
+        <div><p>{t("Folder")}</p><h1>{folderName || selectedFolder.name}</h1><span>{t("Pages and nested folders inherit this location.")}</span></div>
       </header>
-      <section className="cms-document-actions" aria-label="Folder actions">
-        <div className="cms-document-state"><span className="cms-status cms-status-folder">Folder</span><span>{translationMissing ? 'Translation needs to be created.' : 'Navigation changes publish with the next rebuild.'}</span></div>
-        {translationMissing ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolderTranslation()}>Create {folderLocale} translation</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? 'Saving…' : 'Save folder'}</button>}
+      <section className="cms-document-actions" aria-label={t("Folder actions")}>
+        <div className="cms-document-state"><span className="cms-status cms-status-folder">{t("Folder")}</span><span>{translationMissing ? t("Translation needs to be created.") : t("Navigation changes publish with the next rebuild.")}</span></div>
+        {translationMissing ? <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolderTranslation()}>{t("Create {locale} translation", { locale: localeLabel(folderLocale) })}</button> : <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void saveFolder()}>{isSaving ? t("Saving…") : t("Save folder")}</button>}
       </section>
       <div className="cms-folder-fields">
-        <label className="cms-meta-field"><span>URL segment</span><input value={folderSlug} disabled={folderLocale !== defaultLocale} onChange={(event) => setFolderSlug(normalizeSlugInput(event.target.value))} onBlur={() => setFolderSlug((value) => slugify(value))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} /><small className="cms-field-help">Shared across all languages.</small></label>
+        <label className="cms-meta-field"><span>{t("URL segment")}</span><input value={folderSlug} disabled={folderLocale !== defaultLocale} onChange={(event) => setFolderSlug(normalizeSlugInput(event.target.value))} onBlur={() => setFolderSlug((value) => slugify(value))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} /><small className="cms-field-help">{t("Shared across all languages.")}</small></label>
       </div>
-      <label className="cms-content-locale"><span>Language</span><select value={folderLocale} onChange={(event) => void selectFolderLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>
+      <label className="cms-content-locale"><span>{t("Document language")}</span><select value={folderLocale} onChange={(event) => void selectFolderLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>
       {translationMissing ? <section className="cms-folder-translation-empty">
-        <h2>Translation not created</h2>
-        <p>This folder has no {folderLocale} translation. Create one by copying the {missingFolderTranslationSource} name.</p>
+        <h2>{t("Translation not created")}</h2>
+        <p>{t("This folder has no {locale} translation. Create one by copying the {source} name.", { locale: localeLabel(folderLocale), source: missingFolderTranslationSource ? localeLabel(missingFolderTranslationSource) : '' })}</p>
       </section> : <div className="cms-folder-fields">
-        <label className="cms-meta-field"><span>Name</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); if (folderLocale === defaultLocale) setFolderSlug((value) => value || slugify(event.target.value)); }} /></label>
+        <label className="cms-meta-field"><span>{t("Name")}</span><input value={folderName} onChange={(event) => { setFolderName(event.target.value); if (folderLocale === defaultLocale) setFolderSlug((value) => value || slugify(event.target.value)); }} /></label>
       </div>}
-      <section className="cms-folder-children-actions" aria-label="Add to folder"><div><h2>Add to folder</h2><p>Create a page or nested folder at this location.</p></div><div><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>New folder</button></div></section>
-      <section className="cms-danger-zone" aria-label="Danger zone"><div><h2>Delete folder</h2><p>Move or delete its contents before removing this folder.</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>Delete folder</button></section>
+      <section className="cms-folder-children-actions" aria-label={t("Add to folder")}><div><h2>{t("Add to folder")}</h2><p>{t("Create a page or nested folder at this location.")}</p></div><div><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument(selectedFolderId)}>{t("New page")}</button><button className="cms-button" type="button" onClick={() => openNewFolder(selectedFolderId)}>{t("New folder")}</button></div></section>
+      <section className="cms-danger-zone" aria-label={t("Danger zone")}><div><h2>{t("Delete folder")}</h2><p>{t("Move or delete its contents before removing this folder.")}</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void deleteFolder()}>{t("Delete folder")}</button></section>
     </section>;
   };
 
@@ -1004,62 +1011,63 @@ function App() {
       <a className="cms-brand" href="/admin/" aria-label={`${siteConfig.title} home`}><img className="cms-brand-logo" src={logoUrl} alt="" /></a>
       <div className="cms-topbar-controls">
         <div className="cms-actions">
-        <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
-        {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry site update</button>}
-        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || isDirty || hasPendingImages || Boolean(localDraftConflict) || hasVersionConflict || savedChangeCount === 0} title="Publish saved changes across all pages and languages" onClick={() => void publishChanges()}>Publish{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
+        <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{noticeText}</span>
+        {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>{t("Retry site update")}</button>}
+        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || isDirty || hasPendingImages || Boolean(localDraftConflict) || hasVersionConflict || savedChangeCount === 0} title={t("Publish saved changes across all pages and languages")} onClick={() => void publishChanges()}>{t("Publish")}{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
         </div>
-        <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
+        <label className="cms-admin-language"><span className="sr-only">{t("Admin language")}</span><select value={language} onChange={(event) => { if (isAdminLanguage(event.target.value)) setLanguage(event.target.value); }}>{adminConfig.languages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label>
+        <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={t(displayedTheme === 'dark' ? t("Switch to light mode") : t("Switch to dark mode"))} title={t(displayedTheme === 'dark' ? t("Switch to light mode") : t("Switch to dark mode"))}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
         </button>
       </div>
     </header>
-    {noticeIsError && <div className="cms-error-banner" role="alert">{notice}</div>}
+    {noticeIsError && <div className="cms-error-banner" role="alert">{noticeText}</div>}
 
     <div className="cms-workspace">
       <aside className="cms-sidebar">
-        <div className="cms-sidebar-heading"><span>Documents</span><span className="cms-count">{documents.length}</span></div>
-        <label className="cms-search"><span className="sr-only">Search documents</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search documents" /></label>
-        <div className="cms-navigation-actions"><button className="cms-new-document" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-new-folder" type="button" onClick={() => openNewFolder()}>New folder</button></div>
-        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id || missingDocumentId || undefined} selectedFolderId={selectedFolderId} temporaryDocument={current && !current.id ? { name: fields.title.trim() || 'Untitled page', parentId: current.folderId ? `folder:${current.folderId}` : null } : undefined} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
+        <div className="cms-sidebar-heading"><span>{t("Documents")}</span><span className="cms-count">{documents.length}</span></div>
+        <label className="cms-search"><span className="sr-only">{t("Search documents")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("Search documents")} /></label>
+        <div className="cms-navigation-actions"><button className="cms-new-document" type="button" onClick={() => startNewDocument()}>{t("New page")}</button><button className="cms-new-folder" type="button" onClick={() => openNewFolder()}>{t("New folder")}</button></div>
+        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id || missingDocumentId || undefined} selectedFolderId={selectedFolderId} temporaryDocument={current && !current.id ? { name: fields.title.trim() || t("Untitled page"), parentId: current.folderId ? `folder:${current.folderId}` : null } : undefined} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
       </aside>
 
       <main className="cms-main">
-        {selectedFolder ? renderFolderPanel() : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>Translation not created</h1><label className="cms-content-locale"><span>Language</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label><p>This page has no {locale} translation.{missingTranslationSource ? ` Create a draft by copying the ${missingTranslationSource} version.` : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>Create {locale} translation</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>Start a document</h1><p>Create a page or folder, then organize it in the navigation tree.</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>New page</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>New folder</button></div></section> : <>
-          {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
-          <section className="cms-document-actions" aria-label="Document actions">
+        {selectedFolder ? renderFolderPanel() : missingDocumentId ? <section className="cms-empty-state"><span className="cms-empty-icon">文</span><h1>{t("Translation not created")}</h1><label className="cms-content-locale"><span>{t("Document language")}</span><select value={locale} onChange={(event) => selectMissingDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label><p>{t("This page has no {locale} translation.", { locale: localeLabel(locale) })} {missingTranslationSource ? t("Create a draft by copying the {locale} version.", { locale: localeLabel(missingTranslationSource) }) : ''}</p>{missingTranslationSource && <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createDocumentTranslation()}>{t("Create {locale} translation", { locale: localeLabel(locale) })}</button>}</section> : !current ? <section className="cms-empty-state"><span className="cms-empty-icon">✦</span><h1>{t("Start a document")}</h1><p>{t("Create a page or folder, then organize it in the navigation tree.")}</p><div className="cms-empty-actions"><button className="cms-button cms-button-primary" type="button" onClick={() => startNewDocument()}>{t("New page")}</button><button className="cms-button" type="button" onClick={() => openNewFolder()}>{t("New folder")}</button></div></section> : <>
+          {renderBreadcrumb(fields.folderId, fields.title || fields.slug || t("Untitled document"))}
+          <section className="cms-document-actions" aria-label={t("Document actions")}>
             <div className="cms-document-state">
-              <span className={`cms-status cms-status-${hasVersionConflict || localDraftConflict ? 'draft' : !current.id || isDirty ? 'unsaved' : currentPublicationState === 'published' ? 'published' : 'pending'}`}>{hasVersionConflict || localDraftConflict ? 'Review required' : !current.id ? 'New page' : isDirty ? 'Unsaved changes' : currentPublicationState === 'published' ? 'Published' : 'Ready to publish'}</span>
-              <span>{hasVersionConflict || localDraftConflict ? 'Choose which saved content to use below.' : hasPendingImages ? 'Finish uploading images or remove the empty upload block.' : !current.id ? 'Save draft to create this page.' : isDirty ? localSaveState === 'error' ? 'Browser backup failed. Save draft to keep your edits.' : 'Save draft before publishing.' : currentPublicationState === 'published' ? 'No changes to publish.' : 'Saved changes will be included when you publish.'}</span>
+              <span className={`cms-status cms-status-${hasVersionConflict || localDraftConflict ? 'draft' : !current.id || isDirty ? 'unsaved' : currentPublicationState === 'published' ? 'published' : 'pending'}`}>{hasVersionConflict || localDraftConflict ? t("Review required") : !current.id ? t("New page") : isDirty ? t("Unsaved changes") : currentPublicationState === 'published' ? t("Published") : t("Ready to publish")}</span>
+              <span>{hasVersionConflict || localDraftConflict ? t("Choose which saved content to use below.") : hasPendingImages ? t("Finish uploading images or remove the empty upload block.") : !current.id ? t("Save draft to create this page.") : isDirty ? localSaveState === 'error' ? t("Browser backup failed. Save draft to keep your edits.") : t("Save draft before publishing.") : currentPublicationState === 'published' ? t("No changes to publish.") : t("Saved changes will be included when you publish.")}</span>
             </div>
             <div className="cms-document-action-buttons">
-              {current.id && <button className="cms-button" type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? 'Save draft before previewing' : 'Preview the saved draft'} onClick={preview}>Preview draft</button>}
-              <button className={`cms-button ${!current.id || isDirty ? 'cms-button-primary' : ''}`} type="button" disabled={isSaving || hasPendingImages || hasVersionConflict || Boolean(localDraftConflict) || Boolean(current.id && !isDirty)} onClick={() => void save()}>{isSaving ? 'Working…' : 'Save draft'}</button>
-              {isDirty && current.id && <button className="cms-button cms-button-quiet" type="button" disabled={isSaving} onClick={() => void discardLocalChanges()}>Discard local changes</button>}
+              {current.id && <button className="cms-button" type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? t("Save draft before previewing") : t("Preview the saved draft")} onClick={preview}>{t("Preview draft")}</button>}
+              <button className={`cms-button ${!current.id || isDirty ? 'cms-button-primary' : ''}`} type="button" disabled={isSaving || hasPendingImages || hasVersionConflict || Boolean(localDraftConflict) || Boolean(current.id && !isDirty)} onClick={() => void save()}>{isSaving ? t("Working…") : t("Save draft")}</button>
+              {isDirty && current.id && <button className="cms-button cms-button-quiet" type="button" disabled={isSaving} onClick={() => void discardLocalChanges()}>{t("Discard local changes")}</button>}
               {current.id && <span className="cms-action-divider" aria-hidden="true" />}
-              {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
+              {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />{t("History")}</button>}
             </div>
           </section>
-          {hasVersionConflict && <section className="cms-local-draft-conflict"><div><strong>This page was saved elsewhere.</strong><p>Your edits are kept. Load the latest draft, then choose which content to use.</p></div><button className="cms-button" type="button" disabled={isSaving} onClick={() => void selectDocument(current, current.locale)}>Load latest draft</button></section>}
-          {localDraftConflict && <section className="cms-local-draft-conflict" aria-label="Local draft conflict"><div><strong>This page was saved elsewhere.</strong><p>The editor shows the latest saved content. Your unsaved edits are kept in this browser. Recovering them only changes the editor; save and publish are separate actions.</p></div><div><button className="cms-button" type="button" onClick={() => void discardLocalChanges()}>Use latest saved content</button><button className="cms-button" type="button" onClick={restoreConflictingLocalChanges}>Recover my unsaved edits</button></div></section>}
-          <section className="cms-editor-surface" aria-label="Document editor">
+          {hasVersionConflict && <section className="cms-local-draft-conflict"><div><strong>{t("This page was saved elsewhere.")}</strong><p>{t("Your edits are kept. Load the latest draft, then choose which content to use.")}</p></div><button className="cms-button" type="button" disabled={isSaving} onClick={() => void selectDocument(current, current.locale)}>{t("Load latest draft")}</button></section>}
+          {localDraftConflict && <section className="cms-local-draft-conflict" aria-label={t("Local draft conflict")}><div><strong>{t("This page was saved elsewhere.")}</strong><p>{t("The editor shows the latest saved content. Your unsaved edits are kept in this browser. Recovering them only changes the editor; save and publish are separate actions.")}</p></div><div><button className="cms-button" type="button" onClick={() => void discardLocalChanges()}>{t("Use latest saved content")}</button><button className="cms-button" type="button" onClick={restoreConflictingLocalChanges}>{t("Recover my unsaved edits")}</button></div></section>}
+          <section className="cms-editor-surface" aria-label={t("Document editor")}>
             <div className="cms-document-fields">
               <label className="cms-meta-field">
-                <span>URL segment</span>
+                <span>{t("URL segment")}</span>
                 <input className="cms-slug-input" value={fields.slug} onChange={(event) => updateSlug(event.target.value)} onBlur={() => updateField('slug', slugify(fields.slug))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} aria-invalid={Boolean(fields.slug) && !validSlug.test(fields.slug)} placeholder="getting-started" />
-                <small className="cms-field-help">Required. Shared across languages. Changing the URL of a published page updates live navigation when saved.</small>
+                <small className="cms-field-help">{t("Required. Shared across languages. Changing the URL of a published page updates live navigation when saved.")}</small>
               </label>
-              {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => void selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
+              {current.id && <label className="cms-content-locale"><span>{t("Document language")}</span><select value={current.locale} onChange={(event) => void selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
               <label className="cms-meta-field">
-                <span>Title</span>
-                <input className="cms-title-input" value={fields.title} onChange={(event) => updateTitle(event.target.value)} placeholder="Untitled document" />
+                <span>{t("Title")}</span>
+                <input className="cms-title-input" value={fields.title} onChange={(event) => updateTitle(event.target.value)} placeholder={t("Untitled document")} />
               </label>
               <label className="cms-meta-field">
-                <span>Description</span>
-                <textarea className="cms-description-input" value={fields.description} onChange={(event) => updateField('description', event.target.value)} placeholder="Add a concise summary for your readers" rows={2} />
+                <span>{t("Description")}</span>
+                <textarea className="cms-description-input" value={fields.description} onChange={(event) => updateField('description', event.target.value)} placeholder={t("Add a concise summary for your readers")} rows={2} />
               </label>
             </div>
-            <section className="cms-editor-field" aria-label="Content">
-              <header className="cms-editor-field-header"><span>Content</span></header>
+            <section className="cms-editor-field" aria-label={t("Content")}>
+              <header className="cms-editor-field-header"><span>{t("Content")}</span></header>
               <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
                 const contentJson = updatedEditor.getJSON();
                 editVersion.current += 1;
@@ -1072,38 +1080,38 @@ function App() {
                 const changed = hasDocumentChanges(baseline, fieldsRef.current, contentJson);
                 setIsDirty(changed);
                 queueLocalDraft(baseline, fieldsRef.current, contentJson);
-              }} onUploadError={(error) => showNotice(`Image upload failed: ${error.message}`, true)} isAllowedMediaUrl={isAllowedPastedMediaUrl} onRejectedPastedMedia={(count) => showNotice(`${count} pasted ${count === 1 ? 'image or video was' : 'images or videos were'} skipped because the URL is local or insecure. Upload media to include it.`)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
+              }} onUploadError={(error) => showNotice(message(t("Image upload failed: {error}"), { error: error.message }), true)} isAllowedMediaUrl={isAllowedPastedMediaUrl} onRejectedPastedMedia={(count) => showNotice(message(t("{count} pasted images or videos were skipped because the URL is local or insecure. Upload media to include it."), { count }))} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
               }} /></div>
             </section>
-            {current.id && <section className="cms-danger-zone" aria-label="Danger zone"><div><h2>Delete page</h2><p>Permanently remove this page and its translations.</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>Delete page</button></section>}
+            {current.id && <section className="cms-danger-zone" aria-label={t("Danger zone")}><div><h2>{t("Delete page")}</h2><p>{t("Permanently remove this page and its translations.")}</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>{t("Delete page")}</button></section>}
           </section>
         </>}
       </main>
     </div>
 
-    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">Publication history</h2><p>New versions are recorded when you publish. Existing history is kept. Restore updates the draft; publish it to change the site.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label="Close revision history">×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">No publication history yet. Save draft, then publish to record a version.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? 'Save or discard your edits before restoring' : 'Restore to draft only'} onClick={() => void restore(revision)}>Restore to draft</button></div>)}</div>}</aside></div>}
+    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">{t("Publication history")}</h2><p>{t("New versions are recorded when you publish. Existing history is kept. Restore updates the draft; publish it to change the site.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label={t("Close revision history")}>×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">{t("No publication history yet. Save draft, then publish to record a version.")}</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>{t("Revision {revision}", { revision: revision.revision })}</strong><time>{new Date(revision.createdAt).toLocaleString(language)}</time></span><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? t("Save or discard your edits before restoring") : t("Restore to draft only")} onClick={() => void restore(revision)}>{t("Restore to draft")}</button></div>)}</div>}</aside></div>}
 
     {isMediaPickerOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsMediaPickerOpen(false)}>
       <section className="cms-media-dialog" role="dialog" aria-modal="true" aria-labelledby="media-library-title" onMouseDown={(event) => event.stopPropagation()}>
-        <header><div><h1 id="media-library-title">Media library</h1><p>Select an image or video to add it at the cursor.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsMediaPickerOpen(false)} aria-label="Close media library">×</button></header>
-        <div className="cms-media-dialog-actions"><label className="cms-upload">Upload media<input type="file" accept={mediaTypes} onChange={(event) => void upload(event.currentTarget.files?.[0])} /></label></div>
-        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">No media uploaded yet.</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? 'Image' : 'Video'}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? 'Used' : 'Unused'}</span>{!item.isUsed && <button type="button" className="cms-media-delete" disabled={isSaving} onClick={() => void removeMedia(item)}>Delete</button>}</footer></article>)}</div>
+        <header><div><h1 id="media-library-title">{t("Media library")}</h1><p>{t("Select an image or video to add it at the cursor.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsMediaPickerOpen(false)} aria-label={t("Close media library")}>×</button></header>
+        <div className="cms-media-dialog-actions"><label className="cms-upload">{t("Upload media")}<input type="file" accept={mediaTypes} onChange={(event) => void upload(event.currentTarget.files?.[0])} /></label></div>
+        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">{t("No media uploaded yet.")}</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? t("Image") : t("Video")}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? t("Used") : t("Unused")}</span>{!item.isUsed && <button type="button" className="cms-media-delete" disabled={isSaving} onClick={() => void removeMedia(item)}>{t("Delete")}</button>}</footer></article>)}</div>
       </section>
     </div>}
     {isYoutubeDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsYoutubeDialogOpen(false)}>
       <section className="cms-youtube-dialog" role="dialog" aria-modal="true" aria-labelledby="youtube-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
-        <header><div><h1 id="youtube-dialog-title">Embed YouTube video</h1><p>Paste a YouTube or youtu.be URL.</p></div><button className="cms-close-settings" type="button" onClick={() => setIsYoutubeDialogOpen(false)} aria-label="Close">×</button></header>
-        <label className="cms-meta-field"><span>YouTube URL</span><input autoFocus type="url" value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') insertYoutube(); }} placeholder="https://www.youtube.com/watch?v=…" /></label>
-        <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>Embed video</button></footer>
+        <header><div><h1 id="youtube-dialog-title">{t("Embed YouTube video")}</h1><p>{t("Paste a YouTube or youtu.be URL.")}</p></div><button className="cms-close-settings" type="button" onClick={() => setIsYoutubeDialogOpen(false)} aria-label={t("Close")}>×</button></header>
+        <label className="cms-meta-field"><span>{t("YouTube URL")}</span><input autoFocus type="url" value={youtubeUrl} onChange={(event) => setYoutubeUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') insertYoutube(); }} placeholder="https://www.youtube.com/watch?v=…" /></label>
+        <footer><button className="cms-button" type="button" onClick={() => setIsYoutubeDialogOpen(false)}>{t("Cancel")}</button><button className="cms-button cms-button-primary" type="button" onClick={insertYoutube}>{t("Embed video")}</button></footer>
       </section>
     </div>}
-    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">New folder</h1><p>{folderParent ? `Create inside ${folderParent.name}.` : 'Create at the top level.'}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label="Close">×</button></header><label className="cms-meta-field"><span>Name</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder="Getting started" /></label><label className="cms-meta-field"><span>URL segment</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>Cancel</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>Create folder</button></footer></section></div>}
+    {isFolderDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsFolderDialogOpen(false)}><section className="cms-folder-dialog" role="dialog" aria-modal="true" aria-labelledby="new-folder-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h1 id="new-folder-title">{t("New folder")}</h1><p>{folderParent ? t("Create inside {name}.", { name: folderParent.name }) : t("Create at the top level.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsFolderDialogOpen(false)} aria-label={t("Close")}>×</button></header><label className="cms-meta-field"><span>{t("Name")}</span><input autoFocus value={folderDraft.name} onChange={(event) => setFolderDraft((draft) => ({ ...draft, name: event.target.value, slug: draft.slug || slugify(event.target.value) }))} placeholder={t("Getting started")} /></label><label className="cms-meta-field"><span>{t("URL segment")}</span><input value={folderDraft.slug} onChange={(event) => setFolderDraft((draft) => ({ ...draft, slug: normalizeSlugInput(event.target.value) }))} onBlur={() => setFolderDraft((draft) => ({ ...draft, slug: slugify(draft.slug) }))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} placeholder="getting-started" /></label><footer><button className="cms-button" type="button" onClick={() => setIsFolderDialogOpen(false)}>{t("Cancel")}</button><button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void createFolder()}>{t("Create folder")}</button></footer></section></div>}
   </div>;
 }
 
 const root = document.querySelector('#admin-root');
 if (!root) throw new Error('Admin root is missing.');
-createRoot(root).render(<App />);
+createRoot(root).render(<AdminLanguageProvider><App /></AdminLanguageProvider>);

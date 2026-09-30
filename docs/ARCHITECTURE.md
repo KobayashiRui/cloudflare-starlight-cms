@@ -15,16 +15,17 @@ SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
 `src/locales.ts`の`defaultLocale`（`en`）で固定し、選択したDocumentの編集画面だけでtranslationを
 切り替える。Tiptap JSONがそのTranslationのDraft正本で、
 `published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`と`status`列は持たない。
-`published_revision_id IS NULL`が未公開を表す。保存とRestoreは`document_revision`を新規追加し、Publishも現在のTranslationからrevisionを新規追加して
-公開pointerを更新する。そのためDraftとPublishedは分離される。
+`published_revision_id IS NULL`が未公開を表す。Save DraftとRestoreは現在のTranslationを更新する。Publish時だけ現在のTranslationからrevisionを新規追加して
+公開pointerを更新する。既存revisionは削除しない。そのためDraftとPublishedは分離される。
 
 既存Pageの未保存編集はAdmin browser内のDexie/IndexedDBにだけ350ms debounceで保存する。保存対象は
 title、description、URL segment、Tiptap JSONと、その下書きが基づくD1 versionである。
 Page移動、言語切替、reloadではD1 versionが同じ場合にそのローカル下書きを復元する。D1側が先に更新されていた場合は
 ローカル変更を自動上書きせず、editorが「saved draftを使う」か「local changesを復元する」か選ぶ。
-`Save draft`だけがD1 revisionを追加し、`Publish page`と`Publish changes`はD1へ保存済みの内容だけを扱う。
+`Save draft`はD1の最新下書きを更新し、途中保存のrevisionを追加しない。右上の`Publish`は全ページ・全言語のD1へ保存済みの内容だけを扱う。ページ内に別の公開ボタンは置かない。
 新規Pageは安定したdocument IDを持たないため、最初の`Save draft`まではbrowser下書きの対象外である。
 このbufferは端末・browser profileごとの補助であり、共有・同期・共同編集の機能ではない。
+Adminは状態を1つのbadge（New page／Unsaved changes／Ready to publish／Published）と次の操作を示す短い説明で表示する。保存済み内容が公開revisionと同じ場合だけPublishedとなる。公開APIは今回確定した文書とversionを返し、全体公開も選択中のbaselineを同期する。要求中の追加編集は保持する。version競合では編集を保持して最新下書きの再読込とlocal変更の選択を案内する。画像の一時upload blockは保存を拒否し、upload失敗を画面へ表示する。
 Save前のNew pageはAdmin内だけの一時Tree nodeとして親Folder（rootを含む）に表示し、D1へ書き込むまではTreeの並べ替えを無効にする。選択localeのtranslationが未作成でも、既存のTree nodeを選択状態として保持する。
 Adminの`New page`と`New folder`は、選択中Folderの直下、または選択中Pageと同じ親階層へ作成する。rootのPageを選択している場合はrootへ作成する。
 
@@ -53,6 +54,7 @@ Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを表示す�
 WorkerはそのStatic Assets shellを`env.ASSETS.fetch()`で読み、D1のDraft title・description・本文を
 HTMLRewriterで差し込む。Previewは単一localeのDraftを示すためpublic language selectorを除去する。Previewも`/admin/*`のAccess配下であり、`Cache-Control: private, no-store`と
 `X-Robots-Tag: noindex, nofollow`を返す。Preview操作では静的build、Pagefind、Deploy Hookを実行しない。
+Previewでは認証済みAdmin media proxyも利用できる。公開snapshotでは引き続き`MEDIA_PUBLIC_URL`が必要で、Publish前に既存公開rendererによる検証を行う。
 本文のTiptap JSONは一度だけrenderし、GitHub互換slugの見出しanchorとdesktop/mobile TOCを同時に作る。
 Starlight build済みのTOCコンテナ・class・幅は維持し、静的shellの`Overview`だけをDraft見出しの項目へ置換する。
 本文は公開Markdown rendererと同じ検証済みTiptap node modelから安全なHTMLを生成する。Astroのlayout・theme・
@@ -80,7 +82,7 @@ productionと同じStatic Assets shellを読む。失敗した内容を繰り返
 同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
 最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。`next_retry_at`はpending送信の30秒の占有期限として使用する（自動retry時刻ではない）。failedと期限切れpendingをAdminから手動retryできる。
 URL・Tree変更と削除は同じD1 batchにsite配送を記録し、更新成功後に送信する。
-Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送する。Document画面の`Publish page`は現在のtranslationだけを公開し、headerの`Publish changes`は保存済みのDraft／変更を全言語横断で公開して一つのsite配送を記録する。公開内容を変えない手動rebuild操作は持たず、失敗した配送だけをretryできる。実配送はP4で実Accessとともに検証する。
+Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送する。単一translationの公開APIは現在のtranslationだけを公開し、headerの`Publish`は保存済みのDraft／変更を全言語横断で公開して一つのsite配送を記録する。公開内容を変えない手動rebuild操作は持たず、失敗した配送だけをretryできる。実配送はP4で実Accessとともに検証する。
 Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
 通常リンクはHTTP(S)・site-relative pathを許可する。一方、本文へ保存する画像・動画URLは公開HTTPS originまたはsite-relative pathだけを許可し、HTTP・private network・Admin media proxy URLは公開時に拒否する。これはHTTPS Admin/Public DocsでのMixed ContentとPrivate Network Access失敗を防ぐ。
 AdminはHTML貼り付け時に不正な画像・動画nodeを除外し、alt textだけを残せる場合は本文textへ戻す。保存時に失敗させず、Media uploadを案内する。

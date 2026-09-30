@@ -1,5 +1,15 @@
 # Roadmap / terra引き継ぎ
 
+## 保存・公開UIとエラー修正（2026-09-30）
+
+- `Save draft`で最新下書きを更新し、公開は右上の紫の`Publish`へ一本化した。確認画面で全ページ・全言語の保存済み対象を示す。未保存編集がある間は公開できず、公開操作で裏のSaveを行わない。単一translationの公開APIは維持するが、ページ内の公開ボタンは削除した。
+- 状態badgeは1つだけにし、New page／Unsaved changes／Ready to publish／Publishedを表示する。公開待ちを警告色にせずアクセント色にする。Treeは未公開の新規文書をNew、公開版への変更をUpdateと表示する。狭い画面でも状態を隠さない。
+- 全体公開APIが今回確定した本文とversionを返し、選択中の保存済みbaselineを同期する。公開後のSave Draft 409を修正し、公開要求中の追加編集は保持する。真のversion競合は拒否し、最新保存内容の読込と未保存編集の復旧を案内する。2択は競合時だけ表示する。
+- 途中のSave／Restore／translation作成でrevisionを追加せず、Publish時だけsnapshotを残す。schema migration・既存revision削除は行わない。Restoreは最新下書きを更新し、公開snapshotやNavigationを変更しない。
+- 一時imageUpload nodeの保存をUI/APIで拒否し、upload失敗を画面へ表示する。ページ切替後にupload結果が別文書へ挿入されることを防ぐ。Previewは認証済みAdmin media proxyを利用できる。公開に使えないAdmin media URL／未知nodeはPublish前のrenderer検証で拒否する。
+- `npm run check`、50 tests（5 files、実Astro Published buildを含む）、空サイトbuild、dry-runが成功。一時D1/R2で画像3枚のupload→日本語下書き保存2回→再取得・Preview、未完了uploadの拒否、保存で公開snapshot／Historyが変わらないことを確認した。実Adminで全体公開→編集→Save成功、別画面との競合→最新内容を取得→編集を復旧→Save成功を確認した。
+- 当初報告された複数画像のエラーそのものはHTTP status未取得で未再現。今回確認できた保存・Preview・未完了uploadの不具合を修正した。本番Access／deployは未検証・未実施。URL／Tree変更は既存設計どおり保存時に公開Navigationへ反映するため、URL入力欄で案内する。
+
 ## v1.0.0: first stable release（2026-09-14）
 
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。

@@ -204,12 +204,13 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onEmbedYoutube, isAllowedMediaUrl, onRejectedPastedMedia, editable = true }: {
+export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onUploadError, onEmbedYoutube, isAllowedMediaUrl, onRejectedPastedMedia, editable = true }: {
   content: JSONContent
   extensions?: Extensions
   onEditorReady?: (editor: Editor) => void
   onUpdate?: (editor: Editor) => void
   uploadImage?: (file: File) => Promise<string>
+  onUploadError?: (error: Error) => void
   onEmbedYoutube?: () => void
   isAllowedMediaUrl?: (url: string) => boolean
   onRejectedPastedMedia?: (count: number) => void
@@ -223,6 +224,8 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
   const [isSearchAndReplaceOpen, setIsSearchAndReplaceOpen] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const searchAndReplaceButtonRef = useRef<HTMLButtonElement>(null)
+  const uploadErrorRef = useRef(onUploadError)
+  uploadErrorRef.current = onUploadError
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -286,7 +289,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
           if (!uploadImage) throw new Error("Image upload is not configured")
           return uploadImage(file)
         },
-        onError: (error) => console.error("Upload failed:", error),
+        onError: (error) => uploadErrorRef.current?.(error),
       }),
       ...extensions,
     ],

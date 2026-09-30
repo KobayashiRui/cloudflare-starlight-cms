@@ -184,6 +184,134 @@ it('publishes all saved changes through one site delivery', async () => {
   expect(await request('api/publish/changes', 'POST')).toMatchObject({ publishedCount: 0, delivery: null });
 });
 
+it('rejects the editor version left stale by bulk publishing until the translation is reloaded', async () => {
+  const input = {
+    title: 'Version investigation', slug: 'version-investigation', folderId: null, order: 0,
+    description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+  };
+  const page = identity.parse(await request('api/documents', 'POST', input));
+  const locale = hasJapanese ? 'ja' : 'en';
+  const opened = hasJapanese
+    ? identity.parse(await request(`api/documents/${page.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' }))
+    : page;
+  await request('api/publish/changes', 'POST');
+  const latest = identity.parse(await request(`api/documents/${page.id}?locale=${locale}`));
+  expect(latest.version).toBe(opened.version + 1);
+  const published = await request('export/snapshot');
+
+  // The Admin refreshes the tree/list after bulk publishing, but Save draft
+  // still sends the version of the document opened before that operation.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const rejected = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}?locale=${locale}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+      body: JSON.stringify({ ...input, title: 'New draft', version: opened.version }),
+    });
+    expect(rejected.status).toBe(409);
+    expect(await rejected.json()).toEqual({ error: 'The document changed. Reload it and try again.', code: 'version_conflict' });
+  }
+  const saved = identity.parse(await request(`api/documents/${page.id}?locale=${locale}`, 'PUT', {
+    ...input, title: 'New draft', version: latest.version,
+  }));
+  expect(saved.version).toBe(latest.version + 1);
+  expect(await request('export/snapshot')).toEqual(published);
+  await request(`api/documents/${page.id}?locale=${locale}`, 'DELETE', { version: saved.version });
+  if (hasJapanese) {
+    await request(`api/documents/${page.id}`, 'DELETE', { version: page.version + 1 });
+  }
+});
+
+it('saves and reloads three uploaded images with a current translation version', async () => {
+  const images = [];
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+  for (let index = 0; index < 3; index++) {
+    const form = new FormData();
+    form.set('file', new File([png], `image-${index}.png`, { type: 'image/png' }));
+    // Encode multipart bytes before crossing Node/Miniflare's FormData realms.
+    const multipart = new Request('http://localhost/admin/api/media', { method: 'POST', body: form });
+    const response = await mf.dispatchFetch(multipart.url, {
+      method: 'POST', headers: {
+        'X-Requested-With': 'cloudflare-starlight-cms',
+        'Content-Type': multipart.headers.get('content-type')!,
+      }, body: await multipart.arrayBuffer(),
+    });
+    expect(response.status).toBe(201);
+    images.push(z.object({ url: z.string() }).parse(await response.json()));
+  }
+  const input = {
+    title: 'Three images', slug: 'three-images', folderId: null, order: 0, description: '',
+    contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+  };
+  const page = identity.parse(await request('api/documents', 'POST', input));
+  const locale = hasJapanese ? 'ja' : 'en';
+  let opened = hasJapanese
+    ? identity.parse(await request(`api/documents/${page.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' }))
+    : page;
+  const contentJson = {
+    type: 'doc', content: images.map((image, index) => ({
+      type: 'image', attrs: { src: image.url, alt: `Image ${index}`, title: null, width: null, height: null },
+    })),
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    opened = identity.parse(await request(`api/documents/${page.id}?locale=${locale}`, 'PUT', {
+      ...input, contentJson, version: opened.version,
+    }));
+    expect(await request(`api/documents/${page.id}?locale=${locale}`)).toMatchObject({ contentJson });
+  }
+  expect(publishedDocuments(await request('export/snapshot')).some((document) => document.id === page.id)).toBe(false);
+  const preview = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=${locale}`);
+  expect(preview.status).toBe(200);
+  const html = await preview.text();
+  for (const image of images) expect(html).toContain(image.url);
+  const rejectedPublish = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}/publish?locale=${locale}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+    body: JSON.stringify({ version: opened.version }),
+  });
+  expect(rejectedPublish.status).toBe(400);
+  expect(await rejectedPublish.json()).toMatchObject({ error: expect.stringContaining('MEDIA_PUBLIC_URL') });
+  await request(`api/documents/${page.id}?locale=${locale}`, 'DELETE', { version: opened.version });
+  if (hasJapanese) await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+});
+
+it('keeps only publication snapshots for new saves and restores, and returns bulk versions', async () => {
+  const input = { title: 'History', slug: 'publication-history', description: '', folderId: null, order: 0,
+    contentJson: { type: 'doc', content: [{ type: 'paragraph' }] } };
+  let page = identity.parse(await request('api/documents', 'POST', input));
+  expect(await request(`api/documents/${page.id}/revisions`)).toEqual([]);
+  page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, version: page.version }));
+  expect(await request(`api/documents/${page.id}/revisions`)).toEqual([]);
+  const bulk = z.object({ documents: z.array(identity) }).parse(await request('api/publish/changes', 'POST'));
+  const published = bulk.documents.find((document) => document.id === page.id);
+  expect(published?.version).toBe(page.version + 1);
+  page = identity.parse(published);
+  expect(await request(`api/documents/${page.id}`)).toMatchObject({ publicationState: 'published', version: page.version });
+  const snapshot = await request('export/snapshot');
+  const revisions = z.array(z.object({ id: z.string() })).parse(await request(`api/documents/${page.id}/revisions`));
+  expect(revisions).toHaveLength(1);
+  page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'New draft', version: page.version }));
+  expect(await request(`api/documents/${page.id}`)).toMatchObject({ publicationState: 'changes' });
+  expect(await request('export/snapshot')).toEqual(snapshot);
+  expect(await request(`api/documents/${page.id}/revisions`)).toHaveLength(1);
+  page = identity.parse(await request(`api/documents/${page.id}/revisions/${revisions[0]!.id}/restore`, 'POST', { version: page.version }));
+  expect(await request(`api/documents/${page.id}`)).toMatchObject({ title: input.title, publicationState: 'published' });
+  expect(await request(`api/documents/${page.id}/revisions`)).toHaveLength(1);
+  expect(await request('export/snapshot')).toEqual(snapshot);
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+});
+
+it('rejects an unfinished image upload before changing the saved draft', async () => {
+  const input = { title: 'Pending upload', slug: 'pending-upload', description: '', folderId: null, order: 0,
+    contentJson: { type: 'doc', content: [{ type: 'paragraph' }] } };
+  const page = identity.parse(await request('api/documents', 'POST', input));
+  const rejected = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+    body: JSON.stringify({ ...input, version: page.version, contentJson: { type: 'doc', content: [{ type: 'imageUpload' }] } }),
+  });
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toMatchObject({ error: expect.stringContaining('Finish uploading images') });
+  expect(await request(`api/documents/${page.id}`)).toMatchObject({ contentJson: input.contentJson, version: page.version });
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+});
+
 it('keeps navigation shared while folder names are translated per locale', async () => {
   if (!hasJapanese) return;
   const folder = z.object({ id: z.string() }).parse(await request('api/folders', 'POST', { name: 'Guides', slug: 'translated-guides', order: 9 }));

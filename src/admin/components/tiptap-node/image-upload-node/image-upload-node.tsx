@@ -451,12 +451,16 @@ export const ImageUploadNode: React.FC<NodeViewProps> = (props) => {
     useFileUpload(uploadOptions)
 
   const handleUpload = async (files: File[]) => {
+    const uploadNode = props.node
     const urls = await uploadFiles(files)
 
     if (urls.length > 0) {
+      if (props.editor.isDestroyed) return
       const pos = props.getPos()
 
-      if (isValidPosition(pos)) {
+      // A page/language switch or deletion must not insert completed uploads
+      // into a different document now occupying the same editor position.
+      if (isValidPosition(pos) && props.editor.state.doc.nodeAt(pos) === uploadNode) {
         const imageNodes = urls.map((url, index) => {
           const filename =
             files[index]?.name.replace(/\.[^/.]+$/, "") || "unknown"

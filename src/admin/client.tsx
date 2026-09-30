@@ -1,5 +1,5 @@
 import { siteConfig } from '../site.config.ts';
-import { assertDocumentContentUrls, documentMediaUrl } from '../documents/content-urls.ts';
+import { assertDocumentContentUrls, documentMediaUrl, hasPendingImageUpload } from '../documents/content-urls.ts';
 import { Node, type JSONContent } from '@tiptap/core';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import Youtube from '@tiptap/extension-youtube';
@@ -26,6 +26,7 @@ type DocumentRecord = {
   contentJson: JSONContent;
   status: 'draft' | 'published';
   version: number;
+  publicationState: 'draft' | 'changes' | 'published';
 };
 type Media = { id: string; fileName: string; contentType: string; url: string; isUsed: boolean };
 type Revision = { id: string; revision: number; createdAt: number };
@@ -42,8 +43,7 @@ type PublishDelivery = {
   acceptedAt: number | null;
   nextRetryAt: number | null;
 };
-type PublishDocumentResponse = { document: DocumentRecord; delivery: PublishDelivery };
-type PublishChangesResponse = { publishedCount: number; delivery: PublishDelivery | null };
+type PublishChangesResponse = { publishedCount: number; documents: DocumentRecord[]; delivery: PublishDelivery | null };
 type PublishDeliveryResponse = { delivery: PublishDelivery };
 type DocumentFields = Pick<DocumentRecord, 'title' | 'slug' | 'description' | 'folderId' | 'order'>;
 type ThemePreference = 'system' | 'light' | 'dark';
@@ -51,7 +51,7 @@ type ThemePreference = 'system' | 'light' | 'dark';
 const emptyContent: JSONContent = { type: 'doc', content: [{ type: 'paragraph' }] };
 const emptyDocument: DocumentRecord = {
   id: '', locale: defaultLocale, title: '', slug: '', description: '', folderId: null, order: 0,
-  contentJson: emptyContent, status: 'draft', version: 0,
+  contentJson: emptyContent, status: 'draft', publicationState: 'draft', version: 0,
 };
 const mediaTypes = 'image/png,image/jpeg,image/webp,image/avif,video/mp4,video/webm';
 const validSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -129,6 +129,10 @@ const documentExtensions: Extensions = [
   Youtube.configure({ nocookie: true, width: 640, height: 360 }),
 ];
 
+class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) { super(message); }
+}
+
 async function api<T>(path: string, init: RequestInit = {}, locale?: SupportedLocale): Promise<T> {
   const isJson = Boolean(init.body && !(init.body instanceof FormData));
   const url = new URL(`/admin/api${path}`, window.location.origin);
@@ -146,8 +150,8 @@ async function api<T>(path: string, init: RequestInit = {}, locale?: SupportedLo
   if (!text || !response.headers.get('content-type')?.includes('application/json')) {
     throw new Error(`API ${path} returned an invalid response (${response.status}). Restart the local dev server and reload.`);
   }
-  const payload = JSON.parse(text) as T & { error?: string };
-  if (!response.ok) throw new Error(payload.error ?? `Request failed (${response.status})`);
+  const payload = JSON.parse(text) as T & { error?: string; code?: string };
+  if (!response.ok) throw new ApiError(payload.error ?? `Request failed (${response.status})`, response.status, payload.code);
   return payload;
 }
 
@@ -189,6 +193,9 @@ function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [hasPendingImages, setHasPendingImages] = useState(false);
+  const [versionConflictKey, setVersionConflictKey] = useState<string | null>(null);
+  const mutationInFlight = useRef(false);
   const [localSaveState, setLocalSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [localDraftConflict, setLocalDraftConflict] = useState<LocalDocumentDraft | null>(null);
   const [search, setSearch] = useState('');
@@ -217,6 +224,12 @@ function App() {
     setNotice(message);
     setNoticeIsError(error);
   }, []);
+  const showDocumentError = (error: unknown, document: DocumentRecord) => {
+    if (error instanceof ApiError && error.code === 'version_conflict') {
+      setVersionConflictKey(localDocumentKey(document.id, document.locale));
+      showNotice('This page was saved in another editor. Your unsaved edits are kept in this browser. Load the latest saved content to review them.', true);
+    } else showNotice(error instanceof Error ? error.message : String(error), true);
+  };
   const applyFields = (nextFields: DocumentFields) => {
     fieldsRef.current = nextFields;
     setFields(nextFields);
@@ -301,9 +314,8 @@ function App() {
   const activeParentFolderId = selectedFolderId ?? current?.folderId ?? (missingDocument?.parentId ? missingDocument.parentId.slice('folder:'.length) : null);
   const folderParent = treeItems.find((item) => item.kind === 'folder' && item.id === `folder:${folderParentId}`) ?? null;
   const savedChangeCount = treeItems.reduce((count, item) => count + item.translationStates.filter((entry) => entry.state !== 'published').length, 0);
-  const currentPublicationState = current
-    ? treeItems.find((item) => item.documentId === current.id)?.translationStates.find((entry) => entry.locale === current.locale)?.state
-    : undefined;
+  const currentPublicationState = current?.publicationState;
+  const hasVersionConflict = Boolean(current && versionConflictKey === localDocumentKey(current.id, current.locale));
 
   useEffect(() => {
     Promise.all([refreshDocuments(), refreshMedia(), refreshTree(), refreshDeliveries()])
@@ -338,6 +350,7 @@ function App() {
   useEffect(() => {
     if (!current || !editor) return;
     setEditorDocument(editor, current.contentJson);
+    setHasPendingImages(hasPendingImageUpload(current.contentJson));
   }, [current, editor]);
 
   useEffect(() => {
@@ -378,6 +391,7 @@ function App() {
       }
       if (selection !== selectionVersion.current) return;
       savedDocument.current = loaded;
+      setVersionConflictKey(null);
       const canRestore = localDraft?.baseVersion === loaded.version;
       const displayed = canRestore && localDraft ? {
         ...loaded, title: localDraft.title, slug: localDraft.slug, description: localDraft.description,
@@ -393,7 +407,7 @@ function App() {
       setLocalDraftConflict(localDraft && !canRestore ? localDraft : null);
       setIsDirty(Boolean(canRestore));
       setLocalSaveState(canRestore ? 'saved' : 'idle');
-      showNotice(canRestore ? 'Local changes restored.' : `${loaded.status === 'published' ? 'Published' : 'Draft'} · revision ${loaded.version}`);
+      showNotice(canRestore ? 'Your unsaved edits were restored.' : 'Saved draft loaded.');
     } catch (error) {
       showNotice(String(error), true);
     }
@@ -628,7 +642,7 @@ function App() {
   };
 
   const save = async (): Promise<DocumentRecord | undefined> => {
-    if (!editor || !current) return undefined;
+    if (!editor || !current || mutationInFlight.current || localDraftConflict || hasVersionConflict) return undefined;
     if (!validSlug.test(fieldsRef.current.slug)) {
       showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
       return undefined;
@@ -639,6 +653,7 @@ function App() {
       showNotice(error instanceof Error ? error.message : 'Invalid document URL', true);
       return undefined;
     }
+    mutationInFlight.current = true;
     setIsSaving(true);
     try {
       const saveSelection = selectionVersion.current;
@@ -678,8 +693,9 @@ function App() {
       showNotice(editVersion.current === saveVersion ? 'Draft saved.' : 'Draft saved. Newer local changes are still kept in this browser.');
       return saved;
     } catch (error) {
-      showNotice(String(error), true);
+      showDocumentError(error, current);
     } finally {
+      mutationInFlight.current = false;
       setIsSaving(false);
     }
   };
@@ -731,73 +747,41 @@ function App() {
   };
 
   const describeDelivery = (delivery: PublishDelivery) => {
-    if (delivery.status === 'accepted') return delivery.alreadyExists ? 'Build already requested.' : 'Build requested.';
+    if (delivery.status === 'accepted') return delivery.alreadyExists ? 'Publication saved. Site update already requested.' : 'Publication saved. Site update requested.';
     if (delivery.status === 'skipped') return delivery.lastError === 'Local development rebuild is active' ? 'Published. Local docs rebuild automatically.' : 'Published, but Deploy Hook is not configured.';
-    if (delivery.status === 'failed') return 'Published, but the build request failed. Retry it from the header.';
+    if (delivery.status === 'failed') return 'Publication saved, but the site update request failed. Retry site update from the header.';
     return 'Build request is pending.';
   };
 
-  const publish = async () => {
-    if (!current?.id) return showNotice('Save the document before publishing.', true);
-    const publishSelection = selectionVersion.current;
-    let documentToPublish = current;
-    if (isDirty) {
-      const saved = await save();
-      if (!saved) return;
-      if (selectionVersion.current !== publishSelection) return;
-      documentToPublish = saved;
-      const latestContent = editor?.getJSON() ?? emptyContent;
-      if (hasDocumentChanges(saved, fieldsRef.current, latestContent)) {
-        showNotice('Newer local changes are still open. Save draft again before publishing.', true);
-        return;
-      }
-    }
-    const publishEditVersion = editVersion.current;
-    setIsSaving(true);
-    try {
-      const result = await api<PublishDocumentResponse>(`/documents/${encodeURIComponent(documentToPublish.id)}/publish`, {
-        method: 'POST', body: JSON.stringify({ version: documentToPublish.version }),
-      }, documentToPublish.locale);
-      if (selectionVersion.current !== publishSelection) {
-        await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-        return;
-      }
-      savedDocument.current = result.document;
-      if (editVersion.current === publishEditVersion) {
-        setCurrent(result.document);
-        applyFields(documentFields(result.document));
-        setIsDirty(false);
-        pendingLocalDraft.current = null;
-        await removeQueuedLocalDraft(result.document.id, result.document.locale);
-        setLocalSaveState('idle');
-      } else {
-        const latestFields = fieldsRef.current;
-        const latestContent = editor?.getJSON() ?? emptyContent;
-        const displayed = { ...result.document, ...latestFields, contentJson: latestContent };
-        const changed = hasDocumentChanges(result.document, latestFields, latestContent);
-        setCurrent(displayed);
-        applyFields(latestFields);
-        setIsDirty(changed);
-        if (changed) queueLocalDraft(result.document, latestFields, latestContent);
-      }
-      setLatestDelivery(result.delivery);
-      await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-      showNotice(describeDelivery(result.delivery), result.delivery.status === 'failed');
-    } catch (error) {
-      showNotice(String(error), true);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const publishChanges = async () => {
+    if (mutationInFlight.current || localDraftConflict || hasVersionConflict) return;
     if (isDirty) return showNotice('Save the current draft before publishing changes.', true);
     if (savedChangeCount === 0) return showNotice('There are no saved changes to publish.');
     const noun = savedChangeCount === 1 ? 'translation' : 'translations';
-    if (!window.confirm(`Publish ${savedChangeCount} saved ${noun}? The public documentation site will be rebuilt once.`)) return;
+    const targets = treeItems.flatMap((item) => item.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${item.name} · ${localeLabel(entry.locale)}`));
+    if (!window.confirm(`Publish ${savedChangeCount} saved ${noun}?\n\n${targets.join('\n')}\n\nOnly saved drafts are included. The site update will be requested once.`)) return;
+    const publishSelection = selectionVersion.current;
+    mutationInFlight.current = true;
     setIsSaving(true);
     try {
       const result = await api<PublishChangesResponse>('/publish/changes', { method: 'POST' });
+      const published = result.documents.find((document) => document.id === current?.id && document.locale === current.locale);
+      if (published && selectionVersion.current === publishSelection) {
+        savedDocument.current = published;
+        const latestFields = fieldsRef.current;
+        const latestContent = editor?.getJSON() ?? published.contentJson;
+        const changed = hasDocumentChanges(published, latestFields, latestContent);
+        setCurrent({ ...published, ...latestFields, contentJson: latestContent });
+        setIsDirty(changed);
+        if (changed) queueLocalDraft(published, latestFields, latestContent);
+        else {
+          pendingLocalDraft.current = null;
+          if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+          localDraftTimer.current = null;
+          await removeQueuedLocalDraft(published.id, published.locale);
+          setLocalSaveState('idle');
+        }
+      }
       if (!result.delivery) return showNotice('There are no saved changes to publish.');
       setLatestDelivery(result.delivery);
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
@@ -805,6 +789,7 @@ function App() {
     } catch (error) {
       showNotice(String(error), true);
     } finally {
+      mutationInFlight.current = false;
       setIsSaving(false);
     }
   };
@@ -842,23 +827,43 @@ function App() {
   };
 
   const restore = async (revision: Revision) => {
-    if (!current?.id) return;
+    if (!current?.id || mutationInFlight.current || isDirty || localDraftConflict || hasVersionConflict) return;
+    const restoreSelection = selectionVersion.current;
+    const restoreEditVersion = editVersion.current;
+    mutationInFlight.current = true;
+    setIsSaving(true);
     try {
       const restored = await api<DocumentRecord>(`/documents/${encodeURIComponent(current.id)}/revisions/${encodeURIComponent(revision.id)}/restore`, {
         method: 'POST', body: JSON.stringify({ version: current.version }),
       }, current.locale);
-      setCurrent(restored);
+      if (selectionVersion.current !== restoreSelection) {
+        await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
+        return;
+      }
       savedDocument.current = restored;
-      applyFields(documentFields(restored));
-      setEditorDocument(editor, restored.contentJson);
-      setIsDirty(false);
-      pendingLocalDraft.current = null;
-      await removeQueuedLocalDraft(restored.id, restored.locale);
-      setLocalSaveState('idle');
+      if (editVersion.current === restoreEditVersion) {
+        setCurrent(restored);
+        applyFields(documentFields(restored));
+        setIsDirty(false);
+        pendingLocalDraft.current = null;
+        if (localDraftTimer.current !== null) window.clearTimeout(localDraftTimer.current);
+        localDraftTimer.current = null;
+        await removeQueuedLocalDraft(restored.id, restored.locale);
+        setLocalSaveState('idle');
+      } else {
+        const latestFields = fieldsRef.current;
+        const latestContent = editor?.getJSON() ?? restored.contentJson;
+        setCurrent({ ...restored, ...latestFields, contentJson: latestContent });
+        setIsDirty(true);
+        queueLocalDraft(restored, latestFields, latestContent);
+      }
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
       showNotice(`Revision ${revision.revision} restored as a draft.`);
     } catch (error) {
-      showNotice(String(error), true);
+      showDocumentError(error, current);
+    } finally {
+      mutationInFlight.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -1000,14 +1005,15 @@ function App() {
       <div className="cms-topbar-controls">
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{notice}</span>
-        {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry build</button>}
-        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || savedChangeCount === 0} onClick={() => void publishChanges()}>Publish changes{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
+        {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>Retry site update</button>}
+        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || isDirty || hasPendingImages || Boolean(localDraftConflict) || hasVersionConflict || savedChangeCount === 0} title="Publish saved changes across all pages and languages" onClick={() => void publishChanges()}>Publish{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
         </div>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${displayedTheme === 'dark' ? 'light' : 'dark'} mode`}>
           {displayedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
         </button>
       </div>
     </header>
+    {noticeIsError && <div className="cms-error-banner" role="alert">{notice}</div>}
 
     <div className="cms-workspace">
       <aside className="cms-sidebar">
@@ -1022,25 +1028,25 @@ function App() {
           {renderBreadcrumb(fields.folderId, fields.title || fields.slug || 'Untitled document')}
           <section className="cms-document-actions" aria-label="Document actions">
             <div className="cms-document-state">
-              <span className={`cms-status cms-status-${!current.id || isDirty ? 'draft' : current.status}`}>{!current.id ? 'New page' : isDirty ? 'Local changes' : current.status}</span>
-              <span>{!current.id ? 'Save draft to create this page.' : isDirty ? localSaveState === 'saving' ? 'Saving locally…' : localSaveState === 'error' ? 'Local save failed.' : 'Saved locally.' : 'Saved draft.'}</span>
+              <span className={`cms-status cms-status-${hasVersionConflict || localDraftConflict ? 'draft' : !current.id || isDirty ? 'unsaved' : currentPublicationState === 'published' ? 'published' : 'pending'}`}>{hasVersionConflict || localDraftConflict ? 'Review required' : !current.id ? 'New page' : isDirty ? 'Unsaved changes' : currentPublicationState === 'published' ? 'Published' : 'Ready to publish'}</span>
+              <span>{hasVersionConflict || localDraftConflict ? 'Choose which saved content to use below.' : hasPendingImages ? 'Finish uploading images or remove the empty upload block.' : !current.id ? 'Save draft to create this page.' : isDirty ? localSaveState === 'error' ? 'Browser backup failed. Save draft to keep your edits.' : 'Save draft before publishing.' : currentPublicationState === 'published' ? 'No changes to publish.' : 'Saved changes will be included when you publish.'}</span>
             </div>
             <div className="cms-document-action-buttons">
-              {current.id && <button className="cms-button" type="button" disabled={isSaving} onClick={preview}>Preview draft</button>}
-              <button className="cms-button cms-button-primary" type="button" disabled={isSaving} onClick={() => void save()}>{isSaving ? 'Saving…' : 'Save draft'}</button>
+              {current.id && <button className="cms-button" type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? 'Save draft before previewing' : 'Preview the saved draft'} onClick={preview}>Preview draft</button>}
+              <button className={`cms-button ${!current.id || isDirty ? 'cms-button-primary' : ''}`} type="button" disabled={isSaving || hasPendingImages || hasVersionConflict || Boolean(localDraftConflict) || Boolean(current.id && !isDirty)} onClick={() => void save()}>{isSaving ? 'Working…' : 'Save draft'}</button>
               {isDirty && current.id && <button className="cms-button cms-button-quiet" type="button" disabled={isSaving} onClick={() => void discardLocalChanges()}>Discard local changes</button>}
               {current.id && <span className="cms-action-divider" aria-hidden="true" />}
-              {current.id && currentPublicationState !== 'published' && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void publish()}>Publish page</button>}
               {current.id && <button className={`cms-history-button ${isRevisionOpen ? 'is-active' : ''}`} type="button" onClick={() => void toggleRevisionHistory()} aria-expanded={isRevisionOpen}><HistoryIcon />History</button>}
             </div>
           </section>
-          {localDraftConflict && <section className="cms-local-draft-conflict" aria-label="Local draft conflict"><div><strong>A newer saved draft exists.</strong><p>Your browser has local changes from an older saved draft.</p></div><div><button className="cms-button" type="button" onClick={() => void discardLocalChanges()}>Keep saved draft</button><button className="cms-button cms-button-primary" type="button" onClick={restoreConflictingLocalChanges}>Restore local changes</button></div></section>}
+          {hasVersionConflict && <section className="cms-local-draft-conflict"><div><strong>This page was saved elsewhere.</strong><p>Your edits are kept. Load the latest draft, then choose which content to use.</p></div><button className="cms-button" type="button" disabled={isSaving} onClick={() => void selectDocument(current, current.locale)}>Load latest draft</button></section>}
+          {localDraftConflict && <section className="cms-local-draft-conflict" aria-label="Local draft conflict"><div><strong>This page was saved elsewhere.</strong><p>The editor shows the latest saved content. Your unsaved edits are kept in this browser. Recovering them only changes the editor; save and publish are separate actions.</p></div><div><button className="cms-button" type="button" onClick={() => void discardLocalChanges()}>Use latest saved content</button><button className="cms-button" type="button" onClick={restoreConflictingLocalChanges}>Recover my unsaved edits</button></div></section>}
           <section className="cms-editor-surface" aria-label="Document editor">
             <div className="cms-document-fields">
               <label className="cms-meta-field">
                 <span>URL segment</span>
                 <input className="cms-slug-input" value={fields.slug} onChange={(event) => updateSlug(event.target.value)} onBlur={() => updateField('slug', slugify(fields.slug))} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} maxLength={120} aria-invalid={Boolean(fields.slug) && !validSlug.test(fields.slug)} placeholder="getting-started" />
-                <small className="cms-field-help">Required. Lowercase letters, numbers, and hyphens. English titles suggest a value while this field is empty.</small>
+                <small className="cms-field-help">Required. Shared across languages. Changing the URL of a published page updates live navigation when saved.</small>
               </label>
               {current.id && <label className="cms-content-locale"><span>Language</span><select value={current.locale} onChange={(event) => void selectDocumentLocale(event.target.value as SupportedLocale)}>{supportedLocales.map((item) => <option value={item} key={item}>{localeLabel(item)}</option>)}</select></label>}
               <label className="cms-meta-field">
@@ -1056,16 +1062,17 @@ function App() {
               <header className="cms-editor-field-header"><span>Content</span></header>
               <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
                 const contentJson = updatedEditor.getJSON();
+                editVersion.current += 1;
+                setHasPendingImages(hasPendingImageUpload(contentJson));
                 const baseline = savedDocument.current;
                 if (!baseline) {
                   setIsDirty(true);
                   return;
                 }
-                const changed = hasDocumentChanges(baseline, fields, contentJson);
-                if (changed) editVersion.current += 1;
+                const changed = hasDocumentChanges(baseline, fieldsRef.current, contentJson);
                 setIsDirty(changed);
-                queueLocalDraft(baseline, fields, contentJson);
-              }} isAllowedMediaUrl={isAllowedPastedMediaUrl} onRejectedPastedMedia={(count) => showNotice(`${count} pasted ${count === 1 ? 'image or video was' : 'images or videos were'} skipped because the URL is local or insecure. Upload media to include it.`)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
+                queueLocalDraft(baseline, fieldsRef.current, contentJson);
+              }} onUploadError={(error) => showNotice(`Image upload failed: ${error.message}`, true)} isAllowedMediaUrl={isAllowedPastedMediaUrl} onRejectedPastedMedia={(count) => showNotice(`${count} pasted ${count === 1 ? 'image or video was' : 'images or videos were'} skipped because the URL is local or insecure. Upload media to include it.`)} onEmbedYoutube={openYoutubeDialog} uploadImage={async (file) => {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
@@ -1077,7 +1084,7 @@ function App() {
       </main>
     </div>
 
-    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">Revision history</h2><p>Restore adds the selected revision as a new draft.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label="Close revision history">×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">No saved revisions yet.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" onClick={() => void restore(revision)}>Restore</button></div>)}</div>}</aside></div>}
+    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">Publication history</h2><p>New versions are recorded when you publish. Existing history is kept. Restore updates the draft; publish it to change the site.</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label="Close revision history">×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">No publication history yet. Save draft, then publish to record a version.</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>Revision {revision.revision}</strong><time>{new Date(revision.createdAt).toLocaleString()}</time></span><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? 'Save or discard your edits before restoring' : 'Restore to draft only'} onClick={() => void restore(revision)}>Restore to draft</button></div>)}</div>}</aside></div>}
 
     {isMediaPickerOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsMediaPickerOpen(false)}>
       <section className="cms-media-dialog" role="dialog" aria-modal="true" aria-labelledby="media-library-title" onMouseDown={(event) => event.stopPropagation()}>

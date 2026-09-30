@@ -2,8 +2,9 @@ import { createOnDropHandler, dragAndDropFeature, hotkeysCoreFeature, keyboardDr
 import { AssistiveTreeDescription, useTree } from '@headless-tree/react';
 import clsx from 'clsx';
 import { useEffect, useMemo, useRef } from 'react';
+import type { SupportedLocale } from '../locales';
 
-export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; translationStates: { locale: string; state: 'draft' | 'changes' | 'published' }[]; documentId?: string; isTemporary?: boolean };
+export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; translationStates: { locale: SupportedLocale; state: 'draft' | 'changes' | 'published' }[]; documentId?: string; isTemporary?: boolean };
 const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0, hasTranslation: true, translationLocales: [], translationStates: [] };
 
 function TreeChevron({ expanded }: { expanded: boolean }) {
@@ -77,8 +78,8 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
       const isSelected = data.isTemporary || (data.documentId ? selectedDocumentId === data.documentId : selectedFolderId === data.id.slice('folder:'.length));
       const hasChanges = data.translationStates.some((entry) => entry.state === 'changes');
       const hasDraft = data.translationStates.some((entry) => entry.state === 'draft');
-      const publicationLabel = data.isTemporary ? 'Unsaved' : hasChanges ? 'Changes' : hasDraft ? 'Draft' : null;
-      const publicationTitle = data.isTemporary ? 'Save draft to create this page' : data.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${entry.locale}: ${entry.state === 'changes' ? 'Changes' : 'Draft'}`).join(', ');
+      const publicationLabel = data.isTemporary ? 'Unsaved' : hasChanges ? 'Update' : hasDraft ? 'New' : null;
+      const publicationTitle = data.isTemporary ? 'Save draft to create this page' : data.translationStates.map((entry) => `${entry.locale}: ${entry.state === 'changes' ? 'Unpublished changes' : entry.state === 'draft' ? 'Not published' : 'Matches published version'}`).join(', ');
       return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
         <div className={clsx('treeitem', {
           focused: item.isFocused(),

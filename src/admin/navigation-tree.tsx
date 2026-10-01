@@ -113,12 +113,12 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{item.isFolder() && <button className="treeitem-toggle" type="button" tabIndex={-1}
+        })}>{item.isFolder() ? <button className="treeitem-toggle" type="button" tabIndex={-1}
           aria-label={t(item.isExpanded() ? 'Collapse {name}' : 'Expand {name}', { name: data.name })}
           aria-expanded={item.isExpanded()} onClick={(event) => {
             event.stopPropagation();
             if (item.isExpanded()) item.collapse(); else item.expand();
-          }}><TreeChevron expanded={item.isExpanded()} /></button>}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
+          }}><TreeChevron expanded={item.isExpanded()} /></button> : <span className="treeitem-toggle-spacer" aria-hidden="true" />}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
       </div>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />

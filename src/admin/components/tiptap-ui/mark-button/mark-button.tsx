@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 "use client"
 
 import { forwardRef, useCallback } from "react"
@@ -60,6 +61,7 @@ export const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(
     },
     ref
   ) => {
+    const { t } = useAdminI18n();
     const { editor } = useTiptapEditor(providedEditor)
     const {
       isVisible,
@@ -108,7 +110,7 @@ export const MarkButton = forwardRef<HTMLButtonElement, MarkButtonProps>(
         {children ?? (
           <>
             <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            {text && <span className="tiptap-button-text">{t(text)}</span>}
             {showShortcut && (
               <MarkShortcutBadge type={type} shortcutKeys={shortcutKeys} />
             )}

@@ -38,7 +38,7 @@ CLI packageのtemplateはrootアプリからrelease時に生成する。template
 ## データとEditor
 folder/documentは共通TreeとURL segment、folder_translationは表示名を保持する。
 document_translationが編集中の本文・title・descriptionの正本で、published_revision_idが公開snapshotを指す。
-draft_revision_idとstatus列は作らない。保存とRestoreは新しいdocument_revisionを追加する。
+draft_revision_idとstatus列は作らない。保存とRestoreは最新の下書きを更新し、公開時だけ新しいdocument_revisionを追加する。既存revisionは削除しない。
 Revisionは本文・title・descriptionを保持し、NavigationとslugはRestoreしない。
 公開DTOの本文と更新日時は公開revisionから取得し、Draft保存で変更しない。
 同時保存はversion比較で競合検出し、黙って上書きしない。

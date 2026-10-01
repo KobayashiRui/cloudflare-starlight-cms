@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -99,6 +100,7 @@ const MainToolbarContent = ({
   searchAndReplaceButtonRef: React.RefObject<HTMLButtonElement>
   isMobile: boolean
 }) => {
+  const { t } = useAdminI18n();
   return (
     <>
       <Spacer />
@@ -155,8 +157,8 @@ const MainToolbarContent = ({
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        <ImageUploadButton text="Add" />
-        {onEmbedYoutube && <Button type="button" tooltip="Embed YouTube" onClick={onEmbedYoutube}><span className="tiptap-button-text">YouTube</span></Button>}
+        <ImageUploadButton text={t("Add")} />
+        {onEmbedYoutube && <Button type="button" tooltip={t("Embed YouTube")} onClick={onEmbedYoutube}><span className="tiptap-button-text">YouTube</span></Button>}
       </ToolbarGroup>
 
       <Spacer />
@@ -204,17 +206,19 @@ const MobileToolbarContent = ({
   </>
 )
 
-export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onEmbedYoutube, isAllowedMediaUrl, onRejectedPastedMedia, editable = true }: {
+export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate, uploadImage, onUploadError, onEmbedYoutube, isAllowedMediaUrl, onRejectedPastedMedia, editable = true }: {
   content: JSONContent
   extensions?: Extensions
   onEditorReady?: (editor: Editor) => void
   onUpdate?: (editor: Editor) => void
   uploadImage?: (file: File) => Promise<string>
+  onUploadError?: (error: Error) => void
   onEmbedYoutube?: () => void
   isAllowedMediaUrl?: (url: string) => boolean
   onRejectedPastedMedia?: (count: number) => void
   editable?: boolean
 }) {
+  const { t } = useAdminI18n();
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
   const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
@@ -223,6 +227,8 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
   const [isSearchAndReplaceOpen, setIsSearchAndReplaceOpen] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const searchAndReplaceButtonRef = useRef<HTMLButtonElement>(null)
+  const uploadErrorRef = useRef(onUploadError)
+  uploadErrorRef.current = onUploadError
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -252,7 +258,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
         autocomplete: "off",
         autocorrect: "off",
         autocapitalize: "off",
-        "aria-label": editable ? "Main content area, start typing to enter text." : "Document preview content.",
+        "aria-label": t(editable ? "Main content area, start typing to enter text." : "Document preview content."),
         class: "simple-editor",
       },
     },
@@ -286,7 +292,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
           if (!uploadImage) throw new Error("Image upload is not configured")
           return uploadImage(file)
         },
-        onError: (error) => console.error("Upload failed:", error),
+        onError: (error) => uploadErrorRef.current?.(error),
       }),
       ...extensions,
     ],

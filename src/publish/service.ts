@@ -107,11 +107,12 @@ export async function publishDocumentAndRequest(env: RuntimeEnv, id: string, ver
 }
 
 /** Publish all saved Drafts/changes and request exactly one public-site build. */
-export async function publishSavedChangesAndRequest(env: RuntimeEnv): Promise<{ publishedCount: number; delivery: PublishDelivery | null }> {
+export async function publishSavedChangesAndRequest(env: RuntimeEnv): Promise<{ publishedCount: number; documents: DocumentView[]; delivery: PublishDelivery | null }> {
   const pending = { id: crypto.randomUUID(), requestedAt: Date.now() };
-  const publishedCount = await publishSavedChanges(env, pending);
-  if (publishedCount === 0) return { publishedCount, delivery: null };
-  return { publishedCount, delivery: await deliverPublish(env, pending.id) };
+  const documents = await publishSavedChanges(env, pending);
+  const publishedCount = documents.length;
+  if (publishedCount === 0) return { publishedCount, documents, delivery: null };
+  return { publishedCount, documents, delivery: await deliverPublish(env, pending.id) };
 }
 
 export async function retryPublish(env: RuntimeEnv, id: string) {

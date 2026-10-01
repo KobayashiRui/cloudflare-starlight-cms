@@ -1,9 +1,11 @@
-import { createOnDropHandler, dragAndDropFeature, hotkeysCoreFeature, keyboardDragAndDropFeature, selectionFeature, syncDataLoaderFeature } from '@headless-tree/core';
+import { useAdminI18n } from './i18n';
+import { AssistiveDndState, createOnDropHandler, dragAndDropFeature, hotkeysCoreFeature, keyboardDragAndDropFeature, selectionFeature, syncDataLoaderFeature } from '@headless-tree/core';
 import { AssistiveTreeDescription, useTree } from '@headless-tree/react';
 import clsx from 'clsx';
 import { useEffect, useMemo, useRef } from 'react';
+import type { SupportedLocale } from '../locales';
 
-export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; translationStates: { locale: string; state: 'draft' | 'changes' | 'published' }[]; documentId?: string; isTemporary?: boolean };
+export type NavigationItem = { id: string; parentId: string | null; kind: 'folder' | 'document'; name: string; slug: string; order: number; hasTranslation: boolean; translationLocales: string[]; translationStates: { locale: SupportedLocale; state: 'draft' | 'changes' | 'published' }[]; documentId?: string; isTemporary?: boolean };
 const root: NavigationItem = { id: 'root', parentId: null, kind: 'folder', name: 'Navigation', slug: '', order: 0, hasTranslation: true, translationLocales: [], translationStates: [] };
 
 function TreeChevron({ expanded }: { expanded: boolean }) {
@@ -18,6 +20,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
   onTreeChanged: () => Promise<void>;
   canReorder?: boolean;
 }) {
+  const { t } = useAdminI18n();
   const saving = useRef(false);
   const visibleItems = useMemo(() => temporaryDocument ? [...items, {
     id: 'draft:new-page', parentId: temporaryDocument.parentId, kind: 'document' as const,
@@ -70,15 +73,23 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
     features: [syncDataLoaderFeature, selectionFeature, dragAndDropFeature, hotkeysCoreFeature, keyboardDragAndDropFeature],
   });
   useEffect(() => { tree.rebuildTree(); }, [children, tree]);
-  return <div className="navigation-tree-scroll"><div {...tree.getContainerProps('Navigation tree')} className="tree">
-    <AssistiveTreeDescription tree={tree} />
+  return <div className="navigation-tree-scroll"><div {...tree.getContainerProps(t('Navigation tree'))} className="tree">
+    <AssistiveTreeDescription tree={tree} getLabel={(dnd, state, hotkeys) => {
+      if (!hotkeys.startDrag) return '';
+      const values = { start: hotkeys.startDrag.hotkey };
+      if (state === AssistiveDndState.Completed) return t('Drag completed. Press {start} to move selected items', values);
+      if (state === AssistiveDndState.Aborted) return t('Drag cancelled. Press {start} to move selected items', values);
+      if (state === AssistiveDndState.None) return t('Press {start} to move selected items', values);
+      const target = dnd?.dragTarget;
+      const position = !target ? t('None') : 'childIndex' in target ? t('{index} of {count} in {name}', { index: target.childIndex + 1, count: target.item.getChildren().length, name: target.item.getItemName() }) : t('in {name}', { name: target.item.getItemName() });
+      return t('Dragging {names}. Current position: {position}. Press {up} and {down} to move, {drop} to drop, {cancel} to cancel.', {
+        names: dnd?.draggedItems?.map((item) => item.getItemName()).join(', ') ?? '', position,
+        up: hotkeys.dragUp?.hotkey ?? '', down: hotkeys.dragDown?.hotkey ?? '', drop: hotkeys.completeDrag?.hotkey ?? '', cancel: hotkeys.cancelDrag?.hotkey ?? '',
+      });
+    }} />
     {tree.getItems().filter((item) => item.getId() !== 'root').map((item) => {
       const data = item.getItemData();
       const isSelected = data.isTemporary || (data.documentId ? selectedDocumentId === data.documentId : selectedFolderId === data.id.slice('folder:'.length));
-      const hasChanges = data.translationStates.some((entry) => entry.state === 'changes');
-      const hasDraft = data.translationStates.some((entry) => entry.state === 'draft');
-      const publicationLabel = data.isTemporary ? 'Unsaved' : hasChanges ? 'Changes' : hasDraft ? 'Draft' : null;
-      const publicationTitle = data.isTemporary ? 'Save draft to create this page' : data.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${entry.locale}: ${entry.state === 'changes' ? 'Changes' : 'Draft'}`).join(', ');
       return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
         <div className={clsx('treeitem', {
           focused: item.isFocused(),
@@ -86,7 +97,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span>{publicationLabel && <span className={clsx('treeitem-status', data.isTemporary ? 'unsaved' : hasChanges ? 'changes' : 'draft')} title={publicationTitle}>{publicationLabel}</span>}</div>
+        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span></div>
       </button>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />

@@ -45,7 +45,7 @@ export async function listTree(env: RuntimeEnv, locale: SupportedLocale = defaul
       SELECT t.document_id,t.locale,
         CASE
           WHEN t.published_revision_id IS NULL THEN 'draft'
-          WHEN r.title <> t.title OR r.description <> t.description OR r.content_json <> t.content_json THEN 'changes'
+          WHEN r.title IS NOT t.title OR r.sidebar_label IS NOT t.sidebar_label OR r.description IS NOT t.description OR r.content_json IS NOT t.content_json THEN 'changes'
           ELSE 'published'
         END AS state
       FROM document_translation t

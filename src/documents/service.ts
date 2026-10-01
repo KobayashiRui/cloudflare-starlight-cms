@@ -1,9 +1,12 @@
 import { siteDeliveryStatement } from '../publish/record.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
 import type { RuntimeEnv } from '../env.ts';
-import { documentInput, documentUpdate, parseContent, serializeContent, type DocumentInput } from './validation.ts';
+import { documentInput, documentUpdate, parseContent, serializeContent } from './validation.ts';
+import { renderDocumentContent } from '../starlight/render.ts';
 
 export class DocumentConflictError extends Error {}
+export class DocumentVersionConflictError extends DocumentConflictError {}
+export class DocumentContentError extends Error {}
 export class DocumentNotFoundError extends Error {}
 
 type TranslationRow = {
@@ -11,6 +14,7 @@ type TranslationRow = {
   description: string; content_json: string; published_revision_id: string | null; version: number;
   created_at: number; updated_at: number; published_at: number | null; folder_id: string | null;
   slug: string; sort_order: number;
+  publication_state: 'draft' | 'changes' | 'published';
 };
 
 export type DocumentView = {
@@ -18,16 +22,27 @@ export type DocumentView = {
   sidebarLabel: string | null; slug: string; description: string; order: number; contentJson: unknown;
   status: 'draft' | 'published'; version: number; createdAt: number; updatedAt: number;
   publishedAt: number | null; publishedRevisionId: string | null;
+  publicationState: 'draft' | 'changes' | 'published';
 };
 
 /** A delivery is inserted in the same D1 batch as the published revision pointer. */
 export type PendingPublishDelivery = { id: string; requestedAt: number };
 
+function assertPublishable(contentJson: string) {
+  try { renderDocumentContent(JSON.parse(contentJson)); }
+  catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid document content'); }
+}
+
 const translationSelect = `
   SELECT t.id,t.document_id,t.locale,t.title,t.sidebar_label,t.description,t.content_json,
     t.published_revision_id,t.version,t.created_at,t.updated_at,t.published_at,
-    d.folder_id,d.slug,d.sort_order
-  FROM document_translation t JOIN document d ON d.id=t.document_id`;
+    d.folder_id,d.slug,d.sort_order,
+    CASE WHEN t.published_revision_id IS NULL THEN 'draft'
+      WHEN r.title IS NOT t.title OR r.sidebar_label IS NOT t.sidebar_label
+        OR r.description IS NOT t.description OR r.content_json IS NOT t.content_json THEN 'changes'
+      ELSE 'published' END AS publication_state
+  FROM document_translation t JOIN document d ON d.id=t.document_id
+  LEFT JOIN document_revision r ON r.id=t.published_revision_id`;
 
 function toView(row: TranslationRow): DocumentView {
   return {
@@ -37,6 +52,7 @@ function toView(row: TranslationRow): DocumentView {
     status: row.published_revision_id ? 'published' : 'draft', version: row.version,
     createdAt: row.created_at, updatedAt: row.updated_at, publishedAt: row.published_at,
     publishedRevisionId: row.published_revision_id,
+    publicationState: row.publication_state,
   };
 }
 
@@ -53,20 +69,6 @@ async function getTranslation(env: RuntimeEnv, documentId: string, locale: Suppo
     .bind(documentId, locale).first<TranslationRow>();
   if (!row) throw new DocumentNotFoundError();
   return row;
-}
-
-function snapshotStatement(env: RuntimeEnv, id: string, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number, afterUpdate = false) {
-  return env.DB.prepare(`
-    INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
-    SELECT ?, id, COALESCE((SELECT MAX(revision) + 1 FROM document_revision WHERE document_translation_id = ?), 1), ?, sidebar_label, ?, ?, ?
-    FROM document_translation WHERE id = ? ${afterUpdate ? 'AND changes()=1' : ''}`)
-    .bind(id, translationId, input.title, input.description, serializeContent(input.contentJson), now, translationId);
-}
-
-async function snapshot(env: RuntimeEnv, translationId: string, input: Pick<DocumentInput, 'title' | 'description' | 'contentJson'>, now: number) {
-  const id = crypto.randomUUID();
-  await snapshotStatement(env, id, translationId, input, now).run();
-  return id;
 }
 
 export async function listDocuments(env: RuntimeEnv, locale: SupportedLocale = defaultLocale) {
@@ -92,7 +94,6 @@ export async function createDocument(env: RuntimeEnv, raw: unknown, locale: Supp
     env.DB.prepare('INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
       .bind(translationId, id, locale, input.title, null, input.description, serializeContent(input.contentJson), null, 1, now, now, null),
   ]);
-  await snapshot(env, translationId, input, now);
   return getDocument(env, id, locale);
 }
 
@@ -100,7 +101,7 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
   const input = documentUpdate.parse(raw);
   await assertSlugAvailable(env, input.folderId, input.slug, id);
   const current = await getTranslation(env, id, locale);
-  if (current.version !== input.version) throw new DocumentConflictError();
+  if (current.version !== input.version) throw new DocumentVersionConflictError();
   const now = Date.now();
   const results = await env.DB.batch([
     siteDeliveryStatement(env, `EXISTS (SELECT 1 FROM document d JOIN document_translation t ON t.document_id=d.id
@@ -110,15 +111,15 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
       .bind(input.folderId, input.slug, input.order, now, id, current.id, input.version),
     env.DB.prepare('UPDATE document_translation SET title=?,description=?,content_json=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
       .bind(input.title, input.description, serializeContent(input.contentJson), now, current.id, input.version),
-    snapshotStatement(env, crypto.randomUUID(), current.id, input, now, true),
   ]);
-  if (results[2]?.meta.changes !== 1) throw new DocumentConflictError();
+  if (results[2]?.meta.changes !== 1) throw new DocumentVersionConflictError();
   return getDocument(env, id, locale);
 }
 
 export async function publishDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale, delivery?: PendingPublishDelivery) {
   const current = await getTranslation(env, id, locale);
-  if (current.version !== version) throw new DocumentConflictError();
+  if (current.version !== version) throw new DocumentVersionConflictError();
+  assertPublishable(current.content_json);
   const now = Date.now();
   const revisionId = crypto.randomUUID();
   const results = await env.DB.batch([
@@ -132,12 +133,10 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
       SELECT ?,'document',id,'pending',0,0,? FROM document_translation WHERE id=? AND published_revision_id=?`).bind(delivery.id, delivery.requestedAt, current.id, revisionId)] : []),
   ]);
   if (results[1]?.meta.changes !== 1) {
-    throw new DocumentConflictError();
+    throw new DocumentVersionConflictError();
   }
   return getDocument(env, id, locale);
 }
-
-type PublishableTranslation = { id: string; version: number };
 
 /**
  * Publish every saved translation that differs from its current public revision.
@@ -145,20 +144,20 @@ type PublishableTranslation = { id: string; version: number };
  */
 export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPublishDelivery) {
   const candidates = await env.DB.prepare(`
-    SELECT t.id,t.version
-    FROM document_translation t
-    LEFT JOIN document_revision r ON r.id=t.published_revision_id
+    ${translationSelect}
     WHERE t.published_revision_id IS NULL
       OR r.title IS NOT t.title
       OR r.sidebar_label IS NOT t.sidebar_label
       OR r.description IS NOT t.description
       OR r.content_json IS NOT t.content_json
-    ORDER BY t.updated_at,t.id`).all<PublishableTranslation>();
-  if (candidates.results.length === 0) return 0;
+    ORDER BY t.updated_at,t.id`).all<TranslationRow>();
+  if (candidates.results.length === 0) return [];
+  for (const candidate of candidates.results) assertPublishable(candidate.content_json);
 
   const now = Date.now();
-  const statements = candidates.results.flatMap((candidate) => {
-    const revisionId = crypto.randomUUID();
+  const revisions = candidates.results.map(() => crypto.randomUUID());
+  const statements = candidates.results.flatMap((candidate, index) => {
+    const revisionId = revisions[index]!;
     return [
       env.DB.prepare(`INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
         SELECT ?,id,COALESCE((SELECT MAX(revision)+1 FROM document_revision WHERE document_translation_id=?),1),title,sidebar_label,description,content_json,?
@@ -176,7 +175,12 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
   if (candidates.results.some((_, index) => results[index * 2 + 1]?.meta.changes !== 1)) {
     throw new DocumentConflictError();
   }
-  return candidates.results.length;
+  // Return the exact snapshots/version written by this publication, rather
+  // than a later read that might include somebody else's subsequent save.
+  return candidates.results.map((candidate, index) => toView({
+    ...candidate, version: candidate.version + 1, published_revision_id: revisions[index]!,
+    published_at: now, updated_at: now, publication_state: 'published',
+  }));
 }
 
 export async function listRevisions(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
@@ -215,6 +219,5 @@ export async function createDocumentTranslation(env: RuntimeEnv, documentId: str
   const id = crypto.randomUUID(); const now = Date.now();
   await env.DB.prepare('INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
     .bind(id, documentId, locale, source.title, source.sidebar_label, source.description, source.content_json, null, 1, now, now, null).run();
-  await snapshot(env, id, { title: source.title, description: source.description, contentJson: parseContent(source.content_json) }, now);
   return getDocument(env, documentId, locale);
 }

@@ -1,5 +1,32 @@
 # Roadmap / terra引き継ぎ
 
+## v1.0.3: Adminの日英対応と保存・公開UI（2026-09-30）
+
+- CMS自体のEnglish／日本語切替、独立したAdmin言語設定、保存・公開状態の整理をまとめてpatch versionへ更新する。Save／Publishの修正は既存コミットを含める。`release:check`で型check、55 tests（Published buildを含む）、空サイトbuild、dry-run、rootから生成したCLI packageのpackとproject生成が成功した。2026-10-01にリリース番号を`1.0.3`へ修正した。issue #7の要件を満たす。npm公開・pushは行っていない。
+
+## 状態表示の整理（2026-09-30）
+
+- Treeの新規／更新／未保存バッジを削除し、状態表示を編集画面の1か所へ集約した。日英とも同じ構成にする。全体公開の対象件数は右上に維持する。
+- 左側の作成ボタンはフォルダーの文字幅を確保し、折り返さないようにした。`check:admin`とAdmin assets buildが成功し、サイドバーが表示される1024px幅で日英両方の1行表示と状態バッジの重複解消を確認した。
+
+## Admin表示言語（2026-09-30）
+
+- 日英READMEに表示言語の設定先・追加手順・再buildの必要性を記載し、`defaultLanguage`の変更例と選択の優先順を補足した。
+- 文書のlocaleと独立した表示言語を`src/admin.config.ts`で管理し、右上でEnglish／日本語を即時切替できるようにした。初回は保存済み選択→対応するブラウザ言語→既定のenの順で選ぶ。選択をlocalStorageへ保存し、保存領域を利用できない場合も画面の切替は動く。DB migration・追加依存はない。
+- 翻訳を`src/admin/i18n/en.ts`／`ja.ts`へ分離した。保存・公開状態、競合復旧、履歴、Folder／Media／YouTube、Editorのtoolbar・検索置換・画像upload・Tree操作説明も翻訳した。予期しないサーバー詳細は元の文言を保持する。追加言語は完全な辞書を登録しconfigへ追加する。型とテストで辞書・placeholderの欠落を検出する。
+- React Contextで表示だけを更新する。言語切替でEditorを再生成せず、未保存のtitle／本文と文書localeを保持する。通知は表示時に翻訳するため、切替時にAPIを再実行しない。
+- `npm run check`（0 errors）、55 tests（Publishedの実Astro buildを含む）、空サイトbuild、Worker dry-runを確認。実Adminでブラウザ言語による日本語の初回表示、未保存編集を保持した英語切替、選択の再読み込み後の保持、日本語画像upload欄を確認した。本番deployは行っていない。
+
+## 保存・公開UIとエラー修正（2026-09-30）
+
+- `Save draft`で最新下書きを更新し、公開は右上の紫の`Publish`へ一本化した。確認画面で全ページ・全言語の保存済み対象を示す。未保存編集がある間は公開できず、公開操作で裏のSaveを行わない。単一translationの公開APIは維持するが、ページ内の公開ボタンは削除した。
+- 状態badgeは1つだけにし、New page／Unsaved changes／Ready to publish／Publishedを表示する。公開待ちを警告色にせずアクセント色にする。Treeは未公開の新規文書をNew、公開版への変更をUpdateと表示する。狭い画面でも状態を隠さない。
+- 全体公開APIが今回確定した本文とversionを返し、選択中の保存済みbaselineを同期する。公開後のSave Draft 409を修正し、公開要求中の追加編集は保持する。真のversion競合は拒否し、最新保存内容の読込と未保存編集の復旧を案内する。2択は競合時だけ表示する。
+- 途中のSave／Restore／translation作成でrevisionを追加せず、Publish時だけsnapshotを残す。schema migration・既存revision削除は行わない。Restoreは最新下書きを更新し、公開snapshotやNavigationを変更しない。
+- 一時imageUpload nodeの保存をUI/APIで拒否し、upload失敗を画面へ表示する。ページ切替後にupload結果が別文書へ挿入されることを防ぐ。Previewは認証済みAdmin media proxyを利用できる。公開に使えないAdmin media URL／未知nodeはPublish前のrenderer検証で拒否する。
+- `npm run check`、50 tests（5 files、実Astro Published buildを含む）、空サイトbuild、dry-runが成功。一時D1/R2で画像3枚のupload→日本語下書き保存2回→再取得・Preview、未完了uploadの拒否、保存で公開snapshot／Historyが変わらないことを確認した。実Adminで全体公開→編集→Save成功、別画面との競合→最新内容を取得→編集を復旧→Save成功を確認した。
+- 当初報告された複数画像のエラーそのものはHTTP status未取得で未再現。今回確認できた保存・Preview・未完了uploadの不具合を修正した。本番Access／deployは未検証・未実施。URL／Tree変更は既存設計どおり保存時に公開Navigationへ反映するため、URL入力欄で案内する。
+
 ## v1.0.0: first stable release（2026-09-14）
 
 - `create-starlight-cms`を`1.0.0`へ更新する。公開Docs、Cloudflare Access保護Admin、D1/R2、Draft・Revision・多言語、Workers Builds、Deploy Hook、CLI生成・安全なtemplate upgradeを最初の安定範囲とする。

@@ -94,8 +94,8 @@ function createRenderer() {
       case 'codeBlock': return `<pre><code${codeLanguage(value.attrs?.language)}>${inline(value)}</code></pre>`;
       case 'hardBreak': return '<br>';
       case 'horizontalRule': return '<hr>';
-      case 'image': return `<img src="${escapeHtml(documentMediaUrl(value.attrs?.src))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
-      case 'video': return `<video controls src="${escapeHtml(documentMediaUrl(value.attrs?.src))}"></video>`;
+      case 'image': return `<img src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy: true }))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
+      case 'video': return `<video controls src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy: true }))}"></video>`;
       case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
       case 'callout': {
         const title = asideTitle(value.attrs?.title);

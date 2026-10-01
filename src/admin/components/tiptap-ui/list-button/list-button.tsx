@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 import { forwardRef, useCallback } from "react"
 
 // --- Lib ---
@@ -58,6 +59,7 @@ export const ListButton = forwardRef<HTMLButtonElement, ListButtonProps>(
     },
     ref
   ) => {
+    const { t } = useAdminI18n();
     const { editor } = useTiptapEditor(providedEditor)
     const {
       isVisible,
@@ -106,7 +108,7 @@ export const ListButton = forwardRef<HTMLButtonElement, ListButtonProps>(
         {children ?? (
           <>
             <Icon className="tiptap-button-icon" />
-            {text && <span className="tiptap-button-text">{text}</span>}
+            {text && <span className="tiptap-button-text">{t(text)}</span>}
             {showShortcut && (
               <ListShortcutBadge type={type} shortcutKeys={shortcutKeys} />
             )}

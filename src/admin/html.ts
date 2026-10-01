@@ -1,6 +1,8 @@
+import { adminConfig } from '../admin.config';
+
 export function adminHtml(): string {
   return String.raw`<!doctype html>
-<html lang="en">
+<html lang="${adminConfig.defaultLanguage}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">

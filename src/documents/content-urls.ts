@@ -85,6 +85,14 @@ type ContentNode = {
   content?: unknown;
 };
 
+/** The upload picker is temporary editor UI, never saved document content. */
+export function hasPendingImageUpload(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasPendingImageUpload);
+  const node = value as ContentNode;
+  return node.type === 'imageUpload' || (Array.isArray(node.content) && node.content.some(hasPendingImageUpload));
+}
+
 /**
  * Older CMS versions could persist HTTP or local-network media. Do not send
  * those nodes to the browser: they fail under HTTPS and make the whole page
@@ -106,6 +114,7 @@ export function repairLegacyDocumentMedia(value: unknown): unknown {
 export function assertDocumentContentUrls(value: unknown): void {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const node = value as ContentNode;
+  if (node.type === 'imageUpload') throw new Error('Finish uploading images, or remove the empty image upload block before saving.');
   if (node.type === 'image' || node.type === 'video') documentMediaUrl(node.attrs?.src, { allowAdminMediaProxy: true });
   if (Array.isArray(node.marks)) {
     for (const mark of node.marks) {

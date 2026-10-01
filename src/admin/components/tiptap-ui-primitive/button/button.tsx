@@ -1,3 +1,4 @@
+import { useAdminI18n } from '../../../i18n';
 import { forwardRef, Fragment, useMemo } from "react"
 
 // --- Tiptap UI Primitive ---
@@ -87,6 +88,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
+    const { t } = useAdminI18n();
+    const translatedProps = { ...props, 'aria-label': props['aria-label'] ? t(props['aria-label']) : undefined, title: props.title ? t(props.title) : undefined };
     const isCheckVariant = variant === "check"
     const buttonStyle: ButtonStyle | undefined = isCheckVariant
       ? "ghost"
@@ -102,7 +105,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     )
     const content = (
       <>
-        {children}
+        {typeof children === 'string' ? t(children) : children}
         {isCheckVariant && (
           <span className="tiptap-button-check" aria-hidden="true">
             <CheckIcon />
@@ -122,7 +125,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           data-variant={isCheckVariant ? "check" : undefined}
           role={buttonRole}
           aria-checked={buttonAriaChecked}
-          {...props}
+          {...translatedProps}
         >
           {content}
         </button>
@@ -140,12 +143,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           data-variant={isCheckVariant ? "check" : undefined}
           role={buttonRole}
           aria-checked={buttonAriaChecked}
-          {...props}
+          {...translatedProps}
         >
           {content}
         </TooltipTrigger>
         <TooltipContent>
-          {tooltip}
+          {typeof tooltip === 'string' ? t(tooltip) : tooltip}
           <ShortcutDisplay shortcuts={shortcuts} />
         </TooltipContent>
       </Tooltip>

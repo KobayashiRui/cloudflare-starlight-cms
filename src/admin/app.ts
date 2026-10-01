@@ -1,7 +1,7 @@
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { ensureSchema } from '../db/bootstrap.ts';
 import { z } from 'zod';
-import { DocumentConflictError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
+import { DocumentConflictError, DocumentVersionConflictError, DocumentContentError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
 import { InvalidMediaError, MediaInUseError, MediaNotFoundError, deleteUnusedMedia, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
@@ -37,7 +37,8 @@ const csrf: MiddlewareHandler<AdminEnv> = async (c, next) => {
 
 app.onError((error, c) => {
   if (error instanceof DocumentNotFoundError) return c.json({ error: 'Not found' }, 404, jsonHeaders);
-  if (error instanceof DocumentConflictError) return c.json({ error: error.message || 'The document changed. Reload it and try again.' }, 409, jsonHeaders);
+  if (error instanceof DocumentContentError) return c.json({ error: error.message }, 400, jsonHeaders);
+  if (error instanceof DocumentConflictError) return c.json({ error: error.message || 'The document changed. Reload it and try again.', code: error instanceof DocumentVersionConflictError ? 'version_conflict' : 'document_conflict' }, 409, jsonHeaders);
   if (error instanceof InvalidMediaError) return c.json({ error: error.message }, 400, jsonHeaders);
   if (error instanceof MediaNotFoundError) return c.json({ error: 'Media not found' }, 404, jsonHeaders);
   if (error instanceof MediaInUseError) return c.json({ error: error.message }, 409, jsonHeaders);
@@ -45,7 +46,7 @@ app.onError((error, c) => {
   if (error instanceof NavigationConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof PublishDeliveryNotFoundError) return c.json({ error: 'Build request not found' }, 404, jsonHeaders);
   if (error instanceof PublishDeliveryConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
-  if (error instanceof z.ZodError) return c.json({ error: 'Invalid request', details: error.issues }, 400, jsonHeaders);
+  if (error instanceof z.ZodError) return c.json({ error: error.issues.map((issue) => `${issue.path.join('.') || 'document'}: ${issue.message}`).join('; '), details: error.issues }, 400, jsonHeaders);
   console.error('Admin API error', error);
   return c.json({ error: 'Request failed' }, 500, jsonHeaders);
 });

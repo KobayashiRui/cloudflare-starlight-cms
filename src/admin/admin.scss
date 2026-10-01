@@ -207,3 +207,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 
 .cms-admin-language select { height: 32px; max-width: 7.5rem; padding: 0 .45rem; color: var(--cms-text); background: var(--cms-input-bg); border: 1px solid var(--cms-border); border-radius: 6px; font: inherit; font-size: .78rem; }
 .cms-admin-language select:focus-visible { outline: 2px solid var(--cms-accent); outline-offset: 2px; }
+
+.cms-sidebar .tree .treeitem-status { flex-shrink: 0; margin-left: auto; padding: .12rem .34rem; border-radius: 999px; font-size: .6rem; font-weight: 750; line-height: 1.2; white-space: nowrap; }
+.cms-sidebar .tree .treeitem-status.unsaved { color: var(--cms-text-muted); background: var(--cms-elevated); }
+.cms-sidebar .tree .treeitem-status.pending { color: var(--cms-accent); background: var(--cms-accent-subtle); }

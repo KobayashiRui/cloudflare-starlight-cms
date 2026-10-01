@@ -12,9 +12,10 @@ function TreeChevron({ expanded }: { expanded: boolean }) {
   return <span className={`treeitem-chevron${expanded ? ' is-expanded' : ''}`} aria-hidden="true" />;
 }
 
-export function NavigationTree({ items, selectedDocumentId, selectedFolderId, temporaryDocument, onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
+export function NavigationTree({ items, selectedDocumentId, selectedFolderId, temporaryDocument, unsavedDocumentIds = [], onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
   items: NavigationItem[]; selectedDocumentId?: string; selectedFolderId: string | null;
   temporaryDocument?: { name: string; parentId: string | null };
+  unsavedDocumentIds?: string[];
   onSelectDocument: (id: string) => void; onSelectFolder: (id: string) => void;
   onChangeChildren: (parentId: string | null, childIds: string[]) => Promise<void>;
   onTreeChanged: () => Promise<void>;
@@ -90,6 +91,9 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
     {tree.getItems().filter((item) => item.getId() !== 'root').map((item) => {
       const data = item.getItemData();
       const isSelected = data.isTemporary || (data.documentId ? selectedDocumentId === data.documentId : selectedFolderId === data.id.slice('folder:'.length));
+      const unsaved = data.isTemporary || Boolean(data.documentId && unsavedDocumentIds.includes(data.documentId));
+      const pending = data.translationStates.some((entry) => entry.state !== 'published');
+      const status = unsaved ? t('Unsaved') : pending ? t('Ready to publish') : null;
       return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
         <div className={clsx('treeitem', {
           focused: item.isFocused(),
@@ -97,7 +101,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span></div>
+        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
       </button>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />

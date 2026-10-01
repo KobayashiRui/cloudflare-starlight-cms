@@ -1,4 +1,5 @@
 import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
+import { headingText } from '../documents/links.ts';
 import GithubSlugger from 'github-slugger';
 
 export interface PreviewHeading {
@@ -16,8 +17,11 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function text(value: TiptapNode): string {
-  let output = escapeHtml(value.text ?? '');
+function text(value: TiptapNode, literalMarkdown = false): string {
+  // Entities preserve literal Markdown punctuation when embedded in a heading.
+  let output = literalMarkdown
+    ? Array.from(value.text ?? '', (character) => /[\\`*_[\]#!|~]/.test(character) ? `&#${character.charCodeAt(0)};` : escapeHtml(character)).join('')
+    : escapeHtml(value.text ?? '');
   const marks = Array.isArray(value.marks) ? value.marks : [];
   for (const mark of marks) {
     if (!mark || typeof mark !== 'object' || !('type' in mark)) continue;
@@ -42,10 +46,26 @@ function codeLanguage(value: unknown): string {
   return typeof value === 'string' && /^[a-z0-9+-]+$/i.test(value) ? ` class="language-${escapeHtml(value)}"` : '';
 }
 
-function headingText(value: TiptapNode): string {
-  if (value.type === 'text') return value.text ?? '';
-  if (value.type === 'hardBreak') return ' ';
-  return tiptapChildren(value).map(headingText).join('');
+function headingContent(value: TiptapNode): string {
+  return tiptapChildren(value).map((child) => {
+    if (child.type === 'text') return text(child, true);
+    if (child.type === 'hardBreak') return '<br> ';
+    throw new Error(`Unsupported heading child: ${child.type}`);
+  }).join('');
+}
+
+/** Keep literal text inside a span so Markdown retains edge spaces and trailing #. */
+export function renderHeadingMarkdown(value: TiptapNode): string {
+  const level = Number(value.attrs?.level ?? 2);
+  if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
+  return `${'#'.repeat(level)} <span>${headingContent(value)}</span>`;
+}
+
+/** Keep literal Tiptap heading text in Preview as in the public Markdown. */
+export function renderHeadingHtml(value: TiptapNode, id: string): string {
+  const level = Number(value.attrs?.level ?? 2);
+  if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
+  return `<h${level} id="${escapeHtml(id)}">${headingContent(value)}</h${level}>`;
 }
 
 function createRenderer() {
@@ -68,8 +88,12 @@ function createRenderer() {
   function renderTabs(value: TiptapNode): string {
     const tabs = tiptapChildren(value);
     if (tabs.length === 0) return '';
-    const labels = tabs.map((tab) => typeof tab.attrs?.label === 'string' ? tab.attrs.label : 'Tab');
-    return `<starlight-tabs><div class="tablist-wrapper not-content"><ul role="tablist">${labels.map((label, index) => `<li role="presentation" class="tab"><a role="tab" href="#cms-preview-tab-${index}" aria-selected="${index === 0}"${index === 0 ? '' : ' tabindex="-1"'}>${escapeHtml(label)}</a></li>`).join('')}</ul></div>${tabs.map((tab, index) => `<section id="cms-preview-tab-${index}" role="tabpanel"${index === 0 ? '' : ' hidden'}>${inline(tab)}</section>`).join('')}</starlight-tabs>`;
+    // Public Docs render tab labels as H4 sections. Keep Preview equally visible
+    // so every heading link works without a separate tab controller.
+    return tabs.map((tab) => {
+      const label = typeof tab.attrs?.label === 'string' ? tab.attrs.label : 'Tab';
+      return `<h4 id="${escapeHtml(slugger.slug(label))}">${escapeHtml(label)}</h4>${inline(tab)}`;
+    }).join('');
   }
 
   function renderNode(value: TiptapNode): string {
@@ -80,10 +104,10 @@ function createRenderer() {
       case 'heading': {
         const level = Number(value.attrs?.level ?? 2);
         if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
-        const label = headingText(value).replace(/\s+/g, ' ').trim() || 'Section';
+        const label = headingText(value);
         const id = slugger.slug(label);
         headings.push({ id, level, text: label });
-        return `<h${level} id="${escapeHtml(id)}">${inline(value)}</h${level}>`;
+        return renderHeadingHtml(value, id);
       }
       case 'bulletList': return `<ul>${tiptapChildren(value).map(renderListItem).join('')}</ul>`;
       case 'orderedList': return `<ol>${tiptapChildren(value).map(renderListItem).join('')}</ol>`;
@@ -103,7 +127,7 @@ function createRenderer() {
       }
       case 'steps': return `<ol class="sl-steps">${tiptapChildren(value).map(renderListItem).join('')}</ol>`;
       case 'tabs': return renderTabs(value);
-      case 'tab': return inline(value);
+      case 'tab': slugger.slug(String(value.attrs?.label ?? 'Tab')); return inline(value);
       case 'table': {
         const rows = tiptapChildren(value);
         return `<table><tbody>${rows.map((row, index) => renderTableRow(row, index === 0)).join('')}</tbody></table>`;

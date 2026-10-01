@@ -6,6 +6,7 @@ import { EditorContent, EditorContext, useEditor, type Editor, type Extensions }
 import type { JSONContent } from "@tiptap/core"
 
 // --- Tiptap Core Extensions ---
+import { PageLink } from '../../../page-links';
 import { StarterKit } from "@tiptap/starter-kit"
 import { Image } from "@tiptap/extension-image"
 import { TaskItem, TaskList } from "@tiptap/extension-list"
@@ -50,8 +51,6 @@ import {
 } from "@/components/tiptap-ui/color-highlight-popover"
 import {
   LinkPopover,
-  LinkContent,
-  LinkButton,
 } from "@/components/tiptap-ui/link-popover"
 import { MarkButton } from "@/components/tiptap-ui/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
@@ -64,7 +63,6 @@ import {
 // --- Icons ---
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
 import { HighlighterIcon } from "@/components/tiptap-icons/highlighter-icon"
-import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
@@ -85,7 +83,6 @@ const SEARCH_AND_REPLACE_SCROLL_OPTIONS: ScrollIntoViewOptions = {
 
 const MainToolbarContent = ({
   onHighlighterClick,
-  onLinkClick,
   onEmbedYoutube,
   onSearchAndReplaceClick,
   isSearchAndReplaceOpen,
@@ -93,7 +90,6 @@ const MainToolbarContent = ({
   isMobile,
 }: {
   onHighlighterClick: () => void
-  onLinkClick: () => void
   onEmbedYoutube?: () => void
   onSearchAndReplaceClick: () => void
   isSearchAndReplaceOpen: boolean
@@ -135,7 +131,7 @@ const MainToolbarContent = ({
         ) : (
           <ColorHighlightPopoverButton onClick={onHighlighterClick} />
         )}
-        {!isMobile ? <LinkPopover /> : <LinkButton onClick={onLinkClick} />}
+        <LinkPopover />
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -177,32 +173,16 @@ const MainToolbarContent = ({
   )
 }
 
-const MobileToolbarContent = ({
-  type,
-  onBack,
-}: {
-  type: "highlighter" | "link"
-  onBack: () => void
-}) => (
+const MobileToolbarContent = ({ onBack }: { onBack: () => void }) => (
   <>
     <ToolbarGroup>
       <Button variant="ghost" onClick={onBack}>
         <ArrowLeftIcon className="tiptap-button-icon" />
-        {type === "highlighter" ? (
-          <HighlighterIcon className="tiptap-button-icon" />
-        ) : (
-          <LinkIcon className="tiptap-button-icon" />
-        )}
+        <HighlighterIcon className="tiptap-button-icon" />
       </Button>
     </ToolbarGroup>
-
     <ToolbarSeparator />
-
-    {type === "highlighter" ? (
-      <ColorHighlightPopoverContent />
-    ) : (
-      <LinkContent />
-    )}
+    <ColorHighlightPopoverContent />
   </>
 )
 
@@ -221,7 +201,7 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
   const { t } = useAdminI18n();
   const isMobile = useIsBreakpoint()
   const { height } = useWindowSize()
-  const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
+  const [mobileView, setMobileView] = useState<"main" | "highlighter">(
     "main"
   )
   const [isSearchAndReplaceOpen, setIsSearchAndReplaceOpen] = useState(false)
@@ -265,11 +245,9 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
     extensions: [
       StarterKit.configure({
         horizontalRule: false,
-        link: {
-          openOnClick: false,
-          enableClickSelection: true,
-        },
+        link: false,
       }),
+      PageLink,
       HorizontalRule,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TaskList,
@@ -347,7 +325,6 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
           {mobileView === "main" ? (
             <MainToolbarContent
               onHighlighterClick={() => setMobileView("highlighter")}
-              onLinkClick={() => setMobileView("link")}
               onEmbedYoutube={onEmbedYoutube}
               onSearchAndReplaceClick={toggleSearchAndReplace}
               isSearchAndReplaceOpen={isSearchAndReplaceOpen}
@@ -356,7 +333,6 @@ export function SimpleEditor({ content, extensions = [], onEditorReady, onUpdate
             />
           ) : (
             <MobileToolbarContent
-              type={mobileView === "highlighter" ? "highlighter" : "link"}
               onBack={() => setMobileView("main")}
             />
           )}

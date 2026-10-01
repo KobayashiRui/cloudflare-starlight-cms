@@ -1,4 +1,12 @@
 export const en = {
+  "Page": "Page",
+  "Draft": "Draft",
+  "Link destination": "Link destination",
+  "Search pages": "Search pages",
+  "Select a page": "Select a page",
+  "Page top": "Page top",
+  "Link target unavailable": "Link target unavailable",
+  "Unable to load link target.": "Unable to load link target.",
   "Admin language": "Admin language",
   "Document language": "Document language",
   "Documents": "Documents",

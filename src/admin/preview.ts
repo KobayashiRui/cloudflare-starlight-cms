@@ -1,3 +1,5 @@
+import { loadLinkPages } from '../documents/link-pages.ts';
+import { resolveDocumentLinks } from '../documents/links.ts';
 import { getDocument } from '../documents/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
@@ -35,7 +37,8 @@ export async function previewDocument(env: RuntimeEnv, request: Request, id: str
   }
 
   const title = document.title || 'Untitled document';
-  const preview = renderPreviewDocument(document.contentJson);
+  const pages = await loadLinkPages(env, true);
+  const preview = renderPreviewDocument(resolveDocumentLinks(document.contentJson, document, pages, true));
   let desktopLevels = { min: 2, max: 3 };
   let mobileLevels = { min: 2, max: 3 };
   const response = new HTMLRewriter()

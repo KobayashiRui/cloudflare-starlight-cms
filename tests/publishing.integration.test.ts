@@ -359,3 +359,60 @@ it('deletes only media that is absent from drafts, published pages, and revision
   expect(rejected.status).toBe(409);
   expect(await rejected.json()).toMatchObject({ error: expect.stringContaining('still used') });
 });
+
+// Keep Astro builds in one suite: parallel builds share the Vite dependency cache.
+let linksMf: Miniflare;
+let linksOutput: string;
+beforeAll(async () => {
+  linksOutput = await mkdtemp(join(tmpdir(), 'cms-linkIdentity-links-'));
+  const bundle = await build({ entryPoints: ['src/index.ts'], loader: { '.sql': 'text' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
+  linksMf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'links-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA'], serviceBindings: { ASSETS: () => new Response('<html><head><title>Preview</title></head><body><div id="cms-preview-content"></div></body></html>', { headers: { 'Content-Type': 'text/html' } }) } }] }));
+});
+afterAll(async () => { await linksMf?.dispose(); if (linksOutput) await rm(linksOutput, { recursive: true, force: true }); });
+const linkIdentity = z.object({ id: z.string(), version: z.number() });
+async function fetchLinksAdmin(path: string, method = 'GET', body?: unknown) {
+  return linksMf.dispatchFetch(`http://localhost/admin/${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+}
+const linkHeading = (text: string, level = 2) => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
+const linksTargetBody = { type: 'doc', content: [linkHeading('Introduction', 1), linkHeading('  Hello  '), linkHeading('Hello #'), linkHeading('[Title](https://example.com)'), linkHeading('インストール'), linkHeading('インストール'), { type: 'tabs', content: [{ type: 'tab', attrs: { label: 'Details' }, content: [linkHeading('Details')] }] }] };
+const linkFields = (title: string, slug: string, contentJson: unknown) => ({ title, slug, description: '', folderId: null, order: 0, contentJson });
+it('links saved drafts, publishes together, builds working anchors, follows moves and rejects broken publications/deletion', async () => {
+  const target = linkIdentity.parse(await (await fetchLinksAdmin('api/documents', 'POST', linkFields('Target', 'links-target', linksTargetBody))).json());
+  const sourceBody = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Read target', marks: [{ type: 'link', attrs: { href: '/stale/', documentId: target.id, anchor: 'インストール-1' } }] }, { type: 'text', text: 'Read details', marks: [{ type: 'link', attrs: { href: '/stale/', documentId: target.id, anchor: 'details-1' } }] }] }] };
+  const source = linkIdentity.parse(await (await fetchLinksAdmin('api/documents', 'POST', linkFields('Source', 'links-source', sourceBody))).json());
+  const preview = await fetchLinksAdmin(`preview/${source.id}?locale=en`);
+  expect(preview.status).toBe(200);
+  expect(await preview.text()).toContain(`/admin/preview/${target.id}?locale=en#`);
+  expect(preview.headers.get('cache-control')).toBe('private, no-store');
+  expect((await fetchLinksAdmin(`api/documents/${source.id}/publish`, 'POST', { version: source.version })).status).toBe(400);
+  const publication = await fetchLinksAdmin('api/publish/changes', 'POST', {});
+  expect(publication.status, await publication.text()).toBe(200);
+  const snapshot = await (await fetchLinksAdmin('export/snapshot')).json();
+  const docs = z.object({ documents: z.array(z.object({ id: z.string(), body: z.object({ value: z.string() }) })) }).parse(snapshot).documents;
+  expect(docs.find((doc) => doc.id === source.id)!.body.value).toContain('/links-target/#');
+  const endpoint = new URL('/admin/export/snapshot', await linksMf.ready).href;
+  await promisify(execFile)(process.execPath, ['node_modules/astro/bin/astro.mjs', 'build', '--outDir', join(linksOutput, 'site')], { env: { ...process.env, CMS_EXPORT_URL: endpoint, CMS_INITIAL_EMPTY: undefined }, maxBuffer: 4 * 1024 * 1024 });
+  const html = await readFile(join(linksOutput, 'site/links-target/index.html'), 'utf8');
+  expect(html).toContain('id="introduction"');
+  expect(html).toContain('id="--hello--"');
+  expect(html).toContain('id="hello-"');
+  expect(html).toContain('id="titlehttpsexamplecom"');
+  // The explicit text also survives Starlight TOC generation.
+  expect(html).toContain('href="#--hello--"');
+  expect(html).toContain('id="インストール-1"');
+  expect(html).toContain('id="details-1"');
+  const latestTarget = linkIdentity.parse(await (await fetchLinksAdmin(`api/documents/${target.id}`)).json());
+  const moved = await fetchLinksAdmin(`api/documents/${target.id}`, 'PUT', { ...linkFields('Target', 'links-moved', linksTargetBody), version: latestTarget.version });
+  expect(moved.status).toBe(200);
+  const movedPage = linkIdentity.parse(await moved.json());
+  expect(await (await fetchLinksAdmin('export/snapshot')).text()).toContain('/links-moved/#');
+  const edited = await fetchLinksAdmin(`api/documents/${target.id}`, 'PUT', { ...linkFields('Target', 'links-moved', { type: 'doc', content: [linkHeading('Renamed')] }), version: movedPage.version });
+  expect(edited.status).toBe(200);
+  // Saving drafts must leave public link targets and revision timestamps untouched.
+  expect(await (await fetchLinksAdmin('export/snapshot')).text()).toContain('/links-moved/#');
+  expect((await fetchLinksAdmin('api/publish/changes', 'POST', {})).status).toBe(400);
+  const editedPage = linkIdentity.parse(await edited.json());
+  expect((await fetchLinksAdmin(`api/documents/${target.id}`, 'DELETE', { version: editedPage.version })).status).toBe(400);
+  expect((await fetchLinksAdmin(`api/documents/${source.id}`, 'DELETE', { version: source.version + 1 })).status).toBe(204);
+  expect((await fetchLinksAdmin('api/publish/changes', 'POST', {})).status).toBe(200);
+}, 60000);

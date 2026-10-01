@@ -1,3 +1,4 @@
+import { resolveDocumentLinks, type LinkPage } from '../documents/links.ts';
 import { z } from 'zod';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale } from '../locales.ts';
@@ -21,7 +22,9 @@ export async function publishedSnapshot(env: RuntimeEnv) {
   if (!folders || !labels || !pages) throw new Error('Incomplete published snapshot');
   const parent = new Map(z.array(folderRow).parse(folders.results).map((row) => [row.id, row]));
   const names = z.array(labelRow).parse(labels.results);
-  return { version: 3, documents: z.array(pageRow).parse(pages.results).map((row) => {
+  const rows = z.array(pageRow).parse(pages.results);
+  const linkPages: LinkPage[] = [];
+  const documents = rows.map((row) => {
     const ancestors: Folder[] = []; const seen = new Set<string>(); let cursor = row.folder_id;
     while (cursor) {
       if (seen.has(cursor)) throw new Error('Navigation cycle');
@@ -30,6 +33,7 @@ export async function publishedSnapshot(env: RuntimeEnv) {
       if (!folder) throw new Error('Missing folder');
       ancestors.unshift(folder); cursor = folder.parent_id;
     }
+    linkPages.push({ id: row.id, locale: row.locale, title: row.title, path: [...ancestors.map((folder) => folder.slug), row.slug].join('/'), content: JSON.parse(row.content_json) });
     return {
       id: row.id, locale: row.locale, title: row.title,
       slug: [...ancestors.map((folder) => folder.slug), row.slug].join('/'),
@@ -39,9 +43,10 @@ export async function publishedSnapshot(env: RuntimeEnv) {
         label: names.find((name) => name.folder_id === folder.id && name.locale === defaultLocale)?.name ?? folder.slug,
         translations: Object.fromEntries(names.filter((name) => name.folder_id === folder.id).map((name) => [name.locale, name.name])),
       })),
-      body: { format: 'markdown', value: renderDocumentContent(JSON.parse(row.content_json)) },
+      body: { format: 'markdown', value: '' },
       status: 'published', createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(), publishedAt: new Date(row.published_at).toISOString(),
     };
-  }) };
+  });
+  return { version: 3, documents: documents.map((document, index) => ({ ...document, body: { format: 'markdown', value: renderDocumentContent(resolveDocumentLinks(linkPages[index]!.content, document, linkPages)) } })) };
 }

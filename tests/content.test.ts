@@ -35,7 +35,7 @@ describe('Tiptap renderer', () => {
       { type: 'youtube', attrs: { src: 'https://youtu.be/dQw4w9WgXcQ' } },
       { type: 'callout', attrs: { title: 'Note' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Safe.' }] }] },
     ] });
-    expect(markdown).toContain('## **Guide**');
+    expect(markdown).toContain('## <span><strong>Guide</strong></span>');
     expect(markdown).toContain('[this](/guide)');
     expect(markdown).toContain('[Legacy](http://legacy.example.test/guide)');
     expect(markdown).toContain('![Image](/media/image.png)');

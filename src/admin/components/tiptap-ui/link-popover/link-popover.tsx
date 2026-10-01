@@ -1,7 +1,7 @@
 import { useAdminI18n } from '../../../i18n';
 "use client"
 
-import { forwardRef, useCallback, useEffect, useState } from "react"
+import { forwardRef, useCallback, useContext, useEffect, useRef, useState } from "react"
 import type { Editor } from "@tiptap/react"
 
 // --- Hooks ---
@@ -35,9 +35,15 @@ import {
 import { Input } from "@/components/tiptap-ui-primitive/input"
 import { ButtonGroup } from "@/components/tiptap-ui-primitive/button-group"
 
+import { PageLinksContext } from '../../../page-links';
+import { documentHeadings, publicPageUrl, type HeadingTarget } from '../../../../documents/links';
 import "./link-popover.scss"
 
 export interface LinkMainProps {
+  documentId: string | null
+  setDocumentId: React.Dispatch<React.SetStateAction<string | null>>
+  anchor: string | null
+  setAnchor: React.Dispatch<React.SetStateAction<string | null>>
   /**
    * The URL to set for the link.
    */
@@ -72,7 +78,7 @@ export interface LinkPopoverProps
   onOpenChange?: (isOpen: boolean) => void
   /**
    * Whether to automatically open the popover when a link is active.
-   * @default true
+   * @default false
    */
   autoOpenOnLinkActive?: boolean
 }
@@ -112,20 +118,48 @@ const LinkMain: React.FC<LinkMainProps> = ({
   setLink,
   removeLink,
   openLink,
-  isActive,
+  isActive, documentId, setDocumentId, anchor, setAnchor,
 }) => {
   const { t } = useAdminI18n();
   const isMobile = useIsBreakpoint()
+  const links = useContext(PageLinksContext)
+  const [mode, setMode] = useState<'page' | 'url'>(documentId || links && !url ? 'page' : 'url')
+  const [search, setSearch] = useState('')
+  const [headings, setHeadings] = useState<HeadingTarget[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => { if (documentId) setMode('page'); else if (isActive) setMode('url') }, [documentId, isActive])
+  useEffect(() => {
+    let active = true
+    setHeadings([]); setError('')
+    if (!documentId || !links) { setLoading(false); return }
+    setLoading(true)
+    links.loadPage(documentId).then((page) => {
+      if (!active) return
+      setHeadings(documentHeadings(page.content).filter((heading) => heading.level >= 1 && heading.level <= 6 && heading.id))
+    }).catch(() => { if (active) setError(t('Unable to load link target.')) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [documentId, links, t])
+  const target = links?.pages.find((page) => page.id === documentId)
+  useEffect(() => {
+    if (target) setUrl(`${publicPageUrl(target.path, target.locale)}${anchor ? `#${encodeURIComponent(anchor)}` : ''}`)
+  }, [target?.path, target?.locale, documentId, anchor, setUrl])
+  const canApply = !!url && (mode === 'url' || !!target && !loading && !error && (!anchor || headings.some((heading) => heading.id === anchor)))
+  const chooseAnchor = (value: string) => setAnchor(value || null)
+  const openTarget = () => {
+    if (target) window.open(`/admin/preview/${target.id}?locale=${encodeURIComponent(target.locale)}${anchor ? `#${encodeURIComponent(anchor)}` : ''}`, '_blank', 'noopener,noreferrer')
+    else openLink()
+  }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault()
-      setLink()
+      if (canApply) setLink()
     }
   }
 
   return (
-    <Card
+    <Card className="cms-link-card"
       style={{
         ...(isMobile ? { boxShadow: "none", border: 0 } : {}),
       }}
@@ -135,28 +169,51 @@ const LinkMain: React.FC<LinkMainProps> = ({
           ...(isMobile ? { padding: 0 } : {}),
         }}
       >
+        {links && <div className="cms-link-picker">
+          <label>{t('Link destination')}<select aria-label={t('Link destination')} value={mode} onChange={(event) => {
+            const mode = event.target.value === 'page' ? 'page' : 'url'
+            setMode(mode)
+            if (mode === 'url') { setDocumentId(null); setAnchor(null) }
+          }}><option value="url">URL</option><option value="page">{t('Page')}</option></select></label>
+          {mode === 'page' && <>
+            <input aria-label={t('Search pages')} placeholder={t('Search pages')} value={search} onChange={(event) => setSearch(event.target.value)} />
+            <label>{t('Page')}<select aria-label={t('Page')} value={documentId ?? ''} onChange={(event) => { setDocumentId(event.target.value || null); setAnchor(null); setUrl('') }}>
+              <option value="">{t('Select a page')}</option>
+              {documentId && !target && <option value={documentId}>{t('Link target unavailable')}</option>}
+              {links.pages.filter((page) => page.id === documentId || `${page.title} ${page.path}`.toLowerCase().includes(search.toLowerCase())).map((page) => <option key={page.id} value={page.id}>{page.title} /{page.path}/{page.draft ? ` (${t('Draft')})` : ''}</option>)}
+            </select></label>
+            <label>{t('Heading')}<select aria-label={t('Heading')} value={anchor ?? ''} disabled={!target || loading} onChange={(event) => chooseAnchor(event.target.value)}>
+              <option value="">{t('Page top')}</option>
+              {anchor && !headings.some((heading) => heading.id === anchor) && <option value={anchor}>{t('Link target unavailable')}</option>}
+              {headings.map((heading) => <option key={heading.id} value={heading.id}>H{heading.level} {heading.text}</option>)}
+            </select></label>
+            {error && <p role="alert">{error}</p>}
+          </>}
+        </div>}
+        {mode === 'page' && url && <p className="cms-link-destination">{url.replace(/(?:%[0-9a-f]{2})+/gi, (part) => { try { return decodeURI(part) } catch { return part } })}</p>}
         <CardItemGroup orientation="horizontal">
-          <Input
-            type="url"
+          {mode === 'url' && <Input
+            type="text"
             placeholder={t("Paste a link...")}
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setDocumentId(null); setAnchor(null); setUrl(e.target.value) }}
             onKeyDown={handleKeyDown}
             autoFocus
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
             className="tiptap-link-input"
-          />
+          />}
 
           <ButtonGroup>
             <Button
               type="button"
               onClick={setLink}
               title={t("Apply link")}
-              disabled={!url && !isActive}
-              variant="ghost"
+              disabled={!canApply}
+              variant={mode === 'page' ? 'primary' : 'ghost'}
             >
+              {mode === 'page' && <span className="tiptap-button-text">{t("Apply link")}</span>}
               <CornerDownLeftIcon className="tiptap-button-icon" />
             </Button>
           </ButtonGroup>
@@ -167,9 +224,9 @@ const LinkMain: React.FC<LinkMainProps> = ({
             <ButtonGroup>
               <Button
                 type="button"
-                onClick={openLink}
+                onClick={openTarget}
                 title="Open in new window"
-                disabled={!url && !isActive}
+                disabled={!canApply}
                 variant="ghost"
               >
                 <ExternalLinkIcon className="tiptap-button-icon" />
@@ -181,7 +238,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
                 type="button"
                 onClick={removeLink}
                 title={t("Remove link")}
-                disabled={!url && !isActive}
+                disabled={!isActive}
                 variant="ghost"
               >
                 <TrashIcon className="tiptap-button-icon" />
@@ -219,7 +276,7 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
       hideWhenUnavailable = false,
       onSetLink,
       onOpenChange,
-      autoOpenOnLinkActive = true,
+      autoOpenOnLinkActive = false,
       onClick,
       children,
       ...buttonProps
@@ -228,13 +285,14 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
   ) => {
     const { editor } = useTiptapEditor(providedEditor)
     const [isOpen, setIsOpen] = useState(false)
+    const skipAutoOpen = useRef(false)
 
     const {
       isVisible,
       canSet,
       isActive,
       url,
-      setUrl,
+      setUrl, documentId, setDocumentId, anchor, setAnchor,
       setLink,
       removeLink,
       openLink,
@@ -258,6 +316,7 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
     )
 
     const handleSetLink = useCallback(() => {
+      skipAutoOpen.current = true
       setLink()
       setIsOpen(false)
     }, [setLink])
@@ -273,7 +332,8 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
 
     useEffect(() => {
       if (shouldAutoOpen) {
-        setIsOpen(true)
+        if (!skipAutoOpen.current) setIsOpen(true)
+        skipAutoOpen.current = false
       }
     }, [shouldAutoOpen])
 
@@ -298,8 +358,9 @@ export const LinkPopover = forwardRef<HTMLButtonElement, LinkPopoverProps>(
           </LinkButton>
         </PopoverTrigger>
 
-        <PopoverContent collisionPadding={4}>
+        <PopoverContent collisionPadding={12} sticky="always">
           <LinkMain
+            documentId={documentId} setDocumentId={setDocumentId} anchor={anchor} setAnchor={setAnchor}
             url={url}
             setUrl={setUrl}
             setLink={handleSetLink}

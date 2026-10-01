@@ -43,6 +43,20 @@ Folder rows select folder settings; arrow buttons expand/collapse. Keyboard sele
 
 For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
 
+## Page and heading links
+
+The official Tiptap Link mark is extended with nullable `documentId` and `anchor` attributes; its name and standard commands are retained. `href` remains a normal URL for editor rendering and clipboard HTML, while the page ID is authoritative for CMS internal links. Ordinary URL links remain supported.
+
+The link picker searches saved pages by title/path and optionally selects H1–H6 headings. Draft pages are selectable. The current page's heading list uses the editor content; other pages use saved drafts. New pages must be saved once before they can be selected. Links inherit the source document language, falling back to the default language when that target translation is unavailable.
+
+Public paths are calculated from the current navigation tree without building. Export resolves internal references against the same published snapshot used for rendering; page moves and slug changes therefore update links on the next build without rewriting revisions. Same-page heading links become fragments. Preview resolves references to saved drafts on protected Admin preview routes; unavailable draft targets render as ordinary text.
+
+Publication validates links against existing public revisions plus the saved translations being published, before creating revisions or requesting the Hook. Deletion checks the remaining published content. Export validates again, so stale or missing page/heading targets fail the build. These checks apply to CMS page references, not manually entered URLs.
+
+Heading anchors use `github-slugger`, matching the public renderer and Preview, including duplicate-heading suffixes and the tab-label headings emitted by public Markdown. Heading renames or reordered identical headings require link reselection; no persistent heading IDs or link-index tables are introduced.
+
+Heading text is rendered as escaped inline HTML inside Markdown headings, preserving literal punctuation, formatting, and edge spaces while retaining Astro's heading IDs and TOC metadata. Preview displays every tab as a labeled section, matching public Docs, so links into any tab's content remain visible.
+
 ## Languages
 
 Document languages, site title, and public URL are configured in `src/site.config.ts`. Navigation uses the default locale; document/folder translations are edited separately. Default-locale public paths are unprefixed, other locales use prefixes, and untranslated routes use Starlight's default-language fallback. The Admin remembers the last editing locale.

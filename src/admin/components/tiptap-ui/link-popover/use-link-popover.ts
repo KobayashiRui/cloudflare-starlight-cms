@@ -108,6 +108,8 @@ export function shouldShowLinkButton(props: {
 export function useLinkHandler(props: LinkHandlerProps) {
   const { editor, onSetLink } = props
   const [url, setUrl] = useState<string | null>(null)
+  const [documentId, setDocumentId] = useState<string | null>(null)
+  const [anchor, setAnchor] = useState<string | null>(null)
 
   useEffect(() => {
     if (!editor) return
@@ -124,10 +126,13 @@ export function useLinkHandler(props: LinkHandlerProps) {
     if (!editor) return
 
     const updateLinkState = () => {
-      const { href } = editor.getAttributes("link")
+      const { href, documentId, anchor } = editor.getAttributes("link")
       setUrl(href || "")
+      setDocumentId(typeof documentId === 'string' ? documentId : null)
+      setAnchor(typeof anchor === 'string' ? anchor : null)
     }
 
+    updateLinkState()
     editor.on("selectionUpdate", updateLinkState)
     return () => {
       editor.off("selectionUpdate", updateLinkState)
@@ -135,14 +140,14 @@ export function useLinkHandler(props: LinkHandlerProps) {
   }, [editor])
 
   const setLink = useCallback(() => {
-    if (!url || !editor) return
+    if (!url || !editor || !editor.can().setLink({ href: url })) return
 
     const { selection } = editor.state
-    const isEmpty = selection.empty
+    const isEmpty = selection.empty && !editor.isActive("link")
 
     let chain = editor.chain().focus()
 
-    chain = chain.extendMarkRange("link").setLink({ href: url })
+    chain = chain.extendMarkRange("link").setLink({ href: url }).setMark("link", { documentId, anchor })
 
     if (isEmpty) {
       chain = chain.insertContent({ type: "text", text: url })
@@ -153,7 +158,7 @@ export function useLinkHandler(props: LinkHandlerProps) {
     setUrl(null)
 
     onSetLink?.()
-  }, [editor, onSetLink, url])
+  }, [editor, onSetLink, url, documentId, anchor])
 
   const removeLink = useCallback(() => {
     if (!editor) return
@@ -182,6 +187,7 @@ export function useLinkHandler(props: LinkHandlerProps) {
   return {
     url: url || "",
     setUrl,
+    documentId, setDocumentId, anchor, setAnchor,
     setLink,
     removeLink,
     openLink,

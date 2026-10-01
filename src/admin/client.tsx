@@ -10,6 +10,8 @@ import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { PageLinksContext, type PageLinkOption } from './page-links';
+import { navigationPath } from '../documents/links';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
 import { listLocalDocumentDrafts, localDocumentKey, readLocalDocumentDraft, removeLocalDocumentDraft, writeLocalDocumentDraft, type LocalDocumentDraft } from './local-drafts';
@@ -1082,7 +1084,19 @@ function App() {
             </div>
             <section className="cms-editor-field" aria-label={t("Content")}>
               <header className="cms-editor-field-header"><span>{t("Content")}</span></header>
-              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
+              <div className="cms-simple-editor"><PageLinksContext.Provider value={{
+                pages: treeItems.filter((item) => item.kind === 'document' && item.documentId).map((item): PageLinkOption => {
+                  const targetLocale = item.translationLocales.includes(locale) ? locale : defaultLocale;
+                  return { id: item.documentId!, title: item.name, path: navigationPath(item.id, treeItems), locale: targetLocale, draft: item.translationStates.find((state) => state.locale === targetLocale)?.state === 'draft' };
+                }),
+                loadPage: async (id) => {
+                  const item = treeItems.find((item) => item.documentId === id);
+                  if (!item) throw new Error('Missing page');
+                  const targetLocale = item.translationLocales.includes(locale) ? locale : defaultLocale;
+                  const page = id === current.id && targetLocale === locale ? { ...current, contentJson: editor?.getJSON() ?? current.contentJson } : await api<DocumentRecord>(`/documents/${id}`, {}, targetLocale);
+                  return { id, title: page.title, locale: targetLocale, path: navigationPath(item.id, treeItems), content: page.contentJson };
+                },
+              }}><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
                 const contentJson = updatedEditor.getJSON();
                 editVersion.current += 1;
                 setHasPendingImages(hasPendingImageUpload(contentJson));
@@ -1098,7 +1112,7 @@ function App() {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
-              }} /></div>
+              }} /></PageLinksContext.Provider></div>
             </section>
             {current.id && <section className="cms-danger-zone" aria-label={t("Danger zone")}><div><h2>{t("Delete page")}</h2><p>{t("Permanently remove this page and its translations.")}</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>{t("Delete page")}</button></section>}
           </section>

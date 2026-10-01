@@ -22,6 +22,34 @@ Verification:
 
 No database migration or production build/deploy configuration change is required. Existing projects receive the changes through CLI upgrades. npm publication and push have not been performed during this preparation.
 
+## Page and heading links — 2026-10-01
+
+Implemented:
+
+- Extend the official Tiptap Link through its public extension API, retaining standard Link commands and ordinary URL links.
+- Search saved pages, including drafts, and select an optional H1–H6 heading from the existing link UI on desktop and mobile.
+- Store page IDs and heading anchors in Tiptap JSON; derive paths from navigation without a build and resolve public links from one published snapshot.
+- Navigate between saved drafts through protected Preview routes; same-page headings use fragments.
+- Validate references before publication and deletion, and again during public export. Same-language targets use default-language fallback when needed.
+- Preserve link selections through saving/reopening and clipboard HTML attributes. Heading renames and reordered duplicates require reselection.
+
+No database migration, dependency addition, or deployment configuration change is required.
+
+Verification:
+
+- Type checks and all 62 tests passed, including actual published Astro builds and H1 anchors.
+- Empty-site build and Worker dry run passed.
+- An isolated local Worker and test database verified selecting an unpublished page's H2, saving, reopening, and editing destinations while retaining link text. Desktop and 390px-wide screenshots verified labeled controls, readable URLs, an explicit apply button, and a Popover contained within the viewport. Link editing opens from the toolbar and does not interrupt typing.
+- Automated integration covers draft Preview, batch publication, Japanese and duplicate heading IDs in public HTML, URL changes, unchanged public content after draft saves, rejected broken publications, and referenced-page deletion.
+
+No npm publication or production deployment was performed.
+
+Commit review fixes — 2026-10-01:
+
+- Preserve literal heading text through escaped inline HTML within Markdown headings. The picker, public HTML, Preview, and Astro TOC now agree for edge spaces, punctuation, formatting, line breaks, and duplicates.
+- Render Preview tabs as labeled sections, matching public Docs, so headings in every section are visible when navigating by fragment.
+- Type checks, all 64 tests (including published Astro builds), an empty-site build, Worker dry run, and `git diff --check` passed. Regression cases cover heading IDs and TOC metadata, literal HTML safety, and links into the second tab's content.
+
 ## Recent milestones
 
 | Version | Changes |

@@ -1,3 +1,4 @@
+import { assertPublishedLinks } from './link-pages.ts';
 import { siteDeliveryStatement } from '../publish/record.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
 import type { RuntimeEnv } from '../env.ts';
@@ -120,6 +121,7 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
   const current = await getTranslation(env, id, locale);
   if (current.version !== version) throw new DocumentVersionConflictError();
   assertPublishable(current.content_json);
+  try { await assertPublishedLinks(env, [current]); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid page link'); }
   const now = Date.now();
   const revisionId = crypto.randomUUID();
   const results = await env.DB.batch([
@@ -153,6 +155,7 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
     ORDER BY t.updated_at,t.id`).all<TranslationRow>();
   if (candidates.results.length === 0) return [];
   for (const candidate of candidates.results) assertPublishable(candidate.content_json);
+  try { await assertPublishedLinks(env, candidates.results); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid page link'); }
 
   const now = Date.now();
   const revisions = candidates.results.map(() => crypto.randomUUID());
@@ -203,6 +206,8 @@ export async function restoreRevision(env: RuntimeEnv, id: string, revisionId: s
 
 export async function deleteDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
+  if (current.version !== version) throw new DocumentVersionConflictError();
+  try { await assertPublishedLinks(env, [], { id, locale }); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Page is linked from published content'); }
   const results = await env.DB.batch([
     siteDeliveryStatement(env, 'EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=? AND published_revision_id IS NOT NULL)', [current.id, version]),
     env.DB.prepare('DELETE FROM document_translation WHERE id=? AND version=? RETURNING id').bind(current.id, version),

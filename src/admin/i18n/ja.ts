@@ -1,6 +1,14 @@
 import type { en } from './en';
 
 export const ja = {
+  "Page": "ページ",
+  "Draft": "未公開",
+  "Link destination": "リンク先",
+  "Search pages": "ページを検索",
+  "Select a page": "ページを選択",
+  "Page top": "ページ先頭",
+  "Link target unavailable": "リンク先が見つかりません",
+  "Unable to load link target.": "リンク先を読み込めません。",
   "Admin language": "表示言語",
   "Document language": "文書の言語",
   "Documents": "文書",

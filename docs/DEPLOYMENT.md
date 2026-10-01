@@ -30,7 +30,7 @@ Add a human policy with action **Allow** and the permitted email addresses, doma
 
 ## 3. Attach the Docs domain
 
-Attach `docs.example.com` to the Worker, then set the public origin in `src/site.config.ts` and commit it:
+Attach `docs.example.com` to the Worker, then set the public origin in `src/site.config.ts`. Commit it after configuring the build credentials in step 4:
 
 ```ts
 export const siteConfig = {
@@ -61,6 +61,8 @@ CF_ACCESS_CLIENT_SECRET
 
 These are build secrets, not Worker runtime variables. Keep the Service Auth policy separate from the human Allow policy. A Service Token added only to an Allow policy is redirected to the Access login page.
 
+Once these credentials are configured, commit the public origin from step 3 to enable builds from the published snapshot.
+
 ## 5. Configure public media
 
 After the first deployment provisions R2, attach a public custom domain such as `docs-media.example.com` to the `MEDIA` bucket. Set its origin in `wrangler.jsonc`:
@@ -89,7 +91,7 @@ Alternatively, add it in **Worker → Settings → Variables and Secrets**. Do n
 
 The Deploy Hook URL is a credential: anyone who has it can request a build. Keep it out of source control and replace the hook if it is exposed.
 
-`Publish page` publishes one Page and locale. `Publish changes` publishes every saved Draft or saved change and requests one build. Hook acceptance means the build was requested; it does not mean deployment completed. Retry failed build requests from the Admin header.
+Use `Save draft` to save edits, then the header `Publish` button to publish saved changes across every page and language and request one build. Unsaved editor changes must be saved first. Hook acceptance means the build was requested; it does not mean deployment completed. Retry failed build requests from the Admin header.
 
 ## Homepage and landing pages
 

@@ -266,5 +266,7 @@ export const en = {
   "Dragging {names}. Current position: {position}. Press {up} and {down} to move, {drop} to drop, {cancel} to cancel.": "Dragging {names}. Current position: {position}. Press {up} and {down} to move, {drop} to drop, {cancel} to cancel.",
   "None": "None",
   "in {name}": "in {name}",
-  "{index} of {count} in {name}": "{index} of {count} in {name}"
+  "{index} of {count} in {name}": "{index} of {count} in {name}",
+  "Expand {name}": "Expand {name}",
+  "Collapse {name}": "Collapse {name}"
 } as const;

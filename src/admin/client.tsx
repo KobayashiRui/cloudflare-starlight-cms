@@ -1,3 +1,4 @@
+import { liveQuery } from 'dexie';
 import { adminConfig } from '../admin.config';
 import { message, type AdminMessage, isAdminLanguage } from './i18n/language';
 import { AdminLanguageProvider, useAdminI18n } from './i18n';
@@ -197,6 +198,14 @@ function App() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [localDrafts, setLocalDrafts] = useState<Pick<LocalDocumentDraft, 'documentId' | 'locale'>[]>([]);
+  useEffect(() => {
+    const subscription = liveQuery(listLocalDocumentDrafts).subscribe({
+      next: (drafts) => setLocalDrafts(drafts),
+      error: () => setLocalDrafts([]),
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const [hasPendingImages, setHasPendingImages] = useState(false);
   const [versionConflictKey, setVersionConflictKey] = useState<string | null>(null);
   const mutationInFlight = useRef(false);
@@ -1006,6 +1015,11 @@ function App() {
     </section>;
   };
 
+  const unsavedDocumentIds = [...new Set([
+    ...localDrafts.filter((draft) => draft.documentId !== current?.id || draft.locale !== current.locale || Boolean(localDraftConflict)).map((draft) => draft.documentId),
+    ...(current?.id && isDirty ? [current.id] : []),
+  ])];
+
   return <div className="cms-shell">
     <header className="cms-topbar">
       <a className="cms-brand" href="/admin/" aria-label={`${siteConfig.title} home`}><img className="cms-brand-logo" src={logoUrl} alt="" /></a>
@@ -1028,7 +1042,7 @@ function App() {
         <div className="cms-sidebar-heading"><span>{t("Documents")}</span><span className="cms-count">{documents.length}</span></div>
         <label className="cms-search"><span className="sr-only">{t("Search documents")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("Search documents")} /></label>
         <div className="cms-navigation-actions"><button className="cms-new-document" type="button" onClick={() => startNewDocument()}>{t("New page")}</button><button className="cms-new-folder" type="button" onClick={() => openNewFolder()}>{t("New folder")}</button></div>
-        <NavigationTree key={treeItems.map((item) => item.id).join(':')} items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id || missingDocumentId || undefined} selectedFolderId={selectedFolderId} temporaryDocument={current && !current.id ? { name: fields.title.trim() || t("Untitled page"), parentId: current.folderId ? `folder:${current.folderId}` : null } : undefined} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
+        <NavigationTree items={treeItems.filter((item) => item.name.toLowerCase().includes(search.trim().toLowerCase()))} selectedDocumentId={current?.id || missingDocumentId || undefined} selectedFolderId={selectedFolderId} unsavedDocumentIds={unsavedDocumentIds} temporaryDocument={current && !current.id ? { name: fields.title.trim() || t("Untitled page"), parentId: current.folderId ? `folder:${current.folderId}` : null } : undefined} onSelectDocument={selectTreeDocument} onSelectFolder={selectFolder} onChangeChildren={replaceTreeChildren} onTreeChanged={treeChanged} canReorder={!search.trim()} />
       </aside>
 
       <main className="cms-main">
@@ -1036,7 +1050,7 @@ function App() {
           {renderBreadcrumb(fields.folderId, fields.title || fields.slug || t("Untitled document"))}
           <section className="cms-document-actions" aria-label={t("Document actions")}>
             <div className="cms-document-state">
-              <span className={`cms-status cms-status-${hasVersionConflict || localDraftConflict ? 'draft' : !current.id || isDirty ? 'unsaved' : currentPublicationState === 'published' ? 'published' : 'pending'}`}>{hasVersionConflict || localDraftConflict ? t("Review required") : !current.id ? t("New page") : isDirty ? t("Unsaved changes") : currentPublicationState === 'published' ? t("Published") : t("Ready to publish")}</span>
+              <span className={`cms-status cms-status-${hasVersionConflict || localDraftConflict ? 'draft' : !current.id || isDirty ? 'unsaved' : currentPublicationState === 'published' ? 'published' : 'pending'}`}>{hasVersionConflict || localDraftConflict ? t('Review required') : !current.id || isDirty ? t('Unsaved') : currentPublicationState === 'published' ? t('Published') : t('Ready to publish')}</span>
               <span>{hasVersionConflict || localDraftConflict ? t("Choose which saved content to use below.") : hasPendingImages ? t("Finish uploading images or remove the empty upload block.") : !current.id ? t("Save draft to create this page.") : isDirty ? localSaveState === 'error' ? t("Browser backup failed. Save draft to keep your edits.") : t("Save draft before publishing.") : currentPublicationState === 'published' ? t("No changes to publish.") : t("Saved changes will be included when you publish.")}</span>
             </div>
             <div className="cms-document-action-buttons">

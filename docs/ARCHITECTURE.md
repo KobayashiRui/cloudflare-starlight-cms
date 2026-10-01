@@ -1,113 +1,84 @@
 # Architecture
-2026-09-09採用。P0〜P2はローカルMiniflareで確認済み。P3/P4は未完成。
 
-## 1 repo / 1 Worker
-公開Docs: Astro/Starlight SSG + Pagefind → Workers Static Assets。
-管理: /admin（redirectのみ）と /admin/* → Access → Worker → D1/Drizzle、R2。
-管理HTTPはHono、管理APIは /admin/api/*。`/admin/app.js`を含む`/admin/*`は本番では1つのAccess applicationのpath policyで保護し、
-local Wranglerでは認証なしで動作する。選択的Worker-first設定は公式schemaで確認済みで、
-公開閲覧でWorker/D1を呼ばない。
-SonicJSなし。汎用CMS/Auth/RBAC/plugin/workflowは実装しない。
+One repository, one Cloudflare Worker. React provides the Admin, D1 stores content, R2 stores media, and Astro/Starlight generates public Docs with Pagefind search.
 
-## 編集・Navigation・公開
-`folder`と`document`は言語に依存しないidentityで、Treeの親子、URL segment、順序だけを持つ。
-表示名は`folder_translation`、編集内容は`document_translation`に置く。Navigation Treeは
-`src/locales.ts`の`defaultLocale`（`en`）で固定し、選択したDocumentの編集画面だけでtranslationを
-切り替える。Tiptap JSONがそのTranslationのDraft正本で、
-`published_revision_id`だけが公開中の不変snapshotを指す。`draft_revision_id`と`status`列は持たない。
-`published_revision_id IS NULL`が未公開を表す。Save DraftとRestoreは現在のTranslationを更新する。Publish時だけ現在のTranslationからrevisionを新規追加して
-公開pointerを更新する。既存revisionは削除しない。そのためDraftとPublishedは分離される。
+For installation and operations, see [Deployment](DEPLOYMENT.md) and [Troubleshooting](TROUBLESHOOTING.md).
 
-既存Pageの未保存編集はAdmin browser内のDexie/IndexedDBにだけ350ms debounceで保存する。保存対象は
-title、description、URL segment、Tiptap JSONと、その下書きが基づくD1 versionである。
-Page移動、言語切替、reloadではD1 versionが同じ場合にそのローカル下書きを復元する。D1側が先に更新されていた場合は
-ローカル変更を自動上書きせず、editorが「saved draftを使う」か「local changesを復元する」か選ぶ。
-`Save draft`はD1の最新下書きを更新し、途中保存のrevisionを追加しない。右上の`Publish`は全ページ・全言語のD1へ保存済みの内容だけを扱う。ページ内に別の公開ボタンは置かない。
-新規Pageは安定したdocument IDを持たないため、最初の`Save draft`まではbrowser下書きの対象外である。
-このbufferは端末・browser profileごとの補助であり、共有・同期・共同編集の機能ではない。
-Adminは状態を1つのbadge（New page／Unsaved changes／Ready to publish／Published）と次の操作を示す短い説明で表示する。保存済み内容が公開revisionと同じ場合だけPublishedとなる。公開APIは今回確定した文書とversionを返し、全体公開も選択中のbaselineを同期する。要求中の追加編集は保持する。version競合では編集を保持して最新下書きの再読込とlocal変更の選択を案内する。画像の一時upload blockは保存を拒否し、upload失敗を画面へ表示する。
-Save前のNew pageはAdmin内だけの一時Tree nodeとして親Folder（rootを含む）に表示し、D1へ書き込むまではTreeの並べ替えを無効にする。選択localeのtranslationが未作成でも、既存のTree nodeを選択状態として保持する。
-Adminの`New page`と`New folder`は、選択中Folderの直下、または選択中Pageと同じ親階層へ作成する。rootのPageを選択している場合はrootへ作成する。
+## Routing and access
 
-Navigationはcontent revisionと分離した現在のTree状態である。`folder.parent_id IS NULL`と
-`document.folder_id IS NULL`はrootを表す。Folderは本文を持たないDocs専用のNavigation nodeで、
-FolderとDocumentは同じ親内でslugを共有できない。DBのpartial unique indexで各テーブル内の
-root/child slugを保護し、テーブルをまたぐ衝突はNavigation APIが検査する。
-Folderのrename/move、Documentのfolder移動・並べ替えはNavigation変更としてそのまま公開Treeへ反映し、
-Deploy Hookの配送対象にする。Document Restoreは本文/title/descriptionだけを戻し、
-Navigationは復元しない。
+- Public Docs are served from Workers Static Assets without runtime D1 or API calls.
+- `/admin` only redirects to `/admin/`. `/admin/*`, including management assets, APIs, export, and Preview, runs through the Worker.
+- One Cloudflare Access application protects `admin/*` in production. Human access uses an Allow policy; Workers Builds uses a Service Auth policy in the same application.
+- The Worker uses Hono for routes and CSRF checks on mutations. It does not implement accounts, sessions, roles, or Access JWT validation. Everyone admitted by Access has the same management privileges.
+- Local Wrangler runs on localhost without authentication. `workers_dev` and preview URLs stay disabled in production.
 
-DocumentとFolderの`slug`は一階層のURL segmentであり、全translationで共有する。exportはTreeをたどり完全なpathを作り、
-そのpathをStarlight loaderのfilePathに渡す。Treeがそのまま公開URLとStarlight sidebarの階層となる。
-AdminのTree UIは`@headless-tree/core`と`@headless-tree/react`を使う。展開、Folder/Page選択、
-Folder作成・rename・削除、Page作成、pointer D&Dとkeyboard D&Dを実装済みである。D&Dは公式の
-`dragAndDropFeature`／`keyboardDragAndDropFeature`のtarget semanticsを使い、Workerが移動先の
-slug衝突、循環、同階層の順序再採番を検査する。独自Tree engineは作らない。
-Tiptap既存rendererを利用し、Callout→Aside、Steps→Steps、Tabs→Tabs、
-Video→静的video、YouTube→privacy-enhanced iframeの不足だけを実装する。YouTubeは公式extensionを使い、
-公開・Previewともに許可済みURLから抽出したvideo IDを`youtube-nocookie.com`へ正規化する。任意iframeは扱わない。
-Astro Loaderとの接続はlocal D1 exportから実際の出力で検証済み。
-未知nodeの黙殺や本文のMDX/JS実行は禁止。
+The build Service Token can access the Admin as well as export. Treat the build environment as trusted and rotate the token and build secrets if exposed.
 
-Previewは`/admin/preview/:documentId?locale=`で保存済みDraftを表示する。Astro buildは
-`src/pages/cms-preview-shell.astro`（locale routeを含む）を通常のStarlight設定・ユーザーCSS・header/sidebarとともに生成する。
-WorkerはそのStatic Assets shellを`env.ASSETS.fetch()`で読み、D1のDraft title・description・本文を
-HTMLRewriterで差し込む。Previewは単一localeのDraftを示すためpublic language selectorを除去する。Previewも`/admin/*`のAccess配下であり、`Cache-Control: private, no-store`と
-`X-Robots-Tag: noindex, nofollow`を返す。Preview操作では静的build、Pagefind、Deploy Hookを実行しない。
-Previewでは認証済みAdmin media proxyも利用できる。公開snapshotでは引き続き`MEDIA_PUBLIC_URL`が必要で、Publish前に既存公開rendererによる検証を行う。
-本文のTiptap JSONは一度だけrenderし、GitHub互換slugの見出しanchorとdesktop/mobile TOCを同時に作る。
-Starlight build済みのTOCコンテナ・class・幅は維持し、静的shellの`Overview`だけをDraft見出しの項目へ置換する。
-本文は公開Markdown rendererと同じ検証済みTiptap node modelから安全なHTMLを生成する。Astroのlayout・theme・
-sidebar・ユーザーCSSは同じ成果物を使うが、Astro build専用の任意MDX/remark変換やShikiの実行をWorkerで再実行しない。
+## Content and navigation
 
-## Build
-Access Applicationは`admin/*`の1つだけにする。人間向け`Allow` policyと、Workers Builds用Service Tokenを
-Includeした`Service Auth` policyを同じApplicationに置く。`/admin`はこのwildcardに一致しないため、Workerは
-`/admin/`へのredirectだけを返す。localでは認証なしで動作する。WorkerはAccess JWT/AUDを解釈しない。
-BuildはService Tokenを`CF-Access-Client-Id`と`CF-Access-Client-Secret`で提示してexportを取得する。
-この単純な構成ではBuild Tokenも`/admin/*`へ到達できるため、Build環境を管理権限を持つ信頼済み環境として扱い、
-漏えい時はTokenを無効化または削除してBuild secretsを更新する。
-exportはDB内部schemaと分離したversioned DTOでPublished全件の一貫したsnapshotを返す。
-Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回deployを維持する。
-初回は明示的な空サイト＋Adminをdeployし、export設定後に通常buildへ移る。
-通信失敗時のfallbackとして初回モードを使わない。
+| Storage | Purpose |
+| --- | --- |
+| `folder` / `document` | Shared identity, parent, URL segment, and order |
+| `folder_translation` | Folder names by locale |
+| `document_translation` | Current editable title, description, content, and version |
+| `document_revision` | Immutable publication snapshots |
+| `published_revision_id` | The revision currently used by public export |
+| `publish_delivery` | Build-request delivery and retry records |
 
-localの`npm run dev`はrootのNode coordinatorがAdmin Worker（8787）とStatic Docs preview（4321）を起動する。
-Published snapshotの変更時だけAstro buildを実行し、`dist`をWorker用`.dev-assets`へ同期するため、local Previewも
-productionと同じStatic Assets shellを読む。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。Adminはesbuild watchで更新する。
-これはlocal限定の開発補助であり、appsや二つ目のWorkerは追加しない。
+Tiptap JSON is the content source. There are no draft-revision pointers or status columns; publication state is derived from the current translation and its published revision.
 
-## Hook / Media / Setup
-公開revision確定と`publish_delivery`の保存を同じD1 batchで行った後、Deploy Hook→Workers Builds→
-同Workerを更新する。配送記録は対象（document/site）、Hook要求回数、Cloudflare build UUID、受理／失敗、
-最後のエラー、次回retry時刻を持つ。Hook受理は公開完了ではない。`next_retry_at`はpending送信の30秒の占有期限として使用する（自動retry時刻ではない）。failedと期限切れpendingをAdminから手動retryできる。
-URL・Tree変更と削除は同じD1 batchにsite配送を記録し、更新成功後に送信する。
-Hook URLがないlocalは`skipped`として記録し、外部へは送信しない。削除・slug・Navigation変更は自動配送する。単一translationの公開APIは現在のtranslationだけを公開し、headerの`Publish`は保存済みのDraft／変更を全言語横断で公開して一つのsite配送を記録する。公開内容を変えない手動rebuild操作は持たず、失敗した配送だけをretryできる。実配送はP4で実Accessとともに検証する。
-Mediaは既存upload UI＋R2＋D1 metadataと小さなPicker。
-通常リンクはHTTP(S)・site-relative pathを許可する。一方、本文へ保存する画像・動画URLは公開HTTPS originまたはsite-relative pathだけを許可し、HTTP・private network・Admin media proxy URLは公開時に拒否する。これはHTTPS Admin/Public DocsでのMixed ContentとPrivate Network Access失敗を防ぐ。
-AdminはHTML貼り付け時に不正な画像・動画nodeを除外し、alt textだけを残せる場合は本文textへ戻す。保存時に失敗させず、Media uploadを案内する。
-旧版で保存されたHTTPまたはlocal-network mediaは、Adminで開く際にHTTPSが必要である旨の通常textへ置換する。新規入力は引き続き拒否し、
-editorは置換結果を`Save draft`して恒久化できる。既存値のためにPage全体を開けなくしない。
-6形式、片側失敗、使用中削除を検証。Worker経由uploadは10 MiBまでとし、大きい動画は
-R2 multipart uploadを追加して扱う。`MEDIA_PUBLIC_URL`はR2 public/custom domainに必須で、
-Admin専用URLを含むPublished snapshotはbuildを失敗させる。公開R2 URLはDraftでも秘匿されない。
-Accessだけが人の許可を決定する。WorkerはJWTを解釈せず、CSRF対策だけを実施する。
-`wrangler.jsonc`はaccount固有のD1 database ID、D1 database name、R2 bucket nameを持たず、`DB`と`MEDIA`のbindingだけを宣言する。
-Cloudflare Automatic Resource Provisioningが初回deploy時にD1/R2を作成してbindingする。GitHub経由のdeployでは作成後のIDはDashboardで管理され、repositoryへ書き戻されない。
-create CLIは出力先のproject名をWorker名へ設定するため、生成projectごとに自動作成リソースも分離される。
-Workers Buildsは`npm run build`と標準の`npx wrangler deploy`を実行する。初回は`siteConfig.url`が空のため空サイトを生成する。custom domainをWorkerへ接続する前に、予定hostnameの`admin/*`を保護する単一のSelf-hosted public Access Applicationと人間向けAllow policyを作成する。domain接続後、同じApplicationへBuild用Service TokenをIncludeしたService Auth policyを追加し、Client IDとClient SecretをWorkers BuildsのBuild Secretへ登録する。その後に生成projectの`siteConfig.url`をcommitして通常buildへ移る。`CMS_EXPORT_URL`は設定せず、このoriginからsnapshot endpointを導出する。R2 custom domainは`docs-media.example.com`のようにDocs Workerとは別hostnameへ接続し、`MEDIA_PUBLIC_URL`としてsource管理する。管理API・export・previewのDB利用前に同梱の0001/0002を適用し、Wrangler互換の`d1_migrations`へ記録する。各migrationのDDLと履歴はD1 batchでまとめ、失敗時は503を返して次回再試行する。現在のidempotent CREATE文のみが対象で、ALTER/backfillは別途更新手順が必要。成功済みbindingはWeakSetで記憶し、実行中Promiseはリクエスト間で共有しない。公開配信・Admin HTML/assets・/admin redirectではDB初期化しない。非本番ブランチbuildはDashboardで無効にする。
-まず単一repoで完成。薄いテンプレート/パッケージ公開はMVP後。
-Cloudflare/Astro非公式。無料運用は保証しない。
+Save draft and Restore update the current translation. Publish creates a revision and updates the publication pointer. Draft saves do not change public content or its revision timestamp. Restore changes content fields, not navigation. Saves compare versions and reject conflicts rather than silently overwriting another edit.
 
-## i18n
-サイト名・URL・対応言語は`src/site.config.ts`で定義し、AdminとStarlightで共有する。新しいPage/Folderはdefault locale（現在は`en`）で作成し、
-別言語はDocumentのLanguageから既存translationをDraftとして複製する。Treeは言語によって切り替えず、
-Folder/Pageの構造は常に共通である。Published snapshotはlocaleごとの公開revisionだけを含むv3 DTOであり、
-Starlight loaderはdefault localeをunprefixed path、その他をlocale prefixのfilePathへ変換する。Draft本文は公開されない。未翻訳のURLにはStarlight標準の既定言語fallbackを使用する。
-Adminが最後に選んだ編集localeをbrowser local storageに保持し、別PageやFolderを選んでもdefault localeへ戻さない。
+Folder/page structure and URL segments are shared across locales. A null parent represents the root. Slugs must be unique among folders and pages with the same parent. Export walks this tree to generate public paths and the Starlight sidebar.
 
-公開exportはFolder・翻訳名・Published revisionを同一D1 batchで読む。更新日時は公開revisionの日時を使う。Navigation祖先のラベル・翻訳・順序を小さなDTOとして送り、Starlight標準sidebarへ変換する。Astro configとContent Loaderは同じbuildプロセス内で一度取得したsnapshotを共有する。
+Navigation changes and deletion take effect independently of content revisions and request a public rebuild. The URL field explains this distinction.
 
-## Adminの表示言語
+## Admin and editor
 
-AdminのReact UIは`src/admin.config.ts`と`src/admin/i18n/`の静的辞書を使う。文書locale／Starlightの言語設定とは独立する。保存した表示言語を優先し、未設定時はブラウザの対応言語、次に既定値を使う。React Contextの切替は文書の選択・編集内容・公開操作を変更しない。設定・翻訳ファイルの変更後はAdmin assetsを再buildする。
+The Admin uses React, the official MIT Tiptap Simple Editor source, and Headless Tree. Existing extensions handle standard editing; Docs-specific nodes cover callouts, steps, tabs, and video. YouTube uses the official extension and privacy-enhanced embeds. Unknown content nodes are rejected, and document content is never executed as MDX or JavaScript.
+
+Save draft stores the current editable content. The header Publish button publishes saved changes across all pages and document languages. Unsaved editor changes must be saved first. The editor shows its current state and next action; the tree shows Unsaved or Ready to publish when applicable.
+
+Folder rows select folder settings; arrow buttons expand/collapse. Keyboard selection, expansion, and drag-and-drop use Headless Tree. Reordering preserves expansion state. The API validates destination parents, slug collisions, cycles, and sibling ordering.
+
+For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
+
+## Languages
+
+Document languages, site title, and public URL are configured in `src/site.config.ts`. Navigation uses the default locale; document/folder translations are edited separately. Default-locale public paths are unprefixed, other locales use prefixes, and untranslated routes use Starlight's default-language fallback. The Admin remembers the last editing locale.
+
+Create content in the default locale, then copy existing content to add translations. Changing the default locale after content exists requires a data-migration plan; configuration changes do not translate or convert existing data automatically.
+
+Admin display language is independent of document language. `src/admin.config.ts` defines available languages and the fallback; `src/admin/i18n/` holds typed dictionaries. Selection precedence is saved preference, supported browser language, then configured fallback. React Context changes text without losing edits or recreating the editor. Configuration and translation changes require rebuilding Admin assets.
+
+## Preview and public builds
+
+`/admin/preview/:documentId?locale=` displays a saved draft inside the normal Starlight preview shell. The Worker reads the built shell through `ASSETS` and inserts safely rendered draft content with HTMLRewriter. Preview uses Access, `private, no-store`, and `noindex`; it does not trigger Astro, Pagefind, or a Deploy Hook.
+
+Preview shares the site's layout, theme, user CSS, and heading/TOC structure, and can use the authenticated Admin media proxy. It does not rerun arbitrary build-time MDX/remark transforms or Shiki in the Worker.
+
+`/admin/export/snapshot` returns a versioned, consistent snapshot of all published content and navigation. The export DTO is separate from the database schema. Astro configuration and the content loader share one fetched snapshot per build. Validation or rendering failures fail the build instead of falling back to demo or empty content.
+
+Publication pointers and delivery records are persisted together before requesting the Deploy Hook. Hook acceptance means a build was requested, not that deployment completed. Failed and expired pending requests can be retried from the Admin. Without a Hook URL, local deliveries are marked skipped.
+
+## Media
+
+R2 holds media objects; D1 holds metadata. The Admin adds upload, selection, and insertion controls. Worker uploads support PNG, JPEG, WebP, AVIF, MP4, and WebM up to 10 MiB, checking actual format, Content-Type, and size. Partial storage failures are handled, and media referenced by drafts, publications, or history cannot be deleted; browser drafts also prevent deletion locally.
+
+Published media requires a public HTTPS URL or supported site-relative path. Admin-only URLs, HTTP media, and private-network hosts cannot be published. Normal HTTP(S) links remain supported. Unsafe pasted media is removed; legacy unsafe nodes are repaired to explanatory text when opened. Incomplete upload blocks cannot be saved.
+
+Configure a separate R2 custom domain through `MEDIA_PUBLIC_URL`. Draft media stored at a public R2 URL is also public. Multipart uploads for larger videos remain future work.
+
+## Development and database initialization
+
+`npm run dev` applies local migrations, builds/watches Admin into `.dev-assets/admin`, and starts the local Worker on 8787. Astro builds public Docs into `dist`; the coordinator synchronizes public output into `.dev-assets` without removing Admin, and serves Docs preview on 4321. Published-snapshot changes trigger rebuilds. Startup checks both export and Admin JS/CSS readiness.
+
+Production uses `npm run build` and standard `npx wrangler deploy`, with `dist` containing both public and Admin assets. D1/R2 use Automatic Resource Provisioning. Bundled idempotent CREATE migrations initialize D1 before management database access and are recorded in `d1_migrations`. Failure returns 503 and permits retry. Public assets and Admin HTML do not initialize D1. Future ALTER/backfill migrations require an explicit upgrade procedure that preserves data.
+
+## CLI and upgrades
+
+`packages/create-starlight-cms` is a dependency-free Node ESM CLI, not a CMS runtime package. `scripts/prepare-create-template.mjs` generates its ignored template from the root application during packing. Never edit the generated template directly.
+
+Generation creates an English-only My Docs project in a new or empty directory, sets package/Worker names, and records the template version. It rejects symlinks and existing project files, preserves allowed Git metadata, and does not install dependencies, initialize Git, log in, or deploy. Secrets, build output, local databases, and repository-only release documents are excluded; licenses and notices are retained.
+
+Upgrade compares the recorded template, current template, and project. It defaults to a dry run; `--apply` updates unchanged managed files and stops on conflicts. User configuration is preserved, files are not automatically deleted, and dependency changes require `npm install` to update the lockfile. Existing migrations are retained rather than rewritten. Missing template history or conflicts require manual reconciliation.

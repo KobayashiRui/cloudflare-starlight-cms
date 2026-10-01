@@ -23,3 +23,9 @@ Trusted publishing requires a GitHub-hosted runner, Node 22.14 or later, and npm
 3. Commit, push, and merge the version change into `main`.
 
 The workflow runs automatically only when the CLI package manifest changes. It checks whether the exact local CLI version already exists on npm, skips it if it does, and otherwise runs the complete release check before publishing. To retry a failed publish without changing the version, run **Publish CLI** from the GitHub Actions tab on `main`. It does not deploy a CMS instance.
+
+## Template verification
+
+The root application is the template source. `prepack` generates `packages/create-starlight-cms/template`; do not edit that directory directly. Repository-only Roadmap and release documents are excluded from generated projects.
+
+The publication dry run checks types, tests, an empty-site build, a Worker dry run, the actual npm tarball, and CLI project generation. For changes to local startup, also verify `npm run dev` in a fresh generated project, including Admin assets, Preview, and rebuilds after publishing and deleting content. Keep test data in temporary projects.

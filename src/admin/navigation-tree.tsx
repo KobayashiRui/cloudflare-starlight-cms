@@ -12,9 +12,10 @@ function TreeChevron({ expanded }: { expanded: boolean }) {
   return <span className={`treeitem-chevron${expanded ? ' is-expanded' : ''}`} aria-hidden="true" />;
 }
 
-export function NavigationTree({ items, selectedDocumentId, selectedFolderId, temporaryDocument, onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
+export function NavigationTree({ items, selectedDocumentId, selectedFolderId, temporaryDocument, unsavedDocumentIds = [], onSelectDocument, onSelectFolder, onChangeChildren, onTreeChanged, canReorder = true }: {
   items: NavigationItem[]; selectedDocumentId?: string; selectedFolderId: string | null;
   temporaryDocument?: { name: string; parentId: string | null };
+  unsavedDocumentIds?: string[];
   onSelectDocument: (id: string) => void; onSelectFolder: (id: string) => void;
   onChangeChildren: (parentId: string | null, childIds: string[]) => Promise<void>;
   onTreeChanged: () => Promise<void>;
@@ -46,6 +47,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
     dataLoader: { getItem: (id) => byId.get(id) ?? root, getChildren: (id) => children.get(id) ?? [] },
     initialState: { expandedItems: ['root', ...visibleItems.filter((item) => item.kind === 'folder').map((item) => item.id)] },
     canReorder: canPersistReorder,
+    openOnDropDelay: 0,
     indent: 20,
     canDrag: (dragged) => !saving.current && canPersistReorder && dragged.length === 1 && dragged[0]?.getId() !== 'root',
     // The sync loader must see the removal before the helper inserts the item.
@@ -90,15 +92,34 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
     {tree.getItems().filter((item) => item.getId() !== 'root').map((item) => {
       const data = item.getItemData();
       const isSelected = data.isTemporary || (data.documentId ? selectedDocumentId === data.documentId : selectedFolderId === data.id.slice('folder:'.length));
-      return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
+      const unsaved = data.isTemporary || Boolean(data.documentId && unsavedDocumentIds.includes(data.documentId));
+      const pending = data.translationStates.some((entry) => entry.state !== 'published');
+      const status = unsaved ? t('Unsaved') : pending ? t('Ready to publish') : null;
+      const selectItem = () => {
+        item.setFocused();
+        tree.setSelectedItems([item.getId()]);
+        item.primaryAction();
+      };
+      return <div {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}
+        onClick={item.isFolder() ? selectItem : item.getProps().onClick}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.shiftKey || tree.getState().dnd) return;
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectItem(); }
+        }}>
+
         <div className={clsx('treeitem', {
           focused: item.isFocused(),
           expanded: item.isExpanded(),
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span></div>
-      </button>;
+        })}>{item.isFolder() ? <button className="treeitem-toggle" type="button" tabIndex={-1}
+          aria-label={t(item.isExpanded() ? 'Collapse {name}' : 'Expand {name}', { name: data.name })}
+          aria-expanded={item.isExpanded()} onClick={(event) => {
+            event.stopPropagation();
+            if (item.isExpanded()) item.collapse(); else item.expand();
+          }}><TreeChevron expanded={item.isExpanded()} /></button> : <span className="treeitem-toggle-spacer" aria-hidden="true" />}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
+      </div>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />
   </div></div>;

@@ -63,21 +63,35 @@ These are build secrets, not Worker runtime variables. Keep the Service Auth pol
 
 Once these credentials are configured, commit the public origin from step 3 to enable builds from the published snapshot.
 
-## 5. Configure public media
+## 5. Media delivery
 
-After the first deployment provisions R2, attach a public custom domain such as `docs-media.example.com` to the `MEDIA` bucket. Set its origin in `wrangler.jsonc`:
+R2 stores uploaded originals. Editor and Preview use the Access-protected Admin media API. `npm run build` copies only published managed media into `dist/_cms-media/` and serves it with Docs through Workers Static Assets. No R2 custom domain, `MEDIA_PUBLIC_URL`, public CORS configuration or R2 development URL is needed. External HTTPS media stays external.
 
-```jsonc
-{
-  "vars": {
-    "MEDIA_PUBLIC_URL": "https://docs-media.example.com"
-  }
-}
+Existing users can upgrade and push to GitHub. Keep the same bucket, object keys, stored documents and history; no re-upload or additional Publish operation is needed. `MEDIA_PUBLIC_URL` can be removed or left unused. The first build supports the old Worker's existing APIs and skips cleanup. Disable the old R2 domain only after the static-media deployment succeeds. Pre-migration rollbacks and external direct links still need the old domain and originals. While enabled, that domain continues to expose old Draft media URLs.
+
+Uploads remain limited to 10 MiB. Static Assets allows 25 MiB per file and 20,000 total files per Free-plan version, including Docs, Admin, Pagefind and media. Build-time downloads incur R2 reads; published managed media browsing does not.
+
+### Storage and publication history
+
+Publication history has no retention limit by default. Each revision stores document content and media URLs, not another copy of the image or video file. However, media referenced only by old revisions is still retained, so replacing media repeatedly can increase R2 usage. Revision content also consumes D1 storage.
+
+Free-tier usage is limited and shared with other workloads in the account. R2 Standard includes 10 GB-month of storage per month; D1 Free includes 5 GB of total storage. Unlimited history does not guarantee free operation. Review storage and request usage in Cloudflare and check the current [R2](https://developers.cloudflare.com/r2/pricing/) and [D1](https://developers.cloudflare.com/d1/platform/pricing/) pricing before relying on the free tier.
+
+Delete old entries from a page's **History** drawer. The currently published revision and revisions used by an active build cannot be deleted. Deleting history is permanent; it does not immediately delete files.
+
+To limit history automatically, edit `src/cms.config.ts`:
+
+```ts
+export const cmsConfig: { maxPublicationRevisions: number | null } = {
+  maxPublicationRevisions: null, // unlimited; e.g. 20 retains the latest 20 per language
+};
 ```
 
-Commit this public value. It is not a secret. Keep the R2 development URL disabled. Standard image and video embeds do not need CORS; only add a narrow CORS policy when browser JavaScript must fetch the assets directly. Uploaded Draft media is public at this domain.
+Use a positive integer, including the current publication. After completing the build, old unprotected revisions are pruned, then media referenced by no saved draft, retained revision, current publication or active build is removed from R2 and D1. Protected revisions may temporarily exceed the configured limit. Uploaded files are kept for at least 24 hours to protect editors with unsaved inserts; save drafts promptly, as unsaved browser content is not a permanent reference.
 
-Use the Admin Media picker for images and videos. Normal links can use HTTP(S), but published image and video URLs must use a public HTTPS origin.
+**Keep the default Workers Builds deploy command `npx wrangler deploy`.** Collection runs only after the required downloads and site build finish. While the live site lacks the static-media marker, collection is skipped, so a failed migration deployment cannot remove legacy production media. Collection failures fail the build and retry on a later build. Publish with no saved changes can request another build. No scheduled job or post-deploy command is needed.
+
+Build references have a 24-hour lease, normally released when the build finishes. Collection covers managed media referenced in CMS content; use separate assets for custom Astro pages or external uses. Static-media version rollbacks include their deployed media but do not restore D1/R2 state.
 
 ## 6. Trigger public builds on publish
 

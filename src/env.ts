@@ -3,7 +3,6 @@
  * wrangler.jsonc, so only those runtime-only values are declared here.
  */
 export type RuntimeEnv = CloudflareBindings & {
-  MEDIA_PUBLIC_URL?: string;
   WORKERS_DEPLOY_HOOK_URL?: string;
   LOCAL_DEV_BUILD?: string;
 };

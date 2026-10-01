@@ -2,6 +2,24 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## v1.1.0 — Page links, tables and storage cleanup
+
+Prepared changes:
+
+- Link to saved pages and optional headings from the editor, retaining destinations through saving and reopening and resolving URLs in Preview and published Docs.
+- Add official Tiptap table controls for rows, columns, headings, merged cells and resizing, with standard, striped and minimal designs and cell alignment.
+- Keep table colors in shared CSS rather than adding color selection. Use result-oriented header labels and the same transparent toolbar button style as other controls.
+- Add older-history deletion, configurable retention (unlimited by default), and unused-media collection after a verified successful deployment.
+- Include the tree UX and development startup improvements prepared for v1.0.4 below.
+
+Verification:
+
+- `npm run release:check` passed: type checks, all 81 tests including managed published Astro builds, an empty-site build, and a Worker dry run.
+- Packed `create-starlight-cms-1.1.0.tgz` and verified new project generation from the actual package, including the Linux native binding lockfile check.
+- The table toolbar's normal background was verified transparent in dark mode while editing a table.
+
+Migration `0003_build_cleanup.sql` adds build-reference protection and media deletion claims; bundled bootstrap applies its idempotent CREATE statements. No dependency addition is required. Existing Workers Builds projects must use `npm run deploy`. npm publication and production deployment have not been performed.
+
 ## v1.0.4 — Tree UX and development startup
 
 Prepared changes:
@@ -78,6 +96,8 @@ No npm publication or production deployment was performed.
 
 | Version | Changes |
 | --- | --- |
+| 1.1.0 (prepared) | Page/heading links, table designs, revision deletion/retention and unused-media cleanup |
+| 1.0.4 (prepared) | Tree interaction improvements and reliable local Admin assets |
 | 1.0.3 | English/Japanese Admin UI, separate display-language settings, simpler save/publication controls, and save-conflict/upload fixes |
 | 1.0.2 | Recovery for legacy HTTP/private-network media without allowing new unsafe media URLs |
 | 1.0.1 | Navigation selection, temporary unsaved pages, creation destinations, and clearer setup documentation |
@@ -91,7 +111,7 @@ No npm publication or production deployment was performed.
 
 ## Scope
 
-Keep the CMS focused on documentation and use existing React, Tiptap, Headless Tree, Hono, Drizzle, Astro/Starlight, Pagefind, and Cloudflare components. No general collection builder, CMS plugin/workflow engine, custom authentication, roles, or collaborative editing is planned. Draft media at public R2 URLs is not private.
+Keep the CMS focused on documentation and use existing React, Tiptap, Headless Tree, Hono, Drizzle, Astro/Starlight, Pagefind, and Cloudflare components. No general collection builder, CMS plugin/workflow engine, custom authentication, roles, or collaborative editing is planned. New originals can remain in private R2; any retained legacy public R2 domain still exposes old Draft URLs.
 
 ### Table usability — 2026-10-01
 
@@ -100,3 +120,19 @@ Keep the CMS focused on documentation and use existing React, Tiptap, Headless T
 - The table toolbar button no longer stays highlighted merely because the cursor is inside a table.
 
 - Follow-up: explicitly use the toolbar’s ghost button style for Table. The Button primitive defaults to a tinted background, which made Table appear hovered even after its active state was removed.
+
+### History and static published media — 2026-10-01
+
+- Added deletion of older unprotected publication history and `src/cms.config.ts` retention (`null` by default; positive integers per translation). Saved drafts, retained history, current publications, concurrent builds and uploads younger than 24 hours remain protected. Atomic deletion claims/save guards prevent references during collection; R2 failures keep metadata for retry.
+- R2 remains the original store with the existing bucket/keys and immutable stored revisions. Editor, Preview and browser draft recovery resolve registered originals through the protected Admin media API. Legacy public URLs use the same registered keys, without a second URL map, data backfill or re-upload.
+- `npm run build` copies only published managed images/videos/downloads to `dist/_cms-media/`, using the existing Access credentials and media APIs. OSS Markdown/HTML parsers resolve destinations without rewriting code/prose. Each immutable key is downloaded once per build; missing/mismatched files fail the build. External media stays external.
+- After Astro/Admin build and media copies succeed, build-time bounded collection prunes unprotected history and deletes unreferenced R2/D1 media. Builds release their lease on success/failure; abandoned leases expire after 24 hours. Deleted-page originals stay protected while another build is reading them.
+- Removed the custom deploy script, post-deploy confirmation/renewal endpoints and standalone cleanup command. `npm run deploy` is a plain Wrangler alias; Workers Builds can keep `npx wrangler deploy`. No Cron, Queue, media-management page or Admin-open requirement was added.
+- Removed `MEDIA_PUBLIC_URL` from new configuration and regenerated binding types. Existing variables may remain unused. Both deployment/troubleshooting guides describe private originals and static delivery, retention, file limits and migration.
+- Upgrade needs no additional Publish or migration command: the first build uses existing export/list/object APIs when the build lease endpoint is absent (404 only), copies media, and skips collection. Collection remains disabled until the live site carries the static-media marker, so failed migration deployments cannot break legacy production images. Pre-migration rollback/external direct links require the old R2 domain and originals; static version rollback restores assets, not D1/R2 state.
+- Uploads remain limited to 10 MiB. Future larger-video support must account for Static Assets' 25 MiB per-file limit; no speculative hybrid delivery was introduced. Total file limits include Docs/Admin/Pagefind, and repeated build-time downloads still incur R2 reads.
+- Validation includes an actual Astro build through emulated old APIs, image/video byte copies, unchanged legacy stored JSON, protected Editor/Preview URLs, later build-time GC, concurrent-build protection, retention/deletion retries, and strict redirect/authentication failure handling. All 81 tests and type checks passed, including real published Astro builds; empty-site build, Worker dry run and `git diff --check` passed. Packed CLI generation and a generated project’s clean `npm ci` plus empty build passed. Lockfile metadata was regenerated for reproducible clean installation.
+
+References: [Version contents](https://developers.cloudflare.com/workers/versions-and-deployments/), [Static Assets limits](https://developers.cloudflare.com/workers/platform/limits/), [Static Assets billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/), [Upload reuse](https://developers.cloudflare.com/workers/static-assets/direct-upload/).
+
+No npm publication or production deployment was performed.

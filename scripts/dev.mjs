@@ -44,7 +44,7 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function snapshot() {
   const response = await fetch(cmsUrl, { signal: AbortSignal.timeout(5000) });
   if (!response.ok) throw new Error(`CMS export returned ${response.status}`);
-  return response.text();
+  return JSON.stringify([await response.text(), response.headers.get('X-CMS-Publish-Request')]);
 }
 async function ready() {
   for (let attempt = 0; attempt < 60 && !stopping; attempt++) {
@@ -61,7 +61,7 @@ async function ready() {
 }
 const cli = (name) => `node_modules/${name}/bin/${name === 'wrangler' ? 'wrangler.js' : 'astro.mjs'}`;
 async function build() {
-  await run(process.execPath, [cli('astro'), 'build'], { ...process.env, CMS_EXPORT_URL: cmsUrl });
+  await run(process.execPath, ['scripts/build.mjs'], { ...adminEnv, CMS_EXPORT_URL: cmsUrl });
   // Astro clears dist. Keep the served Admin directory intact while synchronizing
   // only public assets, including removal of routes from the previous build.
   for (const name of await readdir(assetsDirectory)) {
@@ -70,6 +70,7 @@ async function build() {
   for (const name of await readdir('dist')) {
     if (name !== 'admin') await cp(join('dist', name), join(assetsDirectory, name), { recursive: true });
   }
+  await cp('dist/admin/cms-build.json', join(assetsDirectory, 'admin', 'cms-build.json'));
 }
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);

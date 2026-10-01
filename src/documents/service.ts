@@ -1,3 +1,5 @@
+import { resolveContentMedia } from '../media/urls.ts';
+import { managedMediaKeys, mediaWriteGuard } from '../media/references.ts';
 import { assertPublishedLinks } from './link-pages.ts';
 import { siteDeliveryStatement } from '../publish/record.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
@@ -30,7 +32,10 @@ export type DocumentView = {
 export type PendingPublishDelivery = { id: string; requestedAt: number };
 
 function assertPublishable(contentJson: string) {
-  try { renderDocumentContent(JSON.parse(contentJson)); }
+  try {
+    const content = JSON.parse(contentJson);
+    renderDocumentContent(resolveContentMedia(content, new Set(managedMediaKeys(content)), 'public'));
+  }
   catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid document content'); }
 }
 
@@ -45,11 +50,11 @@ const translationSelect = `
   FROM document_translation t JOIN document d ON d.id=t.document_id
   LEFT JOIN document_revision r ON r.id=t.published_revision_id`;
 
-function toView(row: TranslationRow): DocumentView {
+function toView(row: TranslationRow, keys: ReadonlySet<string> = new Set()): DocumentView {
   return {
     id: row.document_id, translationId: row.id, locale: row.locale, folderId: row.folder_id,
     title: row.title, sidebarLabel: row.sidebar_label, slug: row.slug, description: row.description,
-    order: row.sort_order, contentJson: parseContent(row.content_json),
+    order: row.sort_order, contentJson: resolveContentMedia(parseContent(row.content_json), keys, 'admin'),
     status: row.published_revision_id ? 'published' : 'draft', version: row.version,
     createdAt: row.created_at, updatedAt: row.updated_at, publishedAt: row.published_at,
     publishedRevisionId: row.published_revision_id,
@@ -75,11 +80,15 @@ async function getTranslation(env: RuntimeEnv, documentId: string, locale: Suppo
 export async function listDocuments(env: RuntimeEnv, locale: SupportedLocale = defaultLocale) {
   const rows = await env.DB.prepare(`${translationSelect} WHERE t.locale=? ORDER BY d.sort_order,d.slug`)
     .bind(locale).all<TranslationRow>();
-  return rows.results.map(toView);
+  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
+  const keys = new Set(media.results.map((row) => row.object_key));
+  return rows.results.map((row) => toView(row, keys));
 }
 
 export async function getDocument(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
-  return toView(await getTranslation(env, id, locale));
+  const row = await getTranslation(env, id, locale);
+  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
+  return toView(row, new Set(media.results.map((item) => item.object_key)));
 }
 
 export async function createDocument(env: RuntimeEnv, raw: unknown, locale: SupportedLocale = defaultLocale) {
@@ -89,12 +98,13 @@ export async function createDocument(env: RuntimeEnv, raw: unknown, locale: Supp
   const id = crypto.randomUUID();
   const translationId = crypto.randomUUID();
   const now = Date.now();
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO document (id,folder_id,slug,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?)')
-      .bind(id, input.folderId, input.slug, input.order, now, now),
-    env.DB.prepare('INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-      .bind(translationId, id, locale, input.title, null, input.description, serializeContent(input.contentJson), null, 1, now, now, null),
+  const created = await env.DB.batch([
+    env.DB.prepare(`INSERT INTO document (id,folder_id,slug,sort_order,created_at,updated_at) SELECT ?,?,?,?,?,? WHERE ${mediaWriteGuard}`)
+      .bind(id, input.folderId, input.slug, input.order, now, now, JSON.stringify(managedMediaKeys(input.contentJson))),
+    env.DB.prepare(`INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE ${mediaWriteGuard}`)
+      .bind(translationId, id, locale, input.title, null, input.description, serializeContent(input.contentJson), null, 1, now, now, null, JSON.stringify(managedMediaKeys(input.contentJson))),
   ]);
+  if (created[1]?.meta.changes !== 1) throw new DocumentContentError('A media file was removed. Upload it again before saving.');
   return getDocument(env, id, locale);
 }
 
@@ -107,13 +117,18 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
   const results = await env.DB.batch([
     siteDeliveryStatement(env, `EXISTS (SELECT 1 FROM document d JOIN document_translation t ON t.document_id=d.id
       WHERE d.id=? AND t.published_revision_id IS NOT NULL AND (d.folder_id IS NOT ? OR d.slug<>? OR d.sort_order<>?)
-      AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?))`, [id,input.folderId,input.slug,input.order,current.id,input.version]),
-    env.DB.prepare('UPDATE document SET folder_id=?,slug=?,sort_order=?,updated_at=? WHERE id=? AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?)')
-      .bind(input.folderId, input.slug, input.order, now, id, current.id, input.version),
-    env.DB.prepare('UPDATE document_translation SET title=?,description=?,content_json=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
-      .bind(input.title, input.description, serializeContent(input.contentJson), now, current.id, input.version),
+      AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?)) AND ${mediaWriteGuard}`, [id,input.folderId,input.slug,input.order,current.id,input.version,JSON.stringify(managedMediaKeys(input.contentJson))]),
+    env.DB.prepare(`UPDATE document SET folder_id=?,slug=?,sort_order=?,updated_at=? WHERE id=? AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?) AND ${mediaWriteGuard}`)
+      .bind(input.folderId, input.slug, input.order, now, id, current.id, input.version, JSON.stringify(managedMediaKeys(input.contentJson))),
+    env.DB.prepare(`UPDATE document_translation SET title=?,description=?,content_json=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND ${mediaWriteGuard}`)
+      .bind(input.title, input.description, serializeContent(input.contentJson), now, current.id, input.version, JSON.stringify(managedMediaKeys(input.contentJson))),
   ]);
-  if (results[2]?.meta.changes !== 1) throw new DocumentVersionConflictError();
+  if (results[2]?.meta.changes !== 1) {
+    const keys = managedMediaKeys(input.contentJson);
+    const missing = await env.DB.prepare(`SELECT 1 WHERE NOT ${mediaWriteGuard}`).bind(JSON.stringify(keys)).first();
+    if (missing) throw new DocumentContentError('A media file was removed. Upload it again before saving.');
+    throw new DocumentVersionConflictError();
+  }
   return getDocument(env, id, locale);
 }
 
@@ -180,17 +195,30 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
   }
   // Return the exact snapshots/version written by this publication, rather
   // than a later read that might include somebody else's subsequent save.
+  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
+  const keys = new Set(media.results.map((row) => row.object_key));
   return candidates.results.map((candidate, index) => toView({
     ...candidate, version: candidate.version + 1, published_revision_id: revisions[index]!,
     published_at: now, updated_at: now, publication_state: 'published',
-  }));
+  }, keys));
 }
 
 export async function listRevisions(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
-  const rows = await env.DB.prepare('SELECT id,revision,created_at FROM document_revision WHERE document_translation_id=? ORDER BY revision DESC')
-    .bind(current.id).all<{ id: string; revision: number; created_at: number }>();
-  return rows.results.map((row) => ({ id: row.id, revision: row.revision, createdAt: row.created_at }));
+  const rows = await env.DB.prepare('SELECT r.id,r.revision,r.created_at,CASE WHEN EXISTS (SELECT 1 FROM document_translation t WHERE t.published_revision_id=r.id) OR EXISTS (SELECT 1 FROM cms_build b WHERE b.expires_at>? AND instr(b.revision_ids,r.id)>0) THEN 0 ELSE 1 END AS can_delete FROM document_revision r WHERE r.document_translation_id=? ORDER BY r.revision DESC')
+    .bind(Date.now(), current.id).all<{ id: string; revision: number; created_at: number; can_delete: number }>();
+  return rows.results.map((row) => ({ id: row.id, revision: row.revision, createdAt: row.created_at, canDelete: Boolean(row.can_delete) }));
+}
+
+export async function deleteRevision(env: RuntimeEnv, id: string, revisionId: string, version: number, locale: SupportedLocale = defaultLocale) {
+  const current = await getTranslation(env, id, locale);
+  if (current.version !== version) throw new DocumentVersionConflictError();
+  const result = await env.DB.prepare(`DELETE FROM document_revision WHERE id=? AND document_translation_id=?
+    AND EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=?)
+    AND NOT EXISTS (SELECT 1 FROM document_translation WHERE published_revision_id=document_revision.id)
+    AND NOT EXISTS (SELECT 1 FROM cms_build b WHERE b.expires_at>? AND instr(b.revision_ids,document_revision.id)>0)`)
+    .bind(revisionId, current.id, current.id, version, Date.now()).run();
+  if (result.meta.changes !== 1) throw new DocumentConflictError('This revision is published, used by a build, or no longer available.');
 }
 
 export async function restoreRevision(env: RuntimeEnv, id: string, revisionId: string, version: number, locale: SupportedLocale = defaultLocale) {
@@ -222,7 +250,8 @@ export async function createDocumentTranslation(env: RuntimeEnv, documentId: str
   const existing = await env.DB.prepare('SELECT id FROM document_translation WHERE document_id=? AND locale=?').bind(documentId, locale).first();
   if (existing) throw new DocumentConflictError('This translation already exists');
   const id = crypto.randomUUID(); const now = Date.now();
-  await env.DB.prepare('INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-    .bind(id, documentId, locale, source.title, source.sidebar_label, source.description, source.content_json, null, 1, now, now, null).run();
+  const result = await env.DB.prepare(`INSERT INTO document_translation (id,document_id,locale,title,sidebar_label,description,content_json,published_revision_id,version,created_at,updated_at,published_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE ${mediaWriteGuard}`)
+    .bind(id, documentId, locale, source.title, source.sidebar_label, source.description, source.content_json, null, 1, now, now, null, JSON.stringify(managedMediaKeys(parseContent(source.content_json)))).run();
+  if (result.meta.changes !== 1) throw new DocumentContentError('A media file was removed. Upload it again before saving.');
   return getDocument(env, documentId, locale);
 }

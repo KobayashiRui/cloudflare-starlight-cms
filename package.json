@@ -8,7 +8,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "build": "astro build && node scripts/build-admin.mjs",
+    "build": "node scripts/build.mjs",
     "build:empty": "CMS_INITIAL_EMPTY=1 npm run build",
     "dev": "node scripts/dev.mjs",
     "check": "CMS_INITIAL_EMPTY=1 astro check && tsc --noEmit && npm run check:admin && npm run check:linux-lock",
@@ -59,6 +59,8 @@
     "github-slugger": "2.0.0",
     "hono": "4.13.7",
     "lodash.throttle": "4.1.1",
+    "mdast-util-from-markdown": "2.0.3",
+    "parse5": "8.0.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hotkeys-hook": "5.3.3",

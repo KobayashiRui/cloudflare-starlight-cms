@@ -43,7 +43,7 @@ npm run dev
 
 ## Deploy to Cloudflare
 
-生成したrepositoryをCloudflare Workers Buildsへ接続します。本番domainをWorkerへ接続する前にCloudflare Accessを設定し、その後Media domainとDeploy Hookを設定します。初回Deploy時にD1/R2 bindingは自動provisionされます。
+生成したrepositoryをCloudflare Workers Buildsへ接続します。本番domainをWorkerへ接続する前にCloudflare Accessを設定し、その後Deploy Hookを設定します。初回Deploy時にD1/R2 bindingは自動provisionされます。
 
 詳細は[デプロイガイド](docs/DEPLOYMENT.ja.md)を参照してください。
 

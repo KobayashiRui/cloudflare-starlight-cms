@@ -40,6 +40,8 @@ it('creates an en-only project without overwriting an existing directory', async
   expect(wranglerConfig).toContain('"binding": "MEDIA"');
   expect(wranglerConfig).not.toMatch(/database_(?:id|name)|bucket_name/);
   expect(await readFile(join(destination, 'tests', 'content.test.ts'), 'utf8')).toContain("published build boundary");
+  expect(await readFile(join(destination, 'tests', 'build-media.test.js'), 'utf8')).toContain('staticMediaMarkdown');
+  expect(wranglerConfig).not.toContain('MEDIA_PUBLIC_URL');
 
   await expect(execute(process.execPath, [cli, destination])).rejects.toMatchObject({ stderr: expect.stringContaining('not empty') });
 });

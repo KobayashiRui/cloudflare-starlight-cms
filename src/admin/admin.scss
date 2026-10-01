@@ -183,8 +183,6 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-media-card footer { display: flex; align-items: center; justify-content: space-between; gap: .35rem; }
 .cms-media-usage { color: var(--cms-text-subtle); font-size: .65rem; }
 .cms-media-usage-used { color: var(--cms-success); }
-.cms-media-delete { padding: .18rem .35rem; color: var(--cms-danger); background: transparent; border: 1px solid var(--cms-border); border-radius: 4px; font-size: .65rem; }
-.cms-media-delete:hover:not(:disabled) { border-color: var(--cms-danger); background: var(--cms-danger-subtle); }
 
 @media (max-width: 720px) {
   .cms-topbar { min-height: 58px; padding: 0 .85rem; }
@@ -215,3 +213,6 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .cms-sidebar .tree .treeitem-toggle { display: flex; align-items: center; justify-content: center; padding: 0; color: inherit; background: transparent; border: none; border-radius: 4px; cursor: pointer; }
 .cms-sidebar .tree .treeitem-toggle:hover { background: var(--cms-hover); }
 .cms-sidebar .tree .treeitem-toggle:focus-visible { outline: 2px solid var(--cms-accent); }
+
+.cms-revision-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; }
+.cms-revision button:disabled { opacity: .45; cursor: default; }

@@ -43,7 +43,7 @@ Local development uses Miniflare for D1 and R2. No Cloudflare account is require
 
 ## Deploy to Cloudflare
 
-Connect the generated repository to Cloudflare Workers Builds, configure Cloudflare Access before attaching the production domain, then add the media domain and Deploy Hook. The first deployment provisions the D1 and R2 bindings automatically.
+Connect the generated repository to Cloudflare Workers Builds, configure Cloudflare Access before attaching the production domain, then add the Deploy Hook. The first deployment provisions the D1 and R2 bindings automatically.
 
 See the [Deployment guide](docs/DEPLOYMENT.md) for the complete setup.
 

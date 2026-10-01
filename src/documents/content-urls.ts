@@ -29,7 +29,7 @@ function documentPath(value: string, options: { allowAdminMediaProxy?: boolean }
   if (!value.startsWith('/')) return null;
   if (value.startsWith('//')) throw new Error('Document URLs must not use protocol-relative paths');
   if (value.startsWith('/admin/api/media/object/') && !options.allowAdminMediaProxy) {
-    throw new Error('Published media requires MEDIA_PUBLIC_URL');
+    throw new Error('Managed media must be resolved before public rendering');
   }
   return value;
 }
@@ -43,7 +43,7 @@ export function documentLinkUrl(value: unknown): string {
     throw new Error('Document links must be an HTTP(S) URL or a site-relative path');
   }
   if (value.startsWith('#') && value.length > 1) return value;
-  const path = documentPath(value);
+  const path = documentPath(value, { allowAdminMediaProxy: true });
   if (path) return path;
   let url: URL;
   try {

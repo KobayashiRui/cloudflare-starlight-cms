@@ -63,21 +63,37 @@ CF_ACCESS_CLIENT_SECRET
 
 認証設定後、手順3の公開originをcommitし、公開snapshotからのbuildを有効にします。
 
-## 5. 公開Mediaを設定する
+## 5. Mediaの配信
 
-最初のDeployでR2がprovisionされた後、`MEDIA` bucketへ`docs-media.example.com`のようなpublic custom domainを接続します。`wrangler.jsonc`にoriginを設定します。
+R2は画像・動画の原本を保持します。AdminのMedia pickerからアップロードし、EditorとPreviewはAccess配下のメディアAPIで表示します。公開時は `npm run build` が必要なファイルだけ `dist/_cms-media/` へコピーし、Docsと一緒にWorkers Static Assetsから配信します。
 
-```jsonc
-{
-  "vars": {
-    "MEDIA_PUBLIC_URL": "https://docs-media.example.com"
-  }
-}
+R2 custom domain、`MEDIA_PUBLIC_URL`、公開用CORS設定は不要です。R2のdevelopment URLも無効のままにします。外部のHTTPS画像・動画はコピーせず、元のURLを使用します。
+
+既存利用者は更新を取り込みGitHubへpushすれば移行できます。R2 bucket・object key・保存済み本文・履歴は維持し、再アップロードや追加のPublish操作は不要です。旧 `MEDIA_PUBLIC_URL` は削除できますが、残っていても無視します。最初のbuildは旧APIを使い、cleanupを省きます。旧R2ドメインを停止する場合はStatic Assets版のdeploy成功後にしてください。移行前Versionへのrollbackや外部の旧画像直リンクを維持する場合は、旧ドメインと原本も必要です。公開中の旧R2ドメインからは引き続きDraft画像も取得できる点に注意してください。
+
+直接アップロードは10 MiBまでです。Static Assetsは1ファイル25 MiB、FreeではVersion全体で20,000ファイルまでです。Docs・Admin・Pagefindのファイルも含みます。ビルドごとの原本取得はR2読み取りに含まれますが、公開閲覧では管理対象メディアをR2から取得しません。
+
+### 保存容量と公開履歴の注意点
+
+公開履歴の保存数は、初期設定では無制限です。履歴に保存するのは本文と画像・動画のURLであり、ファイル自体を履歴ごとに複製するわけではありません。ただし、過去の履歴だけが参照する画像・動画も保持するため、差し替えを繰り返すとR2の使用量が増えます。履歴の本文もD1の保存容量を使います。
+
+無料枠には上限があり、同じアカウントのほかの用途と共有されます。R2 Standardの無料保存枠は月あたり10 GB-month、D1 Freeの合計保存枠は5 GBです。履歴が無制限でも無料で使い続けられるとは限りません。Cloudflareで保存容量・リクエスト使用量を確認し、無料枠で運用する場合は最新の[R2料金](https://developers.cloudflare.com/r2/pricing/)と[D1料金](https://developers.cloudflare.com/d1/platform/pricing/)も確認してください。
+
+ページの「履歴」から古い履歴を削除できます。現在の公開内容、実行中のビルドが使う履歴は削除できません。履歴の削除は取り消せませんが、画像・動画は即座には削除されません。
+
+履歴の自動保存上限は `src/cms.config.ts` で設定します。
+
+```ts
+export const cmsConfig: { maxPublicationRevisions: number | null } = {
+  maxPublicationRevisions: null, // 無制限。例: 20 なら言語ごとに最新20件を保持
+};
 ```
 
-この値はsecretではないためcommitします。R2のdevelopment URLは無効のままにします。通常の画像・動画埋め込みにCORSは不要です。browser JavaScriptからassetを直接fetchする場合だけ、必要最小限のCORS policyを追加してください。upload済みDraft mediaもこのdomainから公開されます。
+設定できるのは `null` または1以上の整数です。現在の公開履歴も件数に含みます。ビルド完了時に、保護されていない古い履歴を整理し、保存済みの下書き・残された履歴・現在の公開データ・実行中ビルドのどこからも参照されないメディアをR2とD1から削除します。保護中の履歴がある間は、上限を一時的に超える場合があります。未保存の編集で使われている可能性を考慮して、アップロードから24時間以内のファイルは保持します。ブラウザ上の未保存内容は永続的な参照にはならないため、下書きはこまめに保存してください。
 
-画像・動画はAdminのMedia pickerから追加します。通常リンクはHTTP(S)を使えますが、公開する画像・動画URLはpublic HTTPS originである必要があります。
+**Deploy commandは標準の `npx wrangler deploy` のままで構いません。** 必要なファイルのコピーとサイトbuildが完了してから整理します。稼働中サイトにStatic Assets配信の印がない間は整理を省くため、移行deployが失敗しても旧公開画像は維持されます。整理失敗はbuild失敗として扱い、次のbuildで再試行します。保存内容に変更がなくても「公開」で再ビルドと整理を依頼できます。追加の定期ジョブやdeploy後のコマンドはありません。
+
+実行中ビルドの参照は最大24時間保持し、通常はbuild終了時に解除します。整理の対象はCMSからアップロードしたメディアとCMS本文内の参照です。独自Astroページや外部用途には別のアセットを使ってください。Static Assets版のrollbackは画像・動画も戻しますが、D1やR2のデータは復元しません。
 
 ## 6. Publish時に公開buildを発火する
 

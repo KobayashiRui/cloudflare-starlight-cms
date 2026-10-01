@@ -1,6 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { cmsOrigin } from './cms-origin.ts';
 
 async function fetchSnapshot(): Promise<unknown> {
+  if (process.env.CMS_SNAPSHOT_FILE) return JSON.parse(await readFile(process.env.CMS_SNAPSHOT_FILE, 'utf8'));
   if (process.env.CMS_INITIAL_EMPTY === '1') return { version: 3, documents: [] };
   const endpoint = process.env.CMS_EXPORT_URL
     ?? (cmsOrigin ? new URL('/admin/export/snapshot', cmsOrigin).toString() : undefined);

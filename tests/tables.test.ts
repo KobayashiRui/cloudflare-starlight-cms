@@ -87,6 +87,6 @@ describe('official Tiptap tables and design attributes', () => {
     expect(() => renderDocumentContent({ ...designedTable, attrs: { tableStyle: 'anything' } })).toThrow();
     expect(() => renderDocumentContent({ type: 'table', content: [{ type: 'paragraph' }] })).toThrow('Invalid table');
     expect(() => renderDocumentContent({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'script' }] }] })).toThrow('Invalid table row');
-    expect(() => renderDocumentContent({ type: 'tableCell', content: [{ type: 'image', attrs: { src: '/admin/api/media/object/a.png' } }] })).toThrow('MEDIA_PUBLIC_URL');
+    expect(() => renderDocumentContent({ type: 'tableCell', content: [{ type: 'image', attrs: { src: '/admin/api/media/object/a.png' } }] })).toThrow('Managed media');
   });
 });

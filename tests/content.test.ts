@@ -47,7 +47,7 @@ describe('Tiptap renderer', () => {
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: 'javascript:alert(1)' } })).toThrow('HTTPS');
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: 'http://192.168.40.198:5201/image.webp' } })).toThrow('HTTPS');
     expect(() => renderDocumentContent({ type: 'image', attrs: { src: 'https://192.168.40.198/image.webp' } })).toThrow('local network');
-    expect(() => renderDocumentContent({ type: 'image', attrs: { src: '/admin/api/media/object/media/example.png' } })).toThrow('MEDIA_PUBLIC_URL');
+    expect(() => renderDocumentContent({ type: 'image', attrs: { src: '/admin/api/media/object/media/example.png' } })).toThrow('Managed media');
     expect(() => renderDocumentContent({ type: 'youtube', attrs: { src: 'https://example.com/video' } })).toThrow('Invalid YouTube URL');
   });
   it('renders task lists and rules created by the Simple Editor toolbar', () => {

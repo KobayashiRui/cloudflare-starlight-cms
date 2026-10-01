@@ -1,8 +1,8 @@
 # Roadmap / terra引き継ぎ
 
-## v1.1.0: Adminの日英対応と保存・公開UI（2026-09-30）
+## v1.0.3: Adminの日英対応と保存・公開UI（2026-09-30）
 
-- CMS自体のEnglish／日本語切替、独立したAdmin言語設定、保存・公開状態の整理をまとめてminor versionへ更新する。Save／Publishの修正は既存コミットを含める。`release:check`で型check、55 tests（Published buildを含む）、空サイトbuild、dry-run、rootから生成した`create-starlight-cms-1.1.0.tgz`のpackとCLI project生成が成功した。issue #7の要件を満たす。npm公開・pushは行っていない。
+- CMS自体のEnglish／日本語切替、独立したAdmin言語設定、保存・公開状態の整理をまとめてpatch versionへ更新する。Save／Publishの修正は既存コミットを含める。`release:check`で型check、55 tests（Published buildを含む）、空サイトbuild、dry-run、rootから生成したCLI packageのpackとproject生成が成功した。2026-10-01にリリース番号を`1.0.3`へ修正した。issue #7の要件を満たす。npm公開・pushは行っていない。
 
 ## 状態表示の整理（2026-09-30）
 

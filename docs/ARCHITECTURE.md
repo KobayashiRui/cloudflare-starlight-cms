@@ -73,8 +73,8 @@ Loaderは全検証/render後にstoreを置換。失敗はbuild失敗、前回dep
 通信失敗時のfallbackとして初回モードを使わない。
 
 localの`npm run dev`はrootのNode coordinatorがAdmin Worker（8787）とStatic Docs preview（4321）を起動する。
-Published snapshotの変更時だけAstro buildを実行し、`dist`をWorker用`.dev-assets`へ同期するため、local Previewも
-productionと同じStatic Assets shellを読む。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。Adminはesbuild watchで更新する。
+Published snapshotの変更時だけAstro buildを実行し、`dist`の公開生成物をWorker用`.dev-assets`へ同期するため、local Previewも
+productionと同じStatic Assets shellを読む。Adminは`.dev-assets/admin`へ生成してesbuild watchで更新し、公開生成物の同期ではこのディレクトリを削除しない。起動完了前にAdmin JS/CSSの配信も確認する。失敗した内容を繰り返しbuildせず、修正後は再起動または次の公開変更で再確認する。
 これはlocal限定の開発補助であり、appsや二つ目のWorkerは追加しない。
 
 ## Hook / Media / Setup

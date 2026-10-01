@@ -1,8 +1,12 @@
 import { spawn } from 'node:child_process';
+import { cp, readdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 
 const cmsPort = Number(process.env.CMS_PORT ?? 8787);
 const docsPort = Number(process.env.DOCS_PORT ?? 4321);
 const cmsUrl = `http://127.0.0.1:${cmsPort}/admin/export/snapshot`;
+const assetsDirectory = '.dev-assets';
+const adminEnv = { ...process.env, ADMIN_ASSETS_DIR: assetsDirectory };
 const children = new Set();
 let stopping = false;
 let timer;
@@ -44,16 +48,28 @@ async function snapshot() {
 }
 async function ready() {
   for (let attempt = 0; attempt < 60 && !stopping; attempt++) {
-    try { return await snapshot(); } catch { await wait(500); }
+    try {
+      const value = await snapshot();
+      for (const [path, contentType] of [['app.js', 'javascript'], ['app.css', 'text/css']]) {
+        const response = await fetch(new URL(path, `http://127.0.0.1:${cmsPort}/admin/`), { signal: AbortSignal.timeout(5000) });
+        if (!response.ok || !response.headers.get('content-type')?.includes(contentType)) throw new Error(`Admin ${path} is not ready`);
+      }
+      return value;
+    } catch { await wait(500); }
   }
   throw new Error('Local CMS did not become ready');
 }
 const cli = (name) => `node_modules/${name}/bin/${name === 'wrangler' ? 'wrangler.js' : 'astro.mjs'}`;
 async function build() {
   await run(process.execPath, [cli('astro'), 'build'], { ...process.env, CMS_EXPORT_URL: cmsUrl });
-  // Match production: both public and Admin assets are served from the configured
-  // Static Assets directory. Astro clears dist, so recreate the Admin bundle after it.
-  await run(process.execPath, ['scripts/build-admin.mjs']);
+  // Astro clears dist. Keep the served Admin directory intact while synchronizing
+  // only public assets, including removal of routes from the previous build.
+  for (const name of await readdir(assetsDirectory)) {
+    if (name !== 'admin') await rm(join(assetsDirectory, name), { recursive: true, force: true });
+  }
+  for (const name of await readdir('dist')) {
+    if (name !== 'admin') await cp(join('dist', name), join(assetsDirectory, name), { recursive: true });
+  }
 }
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
@@ -63,9 +79,9 @@ try {
   // Local development always uses Miniflare state. Applying migrations is idempotent
   // and avoids a separate first-run command without touching a remote D1 database.
   await run(process.execPath, [cli('wrangler'), 'd1', 'migrations', 'apply', 'DB', '--local'], { ...process.env, CI: '1' });
-  await run(process.execPath, ['scripts/build-admin.mjs']);
-  server(process.execPath, ['scripts/build-admin.mjs', '--watch']);
-  server(process.execPath, [cli('wrangler'), 'dev', '--local', '--log-level', 'warn', '--port', String(cmsPort), '--var', 'LOCAL_DEV_BUILD:true']);
+  await run(process.execPath, ['scripts/build-admin.mjs'], adminEnv);
+  server(process.execPath, ['scripts/build-admin.mjs', '--watch'], adminEnv);
+  server(process.execPath, [cli('wrangler'), 'dev', '--local', '--log-level', 'warn', '--port', String(cmsPort), '--assets', assetsDirectory, '--var', 'LOCAL_DEV_BUILD:true']);
   let completed = await ready();
   if (stopping) throw new Error('Development server stopped');
   await build();

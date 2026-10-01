@@ -68,10 +68,9 @@ root packageへ追加する配布用scriptを生成packageへ残さない。depe
 現在は `npm run migrate:local` が先に必要。dev coordinatorでWorker起動前にWranglerのlocal migrationを適用する。
 常に `--local`、固定DB設定、exit code検査。remote migrationを呼ばない。二回目も既存データを保持する。
 
-**先に修正する既知の起動不整合:** 現 `scripts/dev.mjs` はAdminを`.dev-assets`へ生成後、
-Astroだけをbuildした`dist`で`.dev-assets`全体を置換する。fresh checkoutではdistにAdminがないため、
-app.js/app.cssが消える可能性がある。既存watcherの出力先を丸ごと消さず、Admin専用領域と
-公開生成物の同期範囲を明確にする。旧公開routeの削除とAdmin保持を両立し、生成順に依存させない。
+**起動不整合の修正（2026-10-01）:** `scripts/dev.mjs`はAdminを`.dev-assets/admin`へ生成し、
+Workerも`.dev-assets`から配信する。Astroの`dist`から公開生成物を同期する際はAdmin専用領域を保持し、
+旧公開routeだけを削除する。初回・再buildでAdminのJS/CSSが消えないことを新規生成プロジェクトで確認した。
 
 ### 3. CLIと配布準備を追加 — 完了
 

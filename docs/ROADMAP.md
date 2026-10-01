@@ -1,5 +1,10 @@
 # Roadmap / terra引き継ぎ
 
+## dev初回起動時のAdmin欠落（2026-10-01）
+
+- 開発用のAdmin bundle/watchとWorkerの配信先を`.dev-assets`に揃え、Astro buildが空にする`dist`から公開生成物だけを同期する。同期時は`admin`を保持し、古い公開routeは削除する。起動完了判定ではexportに加えAdmin JS/CSSの200応答とContent-Typeを確認する。本番のbuild/deploy設定とDB schemaは変更しない。
+- `release:check`成功（check、55 tests、空サイトbuild、Worker dry-run、npm packとCLI生成確認）。新規CLI生成プロジェクトを空のlocal DBから`npm run dev`で起動し、初回build・Publish・delete後の再buildを通してAdmin HTML/JS/CSSの200応答を維持すること、公開route・Previewの表示と古いrouteの削除を確認した。
+
 ## Treeの文字位置（2026-10-01）
 
 - ページ行にもフォルダーの開閉ボタンと同じ寸法の非操作スペーサーを置き、同じ階層の文字の開始位置を揃えた。ページ専用の左paddingは削除し、ボタンとスペーサーの寸法はCSSで共通化した。`check:admin`・Admin build・`git diff --check`成功。実画面の確認時には8787のローカルサーバーが停止していたため、表示確認は未実施。

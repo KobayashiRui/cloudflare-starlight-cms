@@ -1,5 +1,9 @@
 # Roadmap / terra引き継ぎ
 
+## ドラッグ中のフォルダー自動展開（2026-10-01）
+
+- Headless Treeの`openOnDropDelay`を`0`に設定し、閉じたフォルダーへドラッグを重ねた際の自動展開を無効にした。さらに並び順から作るNavigationTreeのReact keyを除去し、ドロップ後の再取得で再マウントして全フォルダーを展開する問題を修正した。既存のdataLoader更新とrebuildTreeで構造を同期し、開閉状態を保持する。開閉は矢印ボタンと既存のキーボード操作を使う。`check:admin`・Admin build・`git diff --check`成功。`localhost:8787`の実Adminで閉じたフォルダーの並べ替え後も閉じたままであることを確認し、検証後の並び順を元へ戻した。
+
 ## フォルダー選択と開閉（2026-10-01）
 
 - フォルダー行は設定の選択、矢印ボタンは開閉に分けた。開閉は既存Headless Treeのexpand／collapseを使い、矢印操作は選択を変更しない。buttonの入れ子を避けて行はtreeitemのdivとし、Enter／Spaceの選択と既存の左右キーによる開閉を維持する。`check:admin`・Admin build成功。実Adminで行の連続クリックが開閉しないこと、矢印が選択を変えないこと、左右キーで開閉しEnter／Spaceは選択のみになることを確認した。

@@ -47,6 +47,7 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
     dataLoader: { getItem: (id) => byId.get(id) ?? root, getChildren: (id) => children.get(id) ?? [] },
     initialState: { expandedItems: ['root', ...visibleItems.filter((item) => item.kind === 'folder').map((item) => item.id)] },
     canReorder: canPersistReorder,
+    openOnDropDelay: 0,
     indent: 20,
     canDrag: (dragged) => !saving.current && canPersistReorder && dragged.length === 1 && dragged[0]?.getId() !== 'root',
     // The sync loader must see the removal before the helper inserts the item.

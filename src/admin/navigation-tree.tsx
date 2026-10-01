@@ -94,15 +94,31 @@ export function NavigationTree({ items, selectedDocumentId, selectedFolderId, te
       const unsaved = data.isTemporary || Boolean(data.documentId && unsavedDocumentIds.includes(data.documentId));
       const pending = data.translationStates.some((entry) => entry.state !== 'published');
       const status = unsaved ? t('Unsaved') : pending ? t('Ready to publish') : null;
-      return <button {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}>
+      const selectItem = () => {
+        item.setFocused();
+        tree.setSelectedItems([item.getId()]);
+        item.primaryAction();
+      };
+      return <div {...item.getProps()} key={item.getKey()} style={{ paddingLeft: `${item.getItemMeta().level * 20}px` }}
+        onClick={item.isFolder() ? selectItem : item.getProps().onClick}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.shiftKey || tree.getState().dnd) return;
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectItem(); }
+        }}>
+
         <div className={clsx('treeitem', {
           focused: item.isFocused(),
           expanded: item.isExpanded(),
           selected: isSelected,
           folder: item.isFolder(),
           drop: item.isDragTarget(),
-        })}>{item.isFolder() && <TreeChevron expanded={item.isExpanded()} />}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
-      </button>;
+        })}>{item.isFolder() && <button className="treeitem-toggle" type="button" tabIndex={-1}
+          aria-label={t(item.isExpanded() ? 'Collapse {name}' : 'Expand {name}', { name: data.name })}
+          aria-expanded={item.isExpanded()} onClick={(event) => {
+            event.stopPropagation();
+            if (item.isExpanded()) item.collapse(); else item.expand();
+          }}><TreeChevron expanded={item.isExpanded()} /></button>}<span className="treeitem-name">{data.name}</span>{status && <span className={clsx('treeitem-status', unsaved ? 'unsaved' : 'pending')}>{status}</span>}</div>
+      </div>;
     })}
     <div className="dragline" style={tree.getDragLineStyle()} />
   </div></div>;

@@ -268,5 +268,7 @@ export const ja = {
   "Dragging {names}. Current position: {position}. Press {up} and {down} to move, {drop} to drop, {cancel} to cancel.": "{names}を移動中。現在位置: {position}。{up}・{down}で移動、{drop}で確定、{cancel}で取り消し。",
   "None": "未選択",
   "in {name}": "{name}の中",
-  "{index} of {count} in {name}": "{name}の中の{index}番目（全{count}件）"
+  "{index} of {count} in {name}": "{name}の中の{index}番目（全{count}件）",
+  "Expand {name}": "「{name}」を展開",
+  "Collapse {name}": "「{name}」を折りたたむ"
 } satisfies Record<keyof typeof en, string>;

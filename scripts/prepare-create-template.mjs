@@ -78,7 +78,7 @@ await rm(join(templateRoot, 'test-files', 'create-cli.test.ts'), { force: true }
 for (const name of await readdir(join(templateRoot, 'test-files'))) {
   if (name.endsWith('.test.ts')) await rename(join(templateRoot, 'test-files', name), join(templateRoot, 'test-files', name.replace('.test.ts', '.test.template.ts')));
 }
-for (const name of ['ROADMAP.md', 'RELEASING.md', 'TEMPLATE-PLAN.md']) {
+for (const name of ['ROADMAP.md', 'RELEASING.md']) {
   await rm(join(templateRoot, 'docs', name), { force: true });
 }
 

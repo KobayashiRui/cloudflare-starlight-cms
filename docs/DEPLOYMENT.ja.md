@@ -30,7 +30,7 @@ Action **Allow**の人間向けpolicyを追加し、許可するemail、domain�
 
 ## 3. Docs domainを接続する
 
-`docs.example.com`をWorkerへ接続し、`src/site.config.ts`で公開originを設定してcommitします。
+`docs.example.com`をWorkerへ接続し、`src/site.config.ts`で公開originを設定します。commitは手順4のbuild認証設定を終えてから行います。
 
 ```ts
 export const siteConfig = {
@@ -61,6 +61,8 @@ CF_ACCESS_CLIENT_SECRET
 
 これらはbuild secretであり、Worker runtime variableではありません。Service Auth policyは人間向けAllow policyと分けます。Service TokenをAllow policyだけへ追加すると、Access login pageへredirectされます。
 
+認証設定後、手順3の公開originをcommitし、公開snapshotからのbuildを有効にします。
+
 ## 5. 公開Mediaを設定する
 
 最初のDeployでR2がprovisionされた後、`MEDIA` bucketへ`docs-media.example.com`のようなpublic custom domainを接続します。`wrangler.jsonc`にoriginを設定します。
@@ -89,7 +91,7 @@ npx wrangler secret put WORKERS_DEPLOY_HOOK_URL
 
 Deploy Hook URLはcredentialです。URLを知る人はbuildを要求できるため、source controlへ保存せず、漏えい時はHookを削除して再作成してください。
 
-`Publish page`は1つのPage・localeを公開します。`Publish changes`は保存済みDraftまたは保存済み変更をすべて公開し、buildを1回要求します。Hookが受理されたことはbuild開始の要求を意味し、公開完了ではありません。失敗したbuild要求はAdmin headerからretryできます。
+`Save draft`で編集を保存し、headerの`Publish`ボタンで全ページ・全言語の保存済み変更を公開してbuildを1回要求します。未保存の編集がある場合は先に保存してください。Hookが受理されたことはbuild開始の要求を意味し、公開完了ではありません。失敗したbuild要求はAdmin headerからretryできます。
 
 ## ホームページとLanding Page
 

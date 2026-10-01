@@ -1,4 +1,4 @@
-import { renderHeadingMarkdown } from './preview-render.ts';
+import { renderHeadingMarkdown, renderPublicTable } from './preview-render.ts';
 import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 
 function decorateText(value: TiptapNode, output: string): string {
@@ -44,17 +44,10 @@ export function render(nodeValue: unknown): string {
       return `${renderHeadingMarkdown({ type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: label }] })}\n\n${text(item)}`;
     }).join('\n\n');
     case 'tab': return text(value);
-    case 'table': {
-      const rows = tiptapChildren(value);
-      return rows.map((row, index) => {
-        const cells = tiptapChildren(row);
-        const markdown = `| ${cells.map(text).join(' | ')} |`;
-        return index === 0 ? `${markdown}\n| ${cells.map(() => '---').join(' | ')} |` : markdown;
-      }).join('\n');
-    }
-    case 'tableRow': return `| ${tiptapChildren(value).map(text).join(' | ')} |`;
+    case 'table': return renderPublicTable(value);
+    case 'tableRow':
     case 'tableHeader':
-    case 'tableCell': return text(value);
+    case 'tableCell': return renderPublicTable(value);
     default: throw new Error(`Unsupported Tiptap node: ${value.type}`);
   }
 }

@@ -50,6 +50,30 @@ Commit review fixes — 2026-10-01:
 - Render Preview tabs as labeled sections, matching public Docs, so headings in every section are visible when navigating by fragment.
 - Type checks, all 64 tests (including published Astro builds), an empty-site build, Worker dry run, and `git diff --check` passed. Regression cases cover heading IDs and TOC metadata, literal HTML safety, and links into the second tab's content.
 
+## Tables and design — 2026-10-01
+
+Implemented:
+
+- Use official Tiptap table commands for insertion, row/column editing, header toggles, merging/splitting and resizing.
+- Add standard, striped and minimal table designs and left/center/right cell alignment.
+- Preserve design, merged-cell spans, column widths and rich cell content through JSON saves and reopening.
+- Share safe HTML table rendering and CSS across Preview and public Docs, including light/dark mode and horizontal scrolling. Public export continues to reject Admin media URLs.
+- Keep table cell headings as formatting outside the page TOC/link picker so page heading IDs remain consistent.
+- Highlight the table toolbar button only while its menu is open or hovered; placing the cursor in a table no longer leaves the button highlighted.
+- Validate table styles, alignment, spans and widths; never emit arbitrary pasted styles. Keep table controls reactive to cell selection and portal submenus outside the scrolling parent menu.
+
+No dependency addition, database migration or deployment configuration change is required.
+
+Verification:
+
+- Type checks and all 72 tests passed, including an actual published Astro build, saved-draft Preview, JSON reopening, official merge/split operations, escaped rich content, rejected malformed design values and immutable publication snapshots.
+- Empty-site build and Worker dry run passed.
+- An isolated local Worker/database verified insertion, design selection, row addition, column resizing and saved reopening. Light/dark display and a 390px-wide design submenu were checked visually; submenus use a Portal to avoid clipping by the scrolling parent menu.
+
+The enhanced official Table Node UI is available under Tiptap's Start plan and Pro license, rather than MIT. It was not adopted into this MIT-distributed template.
+
+No npm publication or production deployment was performed.
+
 ## Recent milestones
 
 | Version | Changes |
@@ -68,3 +92,11 @@ Commit review fixes — 2026-10-01:
 ## Scope
 
 Keep the CMS focused on documentation and use existing React, Tiptap, Headless Tree, Hono, Drizzle, Astro/Starlight, Pagefind, and Cloudflare components. No general collection builder, CMS plugin/workflow engine, custom authentication, roles, or collaborative editing is planned. Draft media at public R2 URLs is not private.
+
+### Table usability — 2026-10-01
+
+- Header actions describe the result (heading/regular), reflecting the official command behavior: first row, first column, or selected cells. Japanese labels use マス rather than セル.
+- Removed cell color selection and attributes. Header and striped-row colors come from shared CSS; table design selection remains standard/striped/minimal. No custom color picker or HEX input is included.
+- The table toolbar button no longer stays highlighted merely because the cursor is inside a table.
+
+- Follow-up: explicitly use the toolbar’s ghost button style for Table. The Button primitive defaults to a tinted background, which made Table appear hovered even after its active state was removed.

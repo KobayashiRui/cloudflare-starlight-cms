@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { cmsSidebar } from '../src/starlight/sidebar.ts';
 import { supportedLocales } from '../src/locales.ts';
+import { tableDocument } from './fixtures/table';
 
 let mf: Miniflare;
 let output: string;
@@ -416,3 +417,25 @@ it('links saved drafts, publishes together, builds working anchors, follows move
   expect((await fetchLinksAdmin(`api/documents/${source.id}`, 'DELETE', { version: source.version + 1 })).status).toBe(204);
   expect((await fetchLinksAdmin('api/publish/changes', 'POST', {})).status).toBe(200);
 }, 60000);
+
+ it('saves and reopens table designs, previews drafts and builds immutable published tables', async () => {
+  const input = { title: 'Tables', slug: 'table-design-test', folderId: null, order: 0, description: '', contentJson: tableDocument };
+  let page = identity.parse(await request('api/documents', 'POST', input));
+  const reopened = z.object({ contentJson: z.unknown() }).parse(await request(`api/documents/${page.id}`));
+  expect(reopened.contentJson).toEqual(tableDocument);
+  const preview = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=en`);
+  expect(await preview.text()).toContain('data-table-style="striped"');
+  const publication = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version }));
+  page = publication.document;
+  const snapshot = await request('export/snapshot');
+  const editedBody = structuredClone(tableDocument);
+  editedBody.content[0]!.attrs.tableStyle = 'minimal';
+  page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, contentJson: editedBody, version: page.version }));
+  expect(await request('export/snapshot')).toEqual(snapshot);
+  expect(await (await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=en`)).text()).toContain('data-table-style="minimal"');
+  await buildDocs();
+  const html = await readFile(join(output, 'table-design-test/index.html'), 'utf8');
+  for (const fragment of ['data-table-style="striped"', 'colspan="2"', 'rowspan="2"', 'width: 180px', 'text-align: center', '**literal**', 'Second paragraph', 'List item']) expect(html).toContain(fragment);
+  expect(html).not.toContain('data-table-style="minimal"');
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+}, 30000);

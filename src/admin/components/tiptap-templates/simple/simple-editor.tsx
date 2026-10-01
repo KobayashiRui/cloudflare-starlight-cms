@@ -38,6 +38,9 @@ import "@/components/tiptap-node/image-node/image-node.scss"
 import "@/components/tiptap-node/heading-node/heading-node.scss"
 import "@/components/tiptap-node/paragraph-node/paragraph-node.scss"
 
+import { TableMenu } from "@/components/tiptap-ui/table-menu"
+import "../../../../styles/tables.css"
+
 // --- Tiptap UI ---
 import { HeadingDropdownMenu } from "@/components/tiptap-ui/heading-dropdown-menu"
 import { ImageUploadButton } from "@/components/tiptap-ui/image-upload-button"
@@ -116,6 +119,7 @@ const MainToolbarContent = ({
         />
         <BlockquoteButton />
         <CodeBlockButton />
+        <TableMenu />
       </ToolbarGroup>
 
       <ToolbarSeparator />

@@ -5,7 +5,7 @@ import { AdminLanguageProvider, useAdminI18n } from './i18n';
 import { siteConfig } from '../site.config.ts';
 import { assertDocumentContentUrls, documentMediaUrl, hasPendingImageUpload } from '../documents/content-urls.ts';
 import { Node, type JSONContent } from '@tiptap/core';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { tableExtensions } from './table-extensions';
 import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -130,7 +130,7 @@ const Video = Node.create({
 });
 
 const documentExtensions: Extensions = [
-  Table.configure({ resizable: true }), TableRow, TableHeader, TableCell,
+  ...tableExtensions,
   Callout, Steps, Tabs, Tab, Video,
   Youtube.configure({ nocookie: true, width: 640, height: 360 }),
 ];

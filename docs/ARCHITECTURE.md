@@ -43,6 +43,14 @@ Folder rows select folder settings; arrow buttons expand/collapse. Keyboard sele
 
 For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
 
+## Tables
+
+The official Tiptap Table, TableRow, TableHeader and TableCell extensions provide insertion, row/column operations, header toggles, cell merge/split and column resizing. The toolbar adds a 3 × 3 table with a header row. `tableStyle` selects standard, striped or minimal borders. Cell alignment uses the official `align` attribute.
+
+Design attributes, spans and column widths stay in Tiptap JSON through saving and reopening. The official resizable TableView is extended only to mirror `tableStyle` into its DOM. Shared CSS applies to the Editor, Preview and public Docs, including light/dark colors and horizontal scrolling. Colors are controlled by shared CSS, with no cell color attributes or color picker, and rendering validates alignment, spans and widths before emitting HTML.
+
+Public tables use escaped HTML rather than Markdown pipe tables, retaining merged cells, literal punctuation, rich blocks and column sizing. Preview uses the same table rendering code, while only protected Preview permits Admin media URLs. Cell headings remain visible formatting but do not enter the page TOC or heading-link picker, matching Astro's treatment of headings inside HTML tables.
+
 ## Page and heading links
 
 The official Tiptap Link mark is extended with nullable `documentId` and `anchor` attributes; its name and standard commands are retained. `href` remains a normal URL for editor rendering and clipboard HTML, while the page ID is authoritative for CMS internal links. Ordinary URL links remain supported.

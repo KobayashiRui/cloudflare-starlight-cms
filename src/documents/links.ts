@@ -20,6 +20,8 @@ export function documentHeadings(content: unknown): HeadingTarget[] {
   const slugger = new GithubSlugger();
   const headings: HeadingTarget[] = [];
   function visit(node: TiptapNode) {
+    // Cell headings are formatting within a table, not page sections in Astro.
+    if (node.type === 'table') return;
     if (node.type === 'heading' || node.type === 'tab') {
       const text = node.type === 'tab' ? String(node.attrs?.label ?? 'Tab') : headingText(node);
       const id = slugger.slug(text);

@@ -134,6 +134,12 @@ Keep the CMS focused on documentation and use existing React, Tiptap, Headless T
 - Documentation follow-up: README and both deployment guides explicitly state that R2 Custom Domain setup is unnecessary and explain when existing users may detach it, while retaining the original bucket/binding and documenting legacy rollback/direct-link requirements.
 - Validation includes an actual Astro build through emulated old APIs, image/video byte copies, unchanged legacy stored JSON, protected Editor/Preview URLs, later build-time GC, concurrent-build protection, retention/deletion retries, and strict redirect/authentication failure handling. All 81 tests and type checks passed, including real published Astro builds; empty-site build, Worker dry run and `git diff --check` passed. Packed CLI generation and a generated project’s clean `npm ci` plus empty build passed. Lockfile metadata was regenerated for reproducible clean installation.
 
+### Behavior-preserving refactoring — 2026-10-02
+
+- Consolidated registered-media key queries and Admin/public media URL generation across document reads, publication validation, export, upload responses and build downloads. Document views now require the registered-key set explicitly. No schema, stored-data, retention or cleanup-condition changes.
+- Reviewed the 81 test cases. They cover distinct behavior and failures, including parameterized format/slug validation, immutable publication, legacy migration, concurrent builds and deletion safety. Retained these regressions rather than reducing the count or adding tests for helper implementation details.
+- Type checks and all 81 tests passed, including local D1/R2 integration and actual published Astro builds. Empty-site build, Worker dry run and `git diff --check` passed. Production deployment was not performed.
+
 References: [Version contents](https://developers.cloudflare.com/workers/versions-and-deployments/), [Static Assets limits](https://developers.cloudflare.com/workers/platform/limits/), [Static Assets billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/), [Upload reuse](https://developers.cloudflare.com/workers/static-assets/direct-upload/).
 
 No npm publication or production deployment was performed.

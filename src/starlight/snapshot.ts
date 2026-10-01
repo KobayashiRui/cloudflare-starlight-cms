@@ -1,4 +1,5 @@
 import { resolveContentMedia } from '../media/urls.ts';
+import { registeredMediaKeys } from '../media/references.ts';
 import { resolveDocumentLinks, type LinkPage } from '../documents/links.ts';
 import { z } from 'zod';
 import type { RuntimeEnv } from '../env.ts';
@@ -56,7 +57,6 @@ export async function publishedSnapshot(env: RuntimeEnv, build?: { id: string; c
       updatedAt: new Date(row.updated_at).toISOString(), publishedAt: new Date(row.published_at).toISOString(),
     };
   });
-  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
-  const keys = new Set(media.results.map((row) => row.object_key));
+  const keys = await registeredMediaKeys(env.DB);
   return { version: 3, documents: documents.map((document, index) => ({ ...document, body: { format: 'markdown', value: renderDocumentContent(resolveContentMedia(resolveDocumentLinks(linkPages[index]!.content, document, linkPages), keys, 'public')) } })) };
 }

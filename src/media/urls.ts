@@ -1,5 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
 
+export function mediaUrl(key: string, target: 'admin' | 'public'): string {
+  return target === 'admin' ? `/admin/api/media/object/${key}` : `/_cms-media/${key.slice('media/'.length)}`;
+}
+
 /** UUID object keys are stable across public domains and deployment versions. */
 export function mediaObjectKey(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -24,7 +28,7 @@ export function resolveContentMedia(content: unknown, keys: ReadonlySet<string>,
       if (!['src', 'href', 'poster'].includes(field)) continue;
       const key = mediaObjectKey(url);
       if (key && keys.has(key)) {
-        Object.assign(attrs, { [field]: target === 'admin' ? `/admin/api/media/object/${key}` : `/_cms-media/${key.slice('media/'.length)}` });
+        Object.assign(attrs, { [field]: mediaUrl(key, target) });
       }
     }
     value.attrs = attrs;

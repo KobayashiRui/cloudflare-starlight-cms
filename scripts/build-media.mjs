@@ -2,7 +2,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { parseFragment } from 'parse5';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { mediaObjectKey } from '../src/media/urls.ts';
+import { mediaObjectKey, mediaUrl } from '../src/media/urls.ts';
 
 /** Parse destinations, never replace URLs in prose, code examples or alt text. */
 export function staticMediaMarkdown(markdown, media, used) {
@@ -14,7 +14,7 @@ export function staticMediaMarkdown(markdown, media, used) {
       return null;
     }
     used.add(key);
-    return `/_cms-media/${key.slice('media/'.length)}`;
+    return mediaUrl(key, 'public');
   }
   function html(node) {
     const offset = node.position.start.offset;
@@ -66,7 +66,7 @@ export async function copyPublishedMedia(snapshot, records, directory, request) 
   for (const key of used) {
     const record = media.get(key);
     if (record.size > 25 * 1024 * 1024) throw new Error('Published media exceeds 25 MiB');
-    const response = await request(`/admin/api/media/object/${key}`);
+    const response = await request(mediaUrl(key, 'admin'));
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength !== record.size || response.headers.get('content-type')?.split(';')[0] !== record.contentType) throw new Error('CMS media does not match its metadata');
     await writeFile(join(directory, key.slice('media/'.length)), bytes);

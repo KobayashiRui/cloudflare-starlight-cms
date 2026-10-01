@@ -1,5 +1,5 @@
 import { resolveContentMedia } from '../media/urls.ts';
-import { managedMediaKeys, mediaWriteGuard } from '../media/references.ts';
+import { managedMediaKeys, mediaWriteGuard, registeredMediaKeys } from '../media/references.ts';
 import { assertPublishedLinks } from './link-pages.ts';
 import { siteDeliveryStatement } from '../publish/record.ts';
 import { defaultLocale, type SupportedLocale } from '../locales.ts';
@@ -50,7 +50,7 @@ const translationSelect = `
   FROM document_translation t JOIN document d ON d.id=t.document_id
   LEFT JOIN document_revision r ON r.id=t.published_revision_id`;
 
-function toView(row: TranslationRow, keys: ReadonlySet<string> = new Set()): DocumentView {
+function toView(row: TranslationRow, keys: ReadonlySet<string>): DocumentView {
   return {
     id: row.document_id, translationId: row.id, locale: row.locale, folderId: row.folder_id,
     title: row.title, sidebarLabel: row.sidebar_label, slug: row.slug, description: row.description,
@@ -80,15 +80,13 @@ async function getTranslation(env: RuntimeEnv, documentId: string, locale: Suppo
 export async function listDocuments(env: RuntimeEnv, locale: SupportedLocale = defaultLocale) {
   const rows = await env.DB.prepare(`${translationSelect} WHERE t.locale=? ORDER BY d.sort_order,d.slug`)
     .bind(locale).all<TranslationRow>();
-  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
-  const keys = new Set(media.results.map((row) => row.object_key));
+  const keys = await registeredMediaKeys(env.DB);
   return rows.results.map((row) => toView(row, keys));
 }
 
 export async function getDocument(env: RuntimeEnv, id: string, locale: SupportedLocale = defaultLocale) {
   const row = await getTranslation(env, id, locale);
-  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
-  return toView(row, new Set(media.results.map((item) => item.object_key)));
+  return toView(row, await registeredMediaKeys(env.DB));
 }
 
 export async function createDocument(env: RuntimeEnv, raw: unknown, locale: SupportedLocale = defaultLocale) {
@@ -195,8 +193,7 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
   }
   // Return the exact snapshots/version written by this publication, rather
   // than a later read that might include somebody else's subsequent save.
-  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
-  const keys = new Set(media.results.map((row) => row.object_key));
+  const keys = await registeredMediaKeys(env.DB);
   return candidates.results.map((candidate, index) => toView({
     ...candidate, version: candidate.version + 1, published_revision_id: revisions[index]!,
     published_at: now, updated_at: now, publication_state: 'published',

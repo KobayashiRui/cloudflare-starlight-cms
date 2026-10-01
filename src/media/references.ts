@@ -1,4 +1,10 @@
 import { mediaObjectKey } from './urls.ts';
+import type { RuntimeEnv } from '../env.ts';
+
+export async function registeredMediaKeys(db: RuntimeEnv['DB']): Promise<ReadonlySet<string>> {
+  const media = await db.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
+  return new Set(media.results.map((row) => row.object_key));
+}
 
 /** Media objects owned by this CMS, including its protected local media route. */
 export function managedMediaKeys(content: unknown): string[] {

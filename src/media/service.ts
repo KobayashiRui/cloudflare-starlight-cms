@@ -1,6 +1,7 @@
 import { database } from '../db/client.ts';
 import { media } from '../db/schema.ts';
 import { mediaHasReferences } from './references.ts';
+import { mediaUrl } from './urls.ts';
 import type { RuntimeEnv } from '../env.ts';
 
 const mediaTypes = new Map([
@@ -13,10 +14,6 @@ export const directUploadMaxBytes = 10 * 1024 * 1024;
 export class InvalidMediaError extends Error {}
 export class MediaNotFoundError extends Error {}
 export class MediaInUseError extends Error {}
-
-function mediaUrl(key: string): string {
-  return `/admin/api/media/object/${key}`;
-}
 
 export function signatureMatches(type: string, bytes: Uint8Array): boolean {
   if (type === 'image/png') return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
@@ -32,7 +29,7 @@ export async function listMedia(env: RuntimeEnv) {
     CASE WHEN ${mediaHasReferences} THEN 1 ELSE 0 END AS isUsed FROM media
     WHERE NOT EXISTS (SELECT 1 FROM media_deletion x WHERE x.media_id=media.id) ORDER BY file_name`)
     .bind(Date.now()).all<{ id: string; objectKey: string; fileName: string; contentType: string; size: number; createdAt: number; isUsed: number }>();
-  return rows.results.map((row) => ({ ...row, url: mediaUrl(row.objectKey), isUsed: Boolean(row.isUsed) }));
+  return rows.results.map((row) => ({ ...row, url: mediaUrl(row.objectKey, 'admin'), isUsed: Boolean(row.isUsed) }));
 }
 
 export async function uploadMedia(env: RuntimeEnv, request: Request) {
@@ -63,7 +60,7 @@ export async function uploadMedia(env: RuntimeEnv, request: Request) {
     await env.MEDIA.delete(objectKey);
     throw error;
   }
-  return { id, objectKey, fileName: file.name, contentType: type, size: file.size, url: mediaUrl(objectKey) };
+  return { id, objectKey, fileName: file.name, contentType: type, size: file.size, url: mediaUrl(objectKey, 'admin') };
 }
 
 export async function deleteUnusedMedia(env: RuntimeEnv, id: string): Promise<void> {

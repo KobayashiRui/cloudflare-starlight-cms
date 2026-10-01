@@ -1,4 +1,5 @@
 import { resolveContentMedia } from '../media/urls.ts';
+import { registeredMediaKeys } from '../media/references.ts';
 import { z } from 'zod';
 import type { RuntimeEnv } from '../env.ts';
 import { navigationPath, resolveDocumentLinks, type LinkPage } from './links.ts';
@@ -29,7 +30,6 @@ export async function loadLinkPages(env: RuntimeEnv, drafts = false, overrides: 
 }
 export async function assertPublishedLinks(env: RuntimeEnv, overrides: readonly LinkOverride[] = [], removed?: { id: string; locale: string }) {
   const pages = (await loadLinkPages(env, false, overrides)).filter((page) => !removed || page.id !== removed.id || page.locale !== removed.locale);
-  const media = await env.DB.prepare('SELECT object_key FROM media').all<{ object_key: string }>();
-  const keys = new Set(media.results.map((row) => row.object_key));
+  const keys = await registeredMediaKeys(env.DB);
   for (const page of pages) renderDocumentContent(resolveContentMedia(resolveDocumentLinks(page.content, page, pages), keys, 'public'));
 }

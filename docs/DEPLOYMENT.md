@@ -67,7 +67,9 @@ Once these credentials are configured, commit the public origin from step 3 to e
 
 R2 stores uploaded originals. Editor and Preview use the Access-protected Admin media API. `npm run build` copies only published managed media into `dist/_cms-media/` and serves it with Docs through Workers Static Assets. No R2 custom domain, `MEDIA_PUBLIC_URL`, public CORS configuration or R2 development URL is needed. External HTTPS media stays external.
 
-Existing users can upgrade and push to GitHub. Keep the same bucket, object keys, stored documents and history; no re-upload or additional Publish operation is needed. `MEDIA_PUBLIC_URL` can be removed or left unused. The first build supports the old Worker's existing APIs and skips cleanup. Disable the old R2 domain only after the static-media deployment succeeds. Pre-migration rollbacks and external direct links still need the old domain and originals. While enabled, that domain continues to expose old Draft media URLs.
+Existing users can upgrade and push to GitHub. Keep the same bucket, object keys, stored documents and history; no re-upload or additional Publish operation is needed. `MEDIA_PUBLIC_URL` can be removed or left unused. The first build supports the old Worker's existing APIs and skips cleanup.
+
+**Removing an existing R2 domain:** After the static-media deployment succeeds and published images/videos load correctly, detach the bucket’s custom domain. Keep the R2 bucket and `MEDIA` binding for originals, editing and retained history. Pre-migration rollbacks and external direct links still need the old domain and originals. While enabled, that domain continues to expose old Draft media URLs.
 
 Uploads remain limited to 10 MiB. Static Assets allows 25 MiB per file and 20,000 total files per Free-plan version, including Docs, Admin, Pagefind and media. Build-time downloads incur R2 reads; published managed media browsing does not.
 

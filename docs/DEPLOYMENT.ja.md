@@ -69,7 +69,9 @@ R2は画像・動画の原本を保持します。AdminのMedia pickerからア�
 
 R2 custom domain、`MEDIA_PUBLIC_URL`、公開用CORS設定は不要です。R2のdevelopment URLも無効のままにします。外部のHTTPS画像・動画はコピーせず、元のURLを使用します。
 
-既存利用者は更新を取り込みGitHubへpushすれば移行できます。R2 bucket・object key・保存済み本文・履歴は維持し、再アップロードや追加のPublish操作は不要です。旧 `MEDIA_PUBLIC_URL` は削除できますが、残っていても無視します。最初のbuildは旧APIを使い、cleanupを省きます。旧R2ドメインを停止する場合はStatic Assets版のdeploy成功後にしてください。移行前Versionへのrollbackや外部の旧画像直リンクを維持する場合は、旧ドメインと原本も必要です。公開中の旧R2ドメインからは引き続きDraft画像も取得できる点に注意してください。
+既存利用者は更新を取り込みGitHubへpushすれば移行できます。R2 bucket・object key・保存済み本文・履歴は維持し、再アップロードや追加のPublish操作は不要です。旧 `MEDIA_PUBLIC_URL` は削除できますが、残っていても無視します。最初のbuildは旧APIを使い、cleanupを省きます。
+
+**既存R2ドメインを外す場合**：Static Assets版のdeploy成功と公開画像・動画の表示を確認してから、R2のCustom Domain接続を解除できます。R2 bucketと`MEDIA` bindingは原本保存・編集・履歴のために維持します。移行前Versionへのrollbackや外部の旧画像直リンクを維持する場合は、旧ドメインと原本も必要です。公開中の旧R2ドメインからは引き続きDraft画像も取得できる点に注意してください。
 
 直接アップロードは10 MiBまでです。Static Assetsは1ファイル25 MiB、FreeではVersion全体で20,000ファイルまでです。Docs・Admin・Pagefindのファイルも含みます。ビルドごとの原本取得はR2読み取りに含まれますが、公開閲覧では管理対象メディアをR2から取得しません。
 

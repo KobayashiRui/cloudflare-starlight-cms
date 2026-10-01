@@ -45,6 +45,8 @@ Local development uses Miniflare for D1 and R2. No Cloudflare account is require
 
 Connect the generated repository to Cloudflare Workers Builds, configure Cloudflare Access before attaching the production domain, then add the Deploy Hook. The first deployment provisions the D1 and R2 bindings automatically.
 
+No R2 custom domain or `MEDIA_PUBLIC_URL` is required. Keep R2 as the private original store; published images and videos are served with Docs through Workers Static Assets. Existing users can detach the old R2 domain after the upgraded deployment succeeds. Keep the old domain and originals if pre-migration rollbacks or external direct links must continue working.
+
 See the [Deployment guide](docs/DEPLOYMENT.md) for the complete setup.
 
 ## Upgrade

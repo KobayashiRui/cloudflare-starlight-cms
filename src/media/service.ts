@@ -1,6 +1,7 @@
-import { asc, eq } from 'drizzle-orm';
 import { database } from '../db/client.ts';
-import { documentRevision, documentTranslation, media } from '../db/schema.ts';
+import { media } from '../db/schema.ts';
+import { mediaHasReferences } from './references.ts';
+import { mediaUrl } from './urls.ts';
 import type { RuntimeEnv } from '../env.ts';
 
 const mediaTypes = new Map([
@@ -14,11 +15,6 @@ export class InvalidMediaError extends Error {}
 export class MediaNotFoundError extends Error {}
 export class MediaInUseError extends Error {}
 
-function mediaUrl(env: RuntimeEnv, key: string): string {
-  const base = env.MEDIA_PUBLIC_URL?.replace(/\/$/, '');
-  return base ? `${base}/${key}` : `/admin/api/media/object/${key}`;
-}
-
 export function signatureMatches(type: string, bytes: Uint8Array): boolean {
   if (type === 'image/png') return bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
   if (type === 'image/jpeg') return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
@@ -28,46 +24,12 @@ export function signatureMatches(type: string, bytes: Uint8Array): boolean {
   return false;
 }
 
-function contentReferencesObjectKey(content: unknown, objectKey: string): boolean {
-  if (!content || typeof content !== 'object') return false;
-  if (Array.isArray(content)) return content.some((item) => contentReferencesObjectKey(item, objectKey));
-
-  const node = content as { type?: unknown; attrs?: { src?: unknown }; content?: unknown };
-  if ((node.type === 'image' || node.type === 'video') && typeof node.attrs?.src === 'string') {
-    try {
-      const { pathname } = new URL(node.attrs.src, 'https://cms.invalid');
-      if (pathname === `/${objectKey}` || pathname.endsWith(`/${objectKey}`)) return true;
-    } catch {
-      // A malformed editor URL cannot identify a managed R2 object.
-    }
-  }
-  return contentReferencesObjectKey(node.content, objectKey);
-}
-
-export function contentReferencesMediaObject(contentJson: string, objectKey: string): boolean {
-  try {
-    return contentReferencesObjectKey(JSON.parse(contentJson), objectKey);
-  } catch {
-    // Preserve media for malformed historical JSON: it cannot prove an asset is unused.
-    return true;
-  }
-}
-
-async function referencedObjectKeys(env: RuntimeEnv, objectKeys: readonly string[]): Promise<Set<string>> {
-  if (objectKeys.length === 0) return new Set();
-  const db = database(env);
-  const [drafts, revisions] = await Promise.all([
-    db.select({ contentJson: documentTranslation.contentJson }).from(documentTranslation),
-    db.select({ contentJson: documentRevision.contentJson }).from(documentRevision),
-  ]);
-  const content = [...drafts, ...revisions].map((row) => row.contentJson);
-  return new Set(objectKeys.filter((objectKey) => content.some((json) => contentReferencesMediaObject(json, objectKey))));
-}
-
 export async function listMedia(env: RuntimeEnv) {
-  const rows = await database(env).select().from(media).orderBy(asc(media.fileName));
-  const usedObjectKeys = await referencedObjectKeys(env, rows.map((row) => row.objectKey));
-  return rows.map((row) => ({ ...row, url: mediaUrl(env, row.objectKey), isUsed: usedObjectKeys.has(row.objectKey) }));
+  const rows = await env.DB.prepare(`SELECT media.id,object_key AS objectKey,file_name AS fileName,content_type AS contentType,size,created_at AS createdAt,
+    CASE WHEN ${mediaHasReferences} THEN 1 ELSE 0 END AS isUsed FROM media
+    WHERE NOT EXISTS (SELECT 1 FROM media_deletion x WHERE x.media_id=media.id) ORDER BY file_name`)
+    .bind(Date.now()).all<{ id: string; objectKey: string; fileName: string; contentType: string; size: number; createdAt: number; isUsed: number }>();
+  return rows.results.map((row) => ({ ...row, url: mediaUrl(row.objectKey, 'admin'), isUsed: Boolean(row.isUsed) }));
 }
 
 export async function uploadMedia(env: RuntimeEnv, request: Request) {
@@ -98,23 +60,19 @@ export async function uploadMedia(env: RuntimeEnv, request: Request) {
     await env.MEDIA.delete(objectKey);
     throw error;
   }
-  return { id, objectKey, fileName: file.name, contentType: type, size: file.size, url: mediaUrl(env, objectKey) };
+  return { id, objectKey, fileName: file.name, contentType: type, size: file.size, url: mediaUrl(objectKey, 'admin') };
 }
 
 export async function deleteUnusedMedia(env: RuntimeEnv, id: string): Promise<void> {
-  const db = database(env);
-  const row = await db.select().from(media).where(eq(media.id, id)).get();
+  const row = await env.DB.prepare('SELECT object_key FROM media WHERE id=?').bind(id).first<{ object_key: string }>();
   if (!row) throw new MediaNotFoundError();
-  if ((await referencedObjectKeys(env, [row.objectKey])).has(row.objectKey)) {
-    throw new MediaInUseError('Media is still used by a draft, published page, or revision');
-  }
-
-  await db.delete(media).where(eq(media.id, id));
-  try {
-    await env.MEDIA.delete(row.objectKey);
-  } catch (error) {
-    // Restore the row when R2 rejects deletion, leaving the object manageable.
-    await db.insert(media).values(row);
-    throw error;
-  }
+  const result = await env.DB.prepare(`INSERT OR IGNORE INTO media_deletion (media_id) SELECT id FROM media WHERE id=? AND NOT ${mediaHasReferences}`)
+    .bind(id, Date.now()).run();
+  const claimed = result.meta.changes > 0 || await env.DB.prepare('SELECT media_id FROM media_deletion WHERE media_id=?').bind(id).first();
+  if (!claimed) throw new MediaInUseError('Media is still used by a draft, published page, revision, or build');
+  await env.MEDIA.delete(row.object_key);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM media WHERE id=?').bind(id),
+    env.DB.prepare('DELETE FROM media_deletion WHERE media_id=?').bind(id),
+  ]);
 }

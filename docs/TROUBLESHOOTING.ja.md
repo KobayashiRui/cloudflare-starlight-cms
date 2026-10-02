@@ -8,7 +8,7 @@ buildが`/admin/export/snapshot`を読み込もうとした際、Cloudflare Acce
 
 ## 公開サイトでMediaを読み込めない
 
-`MEDIA_PUBLIC_URL`をHTTPSのR2 custom domainへ設定して再buildします。公開画像・動画はHTTP、Admin media proxy URL、private network addressを使用できません。可能な限りMedia pickerからuploadしてください。
+`npm run build`で生成した`dist`全体をデプロイしてください。管理対象メディアはAccessビルドTokenで取得し、`dist/_cms-media/`へ配置します。TokenがAdminのsnapshot・メディア一覧・メディア取得APIを利用でき、R2に原本があることを確認してください。`MEDIA_PUBLIC_URL`は不要です。外部画像・動画はpublic HTTPS URLを使います。
 
 ## 自動D1 provisionで既存databaseエラーが出る
 

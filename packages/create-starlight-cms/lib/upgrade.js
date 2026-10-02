@@ -11,7 +11,7 @@ const ignoredTemplateFiles = new Set(['package-lock.json']);
 const managedPackageFields = ['scripts', 'dependencies', 'devDependencies', 'optionalDependencies', 'engines'];
 
 function templatePath(name, root) {
-  const restored = name.endsWith('.test.template.ts') ? name.replace('.test.template.ts', '.test.ts') : name;
+  const restored = name.replace(/\.test\.template\.(ts|js)$/, '.test.$1');
   if (root && restored === '_gitignore') return '.gitignore';
   if (root && restored === 'package-lock.json.template') return 'package-lock.json';
   if (root && restored === 'test-files') return 'tests';

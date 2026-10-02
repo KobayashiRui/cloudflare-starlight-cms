@@ -1,5 +1,7 @@
 import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
+import { headingText } from '../documents/links.ts';
 import GithubSlugger from 'github-slugger';
+import { tableAttributes, cellAttributes } from '../documents/tables';
 
 export interface PreviewHeading {
   id: string;
@@ -16,8 +18,11 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function text(value: TiptapNode): string {
-  let output = escapeHtml(value.text ?? '');
+function text(value: TiptapNode, literalMarkdown = false): string {
+  // Entities preserve literal Markdown punctuation when embedded in a heading.
+  let output = literalMarkdown
+    ? Array.from(value.text ?? '', (character) => /[\\`*_[\]#!|~]/.test(character) ? `&#${character.charCodeAt(0)};` : escapeHtml(character)).join('')
+    : escapeHtml(value.text ?? '');
   const marks = Array.isArray(value.marks) ? value.marks : [];
   for (const mark of marks) {
     if (!mark || typeof mark !== 'object' || !('type' in mark)) continue;
@@ -42,15 +47,32 @@ function codeLanguage(value: unknown): string {
   return typeof value === 'string' && /^[a-z0-9+-]+$/i.test(value) ? ` class="language-${escapeHtml(value)}"` : '';
 }
 
-function headingText(value: TiptapNode): string {
-  if (value.type === 'text') return value.text ?? '';
-  if (value.type === 'hardBreak') return ' ';
-  return tiptapChildren(value).map(headingText).join('');
+function headingContent(value: TiptapNode): string {
+  return tiptapChildren(value).map((child) => {
+    if (child.type === 'text') return text(child, true);
+    if (child.type === 'hardBreak') return '<br> ';
+    throw new Error(`Unsupported heading child: ${child.type}`);
+  }).join('');
 }
 
-function createRenderer() {
+/** Keep literal text inside a span so Markdown retains edge spaces and trailing #. */
+export function renderHeadingMarkdown(value: TiptapNode): string {
+  const level = Number(value.attrs?.level ?? 2);
+  if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
+  return `${'#'.repeat(level)} <span>${headingContent(value)}</span>`;
+}
+
+/** Keep literal Tiptap heading text in Preview as in the public Markdown. */
+export function renderHeadingHtml(value: TiptapNode, id?: string): string {
+  const level = Number(value.attrs?.level ?? 2);
+  if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
+  return `<h${level}${id === undefined ? '' : ` id="${escapeHtml(id)}"`}>${headingContent(value)}</h${level}>`;
+}
+
+function createRenderer(allowAdminMediaProxy = true) {
   const headings: PreviewHeading[] = [];
   const slugger = new GithubSlugger();
+  let tableDepth = 0;
 
   function inline(value: TiptapNode): string {
     return tiptapChildren(value).map(renderNode).join('');
@@ -60,30 +82,65 @@ function createRenderer() {
     return `<li>${inline(value)}</li>`;
   }
 
-  function renderTableRow(value: TiptapNode, header: boolean): string {
-    const cell = header ? 'th' : 'td';
-    return `<tr>${tiptapChildren(value).map((item) => `<${cell}>${inline(item)}</${cell}>`).join('')}</tr>`;
+  function renderTableCell(value: TiptapNode): string {
+    const tag = value.type === 'tableHeader' ? 'th' : 'td';
+    const attrs = cellAttributes.parse(value.attrs ?? {});
+    const widths = attrs.colwidth ? ` colwidth="${attrs.colwidth.join(',')}"` : '';
+    const align = attrs.align ? ` style="text-align: ${attrs.align}"` : '';
+    return `<${tag} colspan="${attrs.colspan}" rowspan="${attrs.rowspan}"${widths}${align}>${inline(value)}</${tag}>`;
+  }
+
+  function renderTableRow(value: TiptapNode): string {
+    const cells = tiptapChildren(value);
+    if (!cells.length || cells.some((cell) => !['tableCell', 'tableHeader'].includes(cell.type))) throw new Error('Invalid table row');
+    return `<tr>${cells.map(renderTableCell).join('')}</tr>`;
+  }
+
+  function renderTable(value: TiptapNode): string {
+    const attrs = tableAttributes.parse(value.attrs ?? {});
+    const rows = tiptapChildren(value);
+    if (!rows.length || rows.some((row) => row.type !== 'tableRow')) throw new Error('Invalid table');
+    const widths = tiptapChildren(rows[0]!).flatMap((cell) => {
+      const attrs = cellAttributes.parse(cell.attrs ?? {});
+      return attrs.colwidth ?? Array.from({ length: attrs.colspan }, () => null);
+    });
+    const columns = widths.map((width) => width ? `<col style="width: ${width}px">` : '<col>').join('');
+    const fullWidth = widths.every((width) => width !== null && width > 0) ? widths.reduce<number>((sum, width) => sum + (width ?? 0), 0) : null;
+    const minWidth = widths.reduce<number>((sum, width) => sum + (width || 25), 0);
+    let body: string;
+    tableDepth += 1;
+    try { body = rows.map(renderTableRow).join(''); } finally { tableDepth -= 1; }
+    return `<div class="cms-table-scroll" tabindex="0"><table data-table-style="${attrs.tableStyle}"${fullWidth ? ` style="width: ${fullWidth}px"` : ` style="min-width: ${minWidth}px"`}><colgroup>${columns}</colgroup><tbody>${body}</tbody></table></div>`;
   }
 
   function renderTabs(value: TiptapNode): string {
     const tabs = tiptapChildren(value);
     if (tabs.length === 0) return '';
-    const labels = tabs.map((tab) => typeof tab.attrs?.label === 'string' ? tab.attrs.label : 'Tab');
-    return `<starlight-tabs><div class="tablist-wrapper not-content"><ul role="tablist">${labels.map((label, index) => `<li role="presentation" class="tab"><a role="tab" href="#cms-preview-tab-${index}" aria-selected="${index === 0}"${index === 0 ? '' : ' tabindex="-1"'}>${escapeHtml(label)}</a></li>`).join('')}</ul></div>${tabs.map((tab, index) => `<section id="cms-preview-tab-${index}" role="tabpanel"${index === 0 ? '' : ' hidden'}>${inline(tab)}</section>`).join('')}</starlight-tabs>`;
+    // Public Docs render tab labels as H4 sections. Keep Preview equally visible
+    // so every heading link works without a separate tab controller.
+    return tabs.map((tab) => {
+      const label = typeof tab.attrs?.label === 'string' ? tab.attrs.label : 'Tab';
+      return `<h4${tableDepth ? '' : ` id="${escapeHtml(slugger.slug(label))}"`}>${escapeHtml(label)}</h4>${inline(tab)}`;
+    }).join('');
   }
 
   function renderNode(value: TiptapNode): string {
     switch (value.type) {
       case 'text': return text(value);
       case 'doc': return tiptapChildren(value).map(renderNode).join('');
-      case 'paragraph': return `<p>${inline(value)}</p>`;
+      case 'paragraph': {
+        const align = value.attrs?.textAlign;
+        const style = ['left', 'center', 'right', 'justify'].includes(String(align)) ? ` style="text-align: ${align}"` : '';
+        return `<p${style}>${inline(value)}</p>`;
+      }
       case 'heading': {
         const level = Number(value.attrs?.level ?? 2);
         if (!Number.isInteger(level) || level < 1 || level > 6) throw new Error('Invalid heading level');
-        const label = headingText(value).replace(/\s+/g, ' ').trim() || 'Section';
+        if (tableDepth) return renderHeadingHtml(value);
+        const label = headingText(value);
         const id = slugger.slug(label);
         headings.push({ id, level, text: label });
-        return `<h${level} id="${escapeHtml(id)}">${inline(value)}</h${level}>`;
+        return renderHeadingHtml(value, id);
       }
       case 'bulletList': return `<ul>${tiptapChildren(value).map(renderListItem).join('')}</ul>`;
       case 'orderedList': return `<ol>${tiptapChildren(value).map(renderListItem).join('')}</ol>`;
@@ -94,8 +151,8 @@ function createRenderer() {
       case 'codeBlock': return `<pre><code${codeLanguage(value.attrs?.language)}>${inline(value)}</code></pre>`;
       case 'hardBreak': return '<br>';
       case 'horizontalRule': return '<hr>';
-      case 'image': return `<img src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy: true }))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
-      case 'video': return `<video controls src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy: true }))}"></video>`;
+      case 'image': return `<img src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy }))}" alt="${escapeHtml(typeof value.attrs?.alt === 'string' ? value.attrs.alt : '')}">`;
+      case 'video': return `<video controls src="${escapeHtml(documentMediaUrl(value.attrs?.src, { allowAdminMediaProxy }))}"></video>`;
       case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
       case 'callout': {
         const title = asideTitle(value.attrs?.title);
@@ -103,14 +160,11 @@ function createRenderer() {
       }
       case 'steps': return `<ol class="sl-steps">${tiptapChildren(value).map(renderListItem).join('')}</ol>`;
       case 'tabs': return renderTabs(value);
-      case 'tab': return inline(value);
-      case 'table': {
-        const rows = tiptapChildren(value);
-        return `<table><tbody>${rows.map((row, index) => renderTableRow(row, index === 0)).join('')}</tbody></table>`;
-      }
-      case 'tableRow': return renderTableRow(value, false);
+      case 'tab': if (!tableDepth) slugger.slug(String(value.attrs?.label ?? 'Tab')); return inline(value);
+      case 'table': return renderTable(value);
+      case 'tableRow': return renderTableRow(value);
       case 'tableHeader':
-      case 'tableCell': return inline(value);
+      case 'tableCell': return renderTableCell(value);
       default: throw new Error(`Unsupported Tiptap node: ${value.type}`);
     }
   }
@@ -160,4 +214,9 @@ function renderTocItems(items: TocItem[], depth: number, className: string): str
 /** Replace Starlight's static `Overview` item while retaining its generated TOC structure and styles. */
 export function renderPreviewTocItems(headings: PreviewHeading[], minHeadingLevel: number, maxHeadingLevel: number, className: string): string {
   return renderTocItems(tocTree(headings, minHeadingLevel, maxHeadingLevel), 0, className);
+}
+
+/** Public tables retain structure and literal cell content rather than lossy Markdown pipes. */
+export function renderPublicTable(value: TiptapNode): string {
+  return createRenderer(false).render(value);
 }

@@ -8,7 +8,7 @@ Adding the token to the human **Allow** policy is not sufficient.
 
 ## Media does not load on the public site
 
-Set `MEDIA_PUBLIC_URL` to an HTTPS R2 custom domain and rebuild the site. Published images and videos cannot use HTTP, Admin media proxy URLs, or private-network addresses. Use the Media picker to upload assets when possible.
+Run `npm run build` and deploy its complete `dist` output. Managed media is copied into `dist/_cms-media/` using the Access build token. Verify that the token can read the Admin snapshot, media list and media object endpoints and that the original exists in R2. `MEDIA_PUBLIC_URL` is no longer required. External media must use public HTTPS URLs.
 
 ## Automatic D1 provisioning reports an existing database
 

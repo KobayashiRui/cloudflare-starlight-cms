@@ -21,7 +21,7 @@ The build Service Token can access the Admin as well as export. Treat the build 
 | `folder` / `document` | Shared identity, parent, URL segment, and order |
 | `folder_translation` | Folder names by locale |
 | `document_translation` | Current editable title, description, content, and version |
-| `document_revision` | Immutable publication snapshots |
+| `document_revision` | Publication snapshots (retained content is immutable) |
 | `published_revision_id` | The revision currently used by public export |
 | `publish_delivery` | Build-request delivery and retry records |
 
@@ -43,6 +43,28 @@ Folder rows select folder settings; arrow buttons expand/collapse. Keyboard sele
 
 For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
 
+## Tables
+
+The official Tiptap Table, TableRow, TableHeader and TableCell extensions provide insertion, row/column operations, header toggles, cell merge/split and column resizing. The toolbar adds a 3 × 3 table with a header row. `tableStyle` selects standard, striped or minimal borders. Cell alignment uses the official `align` attribute.
+
+Design attributes, spans and column widths stay in Tiptap JSON through saving and reopening. The official resizable TableView is extended only to mirror `tableStyle` into its DOM. Shared CSS applies to the Editor, Preview and public Docs, including light/dark colors and horizontal scrolling. Colors are controlled by shared CSS, with no cell color attributes or color picker, and rendering validates alignment, spans and widths before emitting HTML.
+
+Public tables use escaped HTML rather than Markdown pipe tables, retaining merged cells, literal punctuation, rich blocks and column sizing. Preview uses the same table rendering code, while public rendering resolves managed media to Static Assets paths. Cell headings remain visible formatting but do not enter the page TOC or heading-link picker, matching Astro's treatment of headings inside HTML tables.
+
+## Page and heading links
+
+The official Tiptap Link mark is extended with nullable `documentId` and `anchor` attributes; its name and standard commands are retained. `href` remains a normal URL for editor rendering and clipboard HTML, while the page ID is authoritative for CMS internal links. Ordinary URL links remain supported.
+
+The link picker searches saved pages by title/path and optionally selects H1–H6 headings. Draft pages are selectable. The current page's heading list uses the editor content; other pages use saved drafts. New pages must be saved once before they can be selected. Links inherit the source document language, falling back to the default language when that target translation is unavailable.
+
+Public paths are calculated from the current navigation tree without building. Export resolves internal references against the same published snapshot used for rendering; page moves and slug changes therefore update links on the next build without rewriting revisions. Same-page heading links become fragments. Preview resolves references to saved drafts on protected Admin preview routes; unavailable draft targets render as ordinary text.
+
+Publication validates links against existing public revisions plus the saved translations being published, before creating revisions or requesting the Hook. Deletion checks the remaining published content. Export validates again, so stale or missing page/heading targets fail the build. These checks apply to CMS page references, not manually entered URLs.
+
+Heading anchors use `github-slugger`, matching the public renderer and Preview, including duplicate-heading suffixes and the tab-label headings emitted by public Markdown. Heading renames or reordered identical headings require link reselection; no persistent heading IDs or link-index tables are introduced.
+
+Heading text is rendered as escaped inline HTML inside Markdown headings, preserving literal punctuation, formatting, and edge spaces while retaining Astro's heading IDs and TOC metadata. Preview displays every tab as a labeled section, matching public Docs, so links into any tab's content remain visible.
+
 ## Languages
 
 Document languages, site title, and public URL are configured in `src/site.config.ts`. Navigation uses the default locale; document/folder translations are edited separately. Default-locale public paths are unprefixed, other locales use prefixes, and untranslated routes use Starlight's default-language fallback. The Admin remembers the last editing locale.
@@ -63,17 +85,25 @@ Publication pointers and delivery records are persisted together before requesti
 
 ## Media
 
-R2 holds media objects; D1 holds metadata. The Admin adds upload, selection, and insertion controls. Worker uploads support PNG, JPEG, WebP, AVIF, MP4, and WebM up to 10 MiB, checking actual format, Content-Type, and size. Partial storage failures are handled, and media referenced by drafts, publications, or history cannot be deleted; browser drafts also prevent deletion locally.
+R2 holds media objects; D1 holds metadata. The Admin adds upload, selection, and insertion controls. Worker uploads support PNG, JPEG, WebP, AVIF, MP4, and WebM up to 10 MiB, checking actual format, Content-Type, and size. Partial storage failures are handled, and media referenced by saved drafts, retained publications, the deployed site or in-flight builds stays protected. The insert picker has no deletion controls.
 
-Published media requires a public HTTPS URL or supported site-relative path. Admin-only URLs, HTTP media, and private-network hosts cannot be published. Normal HTTP(S) links remain supported. Unsafe pasted media is removed; legacy unsafe nodes are repaired to explanatory text when opened. Incomplete upload blocks cannot be saved.
+R2 is the original store for uploads, saved drafts and retained publication history. Editor and Preview resolve registered object keys to the Access-protected Admin media proxy. Existing public R2 URLs are resolved by their registered object keys without rewriting stored JSON or adding a URL mapping table. External HTTPS media remains external.
 
-Configure a separate R2 custom domain through `MEDIA_PUBLIC_URL`. Draft media stored at a public R2 URL is also public. Multipart uploads for larger videos remain future work.
+`npm run build` obtains the published snapshot and media metadata with the existing Access Service Token, resolves managed image/video/download destinations, and copies each used original once to `dist/_cms-media/<uuid>.<ext>`. Markdown and embedded HTML are parsed with existing OSS parsers; prose/code examples are not rewritten. Required downloads must match metadata; missing files fail the build. Public Docs and their managed media use Static Assets without runtime R2 reads. R2 public domains and `MEDIA_PUBLIC_URL` are unnecessary; an old variable may remain unused. Keeping an old public domain also keeps old Draft URLs public.
+
+`src/cms.config.ts` sets `maxPublicationRevisions` to `null` by default, or a positive count per translation including the current publication. The History drawer can delete unprotected older revisions. Deletion never changes publication or requests its own build.
+
+Managed builds pin their published references in `cms_build` with a 24-hour lease. Once Astro, Admin assets and all required media have completed, the Node build script drives bounded history pruning/media collection batches of at most ten. It releases its lease on success or failure; crashed builds expire. Drafts, retained history, current publications and concurrent builds remain protected. Uploads receive a 24-hour grace period. Atomic deletion claims/save guards prevent references being introduced during deletion; R2 deletion precedes D1 metadata removal, with failed claims retained for retry on the next build. Publish without content changes can request another build.
+
+The first upgrade build can use the old Worker's existing snapshot/list/object APIs if the lease API is absent (404 only); it skips collection. Collection also stays disabled while live Static Assets lacks the static-media marker, protecting legacy production through failed migration deployments. Future builds collect without deploy callbacks, Cron, Queues or a custom deploy command. Static-media version rollbacks include their media files, but never restore D1/R2 state. Pre-migration rollbacks/external direct links require the old R2 originals and domain; collection does not preserve these forever. Custom Astro pages must use separately managed assets.
+
+Uploads remain limited to 10 MiB. Static Assets permits 25 MiB per file and the total deployed file count includes Docs, Admin, Pagefind and media. Large-video multipart upload and its delivery design remain future work. Build-time downloads still incur R2 reads even though public browsing does not.
 
 ## Development and database initialization
 
 `npm run dev` applies local migrations, builds/watches Admin into `.dev-assets/admin`, and starts the local Worker on 8787. Astro builds public Docs into `dist`; the coordinator synchronizes public output into `.dev-assets` without removing Admin, and serves Docs preview on 4321. Published-snapshot changes trigger rebuilds. Startup checks both export and Admin JS/CSS readiness.
 
-Production uses `npm run build` and standard `npx wrangler deploy`, with `dist` containing both public and Admin assets. D1/R2 use Automatic Resource Provisioning. Bundled idempotent CREATE migrations initialize D1 before management database access and are recorded in `d1_migrations`. Failure returns 503 and permits retry. Public assets and Admin HTML do not initialize D1. Future ALTER/backfill migrations require an explicit upgrade procedure that preserves data.
+Production uses `npm run build` and `npx wrangler deploy`, with `dist` containing both public and Admin assets. D1/R2 use Automatic Resource Provisioning. Bundled idempotent CREATE migrations initialize D1 before management database access and are recorded in `d1_migrations`. Failure returns 503 and permits retry. Public assets and Admin HTML do not initialize D1. Future ALTER/backfill migrations require an explicit upgrade procedure that preserves data.
 
 ## CLI and upgrades
 

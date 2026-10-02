@@ -1,3 +1,5 @@
+import { pageReference } from './links.ts';
+
 /**
  * URLs that end up in a document are rendered in both the public static site
  * and the HTTPS-only Admin preview. Keep this check independent from the
@@ -27,7 +29,7 @@ function documentPath(value: string, options: { allowAdminMediaProxy?: boolean }
   if (!value.startsWith('/')) return null;
   if (value.startsWith('//')) throw new Error('Document URLs must not use protocol-relative paths');
   if (value.startsWith('/admin/api/media/object/') && !options.allowAdminMediaProxy) {
-    throw new Error('Published media requires MEDIA_PUBLIC_URL');
+    throw new Error('Managed media must be resolved before public rendering');
   }
   return value;
 }
@@ -40,7 +42,8 @@ export function documentLinkUrl(value: unknown): string {
   if (typeof value !== 'string' || value.length === 0 || /[\s"<>]/.test(value)) {
     throw new Error('Document links must be an HTTP(S) URL or a site-relative path');
   }
-  const path = documentPath(value);
+  if (value.startsWith('#') && value.length > 1) return value;
+  const path = documentPath(value, { allowAdminMediaProxy: true });
   if (path) return path;
   let url: URL;
   try {
@@ -120,7 +123,7 @@ export function assertDocumentContentUrls(value: unknown): void {
     for (const mark of node.marks) {
       if (!mark || typeof mark !== 'object' || Array.isArray(mark)) continue;
       const typed = mark as { type?: unknown; attrs?: Record<string, unknown> };
-      if (typed.type === 'link') documentLinkUrl(typed.attrs?.href);
+      if (typed.type === 'link') { documentLinkUrl(typed.attrs?.href); pageReference(typed.attrs); }
     }
   }
   if (Array.isArray(node.content)) {

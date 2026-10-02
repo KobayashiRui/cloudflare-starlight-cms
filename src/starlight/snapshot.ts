@@ -1,3 +1,6 @@
+import { resolveContentMedia } from '../media/urls.ts';
+import { registeredMediaKeys } from '../media/references.ts';
+import { resolveDocumentLinks, type LinkPage } from '../documents/links.ts';
 import { z } from 'zod';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale } from '../locales.ts';
@@ -8,7 +11,7 @@ type Folder = z.infer<typeof folderRow>;
 const labelRow = z.object({ folder_id: z.string(), locale: z.string(), name: z.string() });
 const pageRow = z.object({ id: z.string(), folder_id: z.string().nullable(), slug: z.string(), sort_order: z.number(), locale: z.string(), title: z.string(), description: z.string(), content_json: z.string(), created_at: z.number(), updated_at: z.number(), published_at: z.number() });
 
-export async function publishedSnapshot(env: RuntimeEnv) {
+export async function publishedSnapshot(env: RuntimeEnv, build?: { id: string; createdAt: number; expiresAt: number }) {
   const [folders, labels, pages] = await env.DB.batch([
     env.DB.prepare('SELECT id,parent_id,slug,sort_order FROM folder ORDER BY id'),
     env.DB.prepare('SELECT folder_id,locale,name FROM folder_translation ORDER BY folder_id,locale'),
@@ -17,11 +20,20 @@ export async function publishedSnapshot(env: RuntimeEnv) {
       FROM document d JOIN document_translation t ON t.document_id=d.id
       JOIN document_revision r ON r.id=t.published_revision_id
       ORDER BY t.locale,d.sort_order,d.slug,d.id`),
+    ...(build ? [env.DB.prepare(`INSERT INTO cms_build (id,revision_ids,content_json,created_at,expires_at)
+      SELECT ?,
+        (SELECT json_group_array(r.id) FROM document_translation t JOIN document_revision r ON r.id=t.published_revision_id),
+        (SELECT json_group_array(json_object('src',j.value))
+          FROM document_translation t JOIN document_revision r ON r.id=t.published_revision_id JOIN json_tree(r.content_json) j
+          WHERE j.key IN ('src','href','poster') AND j.type='text'),?,?`)
+      .bind(build.id, build.createdAt, build.expiresAt)] : []),
   ]);
   if (!folders || !labels || !pages) throw new Error('Incomplete published snapshot');
   const parent = new Map(z.array(folderRow).parse(folders.results).map((row) => [row.id, row]));
   const names = z.array(labelRow).parse(labels.results);
-  return { version: 3, documents: z.array(pageRow).parse(pages.results).map((row) => {
+  const rows = z.array(pageRow).parse(pages.results);
+  const linkPages: LinkPage[] = [];
+  const documents = rows.map((row) => {
     const ancestors: Folder[] = []; const seen = new Set<string>(); let cursor = row.folder_id;
     while (cursor) {
       if (seen.has(cursor)) throw new Error('Navigation cycle');
@@ -30,6 +42,7 @@ export async function publishedSnapshot(env: RuntimeEnv) {
       if (!folder) throw new Error('Missing folder');
       ancestors.unshift(folder); cursor = folder.parent_id;
     }
+    linkPages.push({ id: row.id, locale: row.locale, title: row.title, path: [...ancestors.map((folder) => folder.slug), row.slug].join('/'), content: JSON.parse(row.content_json) });
     return {
       id: row.id, locale: row.locale, title: row.title,
       slug: [...ancestors.map((folder) => folder.slug), row.slug].join('/'),
@@ -39,9 +52,11 @@ export async function publishedSnapshot(env: RuntimeEnv) {
         label: names.find((name) => name.folder_id === folder.id && name.locale === defaultLocale)?.name ?? folder.slug,
         translations: Object.fromEntries(names.filter((name) => name.folder_id === folder.id).map((name) => [name.locale, name.name])),
       })),
-      body: { format: 'markdown', value: renderDocumentContent(JSON.parse(row.content_json)) },
+      body: { format: 'markdown', value: '' },
       status: 'published', createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(), publishedAt: new Date(row.published_at).toISOString(),
     };
-  }) };
+  });
+  const keys = await registeredMediaKeys(env.DB);
+  return { version: 3, documents: documents.map((document, index) => ({ ...document, body: { format: 'markdown', value: renderDocumentContent(resolveContentMedia(resolveDocumentLinks(linkPages[index]!.content, document, linkPages), keys, 'public')) } })) };
 }

@@ -66,7 +66,7 @@ async function assertDoesNotExist(path) {
 async function copyDirectory(source, destination, isRoot = false) {
   await mkdir(destination, { recursive: true });
   for (const name of await readdir(source)) {
-    const restoredName = name.endsWith('.test.template.ts') ? name.replace('.test.template.ts', '.test.ts') : name;
+    const restoredName = name.replace(/\.test\.template\.(ts|js)$/, '.test.$1');
     const targetName = isRoot && restoredName === '_gitignore'
       ? '.gitignore'
       : isRoot && restoredName === 'package-lock.json.template'

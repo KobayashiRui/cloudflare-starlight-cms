@@ -1,12 +1,14 @@
 /// <reference path="../sql.d.ts" />
 import schema from '../../migrations/0001_schema.sql';
 import delivery from '../../migrations/0002_publish_delivery.sql';
+import cleanup from '../../migrations/0003_build_cleanup.sql';
 
 // Only these bounded, idempotent CREATE migrations run on requests. Future
 // ALTER/backfill migrations need an explicit deployment migration plan.
 const migrations = [
   ['0001_schema.sql', schema],
   ['0002_publish_delivery.sql', delivery],
+  ['0003_build_cleanup.sql', cleanup],
 ] as const;
 const ready = new WeakSet<D1Database>();
 

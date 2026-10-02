@@ -12,6 +12,9 @@ const entries = [
   'migrations',
   'docs',
   'scripts/dev.mjs',
+  'scripts/build.mjs',
+  'scripts/build-media.mjs',
+  'scripts/build-client.mjs',
   'scripts/build-admin.mjs',
   'scripts/check-linux-bindings.mjs',
   'tests',
@@ -76,7 +79,7 @@ for (const entry of entries) await copyEntry(entry);
 // meaning inside a generated CMS project and refers to the package directory.
 await rm(join(templateRoot, 'test-files', 'create-cli.test.ts'), { force: true });
 for (const name of await readdir(join(templateRoot, 'test-files'))) {
-  if (name.endsWith('.test.ts')) await rename(join(templateRoot, 'test-files', name), join(templateRoot, 'test-files', name.replace('.test.ts', '.test.template.ts')));
+  if (/\.test\.(ts|js)$/.test(name)) await rename(join(templateRoot, 'test-files', name), join(templateRoot, 'test-files', name.replace('.test.', '.test.template.')));
 }
 for (const name of ['ROADMAP.md', 'RELEASING.md']) {
   await rm(join(templateRoot, 'docs', name), { force: true });

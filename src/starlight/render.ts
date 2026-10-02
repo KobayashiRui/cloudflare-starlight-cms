@@ -1,3 +1,4 @@
+import { renderHeadingMarkdown, renderPublicTable } from './preview-render.ts';
 import { documentLinkUrl, documentMediaUrl, parseTiptapNode, tiptapChildren, type TiptapNode, youtubeEmbedHtml } from './tiptap.ts';
 
 function decorateText(value: TiptapNode, output: string): string {
@@ -23,7 +24,7 @@ export function render(nodeValue: unknown): string {
     case 'text': return decorateText(value, value.text ?? '');
     case 'doc': return `${tiptapChildren(value).map(render).join('\n\n')}\n`;
     case 'paragraph': return text(value);
-    case 'heading': return `${'#'.repeat(Number(value.attrs?.level ?? 2))} ${text(value)}`;
+    case 'heading': return renderHeadingMarkdown(value);
     case 'bulletList': return tiptapChildren(value).map((item) => `- ${text(item)}`).join('\n');
     case 'orderedList': return tiptapChildren(value).map((item, index) => `${index + 1}. ${text(item)}`).join('\n');
     case 'taskList': return tiptapChildren(value).map((item) => `- [${item.attrs?.checked === true ? 'x' : ' '}] ${text(item)}`).join('\n');
@@ -38,19 +39,15 @@ export function render(nodeValue: unknown): string {
     case 'youtube': return youtubeEmbedHtml(value.attrs?.src);
     case 'callout': return `:::note[${asideTitle(value.attrs?.title)}]\n${tiptapChildren(value).map(render).join('\n\n')}\n:::`;
     case 'steps': return tiptapChildren(value).map((item, index) => `${index + 1}. ${text(item)}`).join('\n');
-    case 'tabs': return tiptapChildren(value).map((item) => `#### ${typeof item.attrs?.label === 'string' ? item.attrs.label : 'Tab'}\n\n${text(item)}`).join('\n\n');
+    case 'tabs': return tiptapChildren(value).map((item) => {
+      const label = typeof item.attrs?.label === 'string' ? item.attrs.label : 'Tab';
+      return `${renderHeadingMarkdown({ type: 'heading', attrs: { level: 4 }, content: [{ type: 'text', text: label }] })}\n\n${text(item)}`;
+    }).join('\n\n');
     case 'tab': return text(value);
-    case 'table': {
-      const rows = tiptapChildren(value);
-      return rows.map((row, index) => {
-        const cells = tiptapChildren(row);
-        const markdown = `| ${cells.map(text).join(' | ')} |`;
-        return index === 0 ? `${markdown}\n| ${cells.map(() => '---').join(' | ')} |` : markdown;
-      }).join('\n');
-    }
-    case 'tableRow': return `| ${tiptapChildren(value).map(text).join(' | ')} |`;
+    case 'table': return renderPublicTable(value);
+    case 'tableRow':
     case 'tableHeader':
-    case 'tableCell': return text(value);
+    case 'tableCell': return renderPublicTable(value);
     default: throw new Error(`Unsupported Tiptap node: ${value.type}`);
   }
 }

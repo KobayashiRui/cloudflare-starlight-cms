@@ -1,3 +1,4 @@
+import { resolveContentMedia } from '../media/urls.ts';
 import { liveQuery } from 'dexie';
 import { adminConfig } from '../admin.config';
 import { message, type AdminMessage, isAdminLanguage } from './i18n/language';
@@ -5,11 +6,13 @@ import { AdminLanguageProvider, useAdminI18n } from './i18n';
 import { siteConfig } from '../site.config.ts';
 import { assertDocumentContentUrls, documentMediaUrl, hasPendingImageUpload } from '../documents/content-urls.ts';
 import { Node, type JSONContent } from '@tiptap/core';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { tableExtensions } from './table-extensions';
 import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { PageLinksContext, type PageLinkOption } from './page-links';
+import { navigationPath } from '../documents/links';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
 import { listLocalDocumentDrafts, localDocumentKey, readLocalDocumentDraft, removeLocalDocumentDraft, writeLocalDocumentDraft, type LocalDocumentDraft } from './local-drafts';
@@ -32,8 +35,8 @@ type DocumentRecord = {
   version: number;
   publicationState: 'draft' | 'changes' | 'published';
 };
-type Media = { id: string; fileName: string; contentType: string; url: string; isUsed: boolean };
-type Revision = { id: string; revision: number; createdAt: number };
+type Media = { id: string; objectKey: string; fileName: string; contentType: string; url: string; isUsed: boolean };
+type Revision = { id: string; revision: number; createdAt: number; canDelete: boolean };
 type Folder = { id: string; name: string; slug: string; parentId: string | null; order: number };
 type FolderTranslation = Pick<Folder, 'id' | 'name'>;
 type PublishDelivery = {
@@ -128,7 +131,7 @@ const Video = Node.create({
 });
 
 const documentExtensions: Extensions = [
-  Table.configure({ resizable: true }), TableRow, TableHeader, TableCell,
+  ...tableExtensions,
   Callout, Steps, Tabs, Tab, Video,
   Youtube.configure({ nocookie: true, width: 640, height: 360 }),
 ];
@@ -412,7 +415,7 @@ function App() {
       const canRestore = localDraft?.baseVersion === loaded.version;
       const displayed = canRestore && localDraft ? {
         ...loaded, title: localDraft.title, slug: localDraft.slug, description: localDraft.description,
-        folderId: localDraft.folderId, order: localDraft.order, contentJson: localDraft.contentJson,
+        folderId: localDraft.folderId, order: localDraft.order, contentJson: resolveContentMedia(localDraft.contentJson, new Set(media.map((item) => item.objectKey)), 'admin'),
       } : loaded;
       setCurrent(displayed);
       setMissingDocumentId(null);
@@ -743,7 +746,7 @@ function App() {
       description: localDraftConflict.description,
       folderId: localDraftConflict.folderId,
       order: localDraftConflict.order,
-      contentJson: localDraftConflict.contentJson,
+      contentJson: resolveContentMedia(localDraftConflict.contentJson, new Set(media.map((item) => item.objectKey)), 'admin'),
     };
     setCurrent(restored);
     applyFields(documentFields(restored));
@@ -773,9 +776,8 @@ function App() {
   const publishChanges = async () => {
     if (mutationInFlight.current || localDraftConflict || hasVersionConflict) return;
     if (isDirty) return showNotice('Save the current draft before publishing changes.', true);
-    if (savedChangeCount === 0) return showNotice('There are no saved changes to publish.');
     const targets = treeItems.flatMap((item) => item.translationStates.filter((entry) => entry.state !== 'published').map((entry) => `${item.name} · ${localeLabel(entry.locale)}`));
-    if (!window.confirm(t('Publish {count} saved translations?\n\n{targets}\n\nOnly saved drafts are included. The site update will be requested once.', { count: savedChangeCount, targets: targets.join('\n') }))) return;
+    if (!window.confirm(savedChangeCount > 0 ? t('Publish {count} saved translations?\n\n{targets}\n\nOnly saved drafts are included. The site update will be requested once.', { count: savedChangeCount, targets: targets.join('\n') }) : t('Rebuild the site and clean up unused media when the build completes?'))) return;
     const publishSelection = selectionVersion.current;
     mutationInFlight.current = true;
     setIsSaving(true);
@@ -801,7 +803,10 @@ function App() {
       if (!result.delivery) return showNotice('There are no saved changes to publish.');
       setLatestDelivery(result.delivery);
       await Promise.all([refreshDocuments(), refreshTree(), refreshDeliveries()]);
-      showNotice(message('Published {count} translations. {delivery}', { count: result.publishedCount, delivery: describeDelivery(result.delivery) }), result.delivery.status === 'failed');
+      await refreshMedia();
+      showNotice(result.publishedCount > 0
+        ? message('Published {count} translations. {delivery}', { count: result.publishedCount, delivery: describeDelivery(result.delivery) })
+        : message('Site rebuild requested. {delivery}', { delivery: describeDelivery(result.delivery) }), result.delivery.status === 'failed');
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), true);
     } finally {
@@ -840,6 +845,20 @@ function App() {
       return;
     }
     await loadRevisions();
+  };
+
+  const removeRevision = async (revision: Revision) => {
+    if (!current?.id || mutationInFlight.current || isDirty || !revision.canDelete) return;
+    if (!window.confirm(t('Delete revision {revision}? It cannot be restored. Media still used elsewhere will be kept; unused media is cleaned up during the next build.', { revision: revision.revision }))) return;
+    const selection = selectionVersion.current;
+    mutationInFlight.current = true; setIsSaving(true);
+    try {
+      await api<void>(`/documents/${encodeURIComponent(current.id)}/revisions/${encodeURIComponent(revision.id)}`, { method: 'DELETE', body: JSON.stringify({ version: current.version }) }, current.locale);
+      if (selection === selectionVersion.current) await loadRevisions();
+      await refreshMedia();
+      showNotice('Revision deleted. Unused media will be cleaned up during the next build.');
+    } catch (error) { showDocumentError(error, current); }
+    finally { mutationInFlight.current = false; setIsSaving(false); }
   };
 
   const restore = async (revision: Revision) => {
@@ -917,26 +936,6 @@ function App() {
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), true);
       return undefined;
-    }
-  };
-
-  const removeMedia = async (item: Media) => {
-    if (item.isUsed || !window.confirm(t('Delete {name}? This cannot be undone.', { name: item.fileName }))) return;
-    try {
-      const localDrafts = await listLocalDocumentDrafts().catch(() => []);
-      if (localDrafts.some((draft) => JSON.stringify(draft.contentJson).includes(item.url))) {
-        showNotice('This media is used by local changes in this browser. Save or discard those changes before deleting it.', true);
-        await refreshMedia();
-        return;
-      }
-      setIsSaving(true);
-      await api<void>(`/media/${item.id}`, { method: 'DELETE' });
-      await refreshMedia();
-      showNotice('Media deleted.');
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error), true);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -1027,7 +1026,7 @@ function App() {
         <div className="cms-actions">
         <span className={`cms-notice ${noticeIsError ? 'is-error' : ''}`} role="status">{noticeText}</span>
         {(latestDelivery?.status === 'failed' || (latestDelivery?.status === 'pending' && (!latestDelivery.nextRetryAt || latestDelivery.nextRetryAt <= Date.now()))) && <button className="cms-button" type="button" disabled={isSaving} onClick={() => void retryBuild()}>{t("Retry site update")}</button>}
-        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || isDirty || hasPendingImages || Boolean(localDraftConflict) || hasVersionConflict || savedChangeCount === 0} title={t("Publish saved changes across all pages and languages")} onClick={() => void publishChanges()}>{t("Publish")}{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
+        <button className="cms-button cms-button-primary" type="button" disabled={isSaving || isDirty || hasPendingImages || Boolean(localDraftConflict) || hasVersionConflict} title={t("Publish saved changes across all pages and languages")} onClick={() => void publishChanges()}>{t("Publish")}{savedChangeCount > 0 ? ` (${savedChangeCount})` : ''}</button>
         </div>
         <label className="cms-admin-language"><span className="sr-only">{t("Admin language")}</span><select value={language} onChange={(event) => { if (isAdminLanguage(event.target.value)) setLanguage(event.target.value); }}>{adminConfig.languages.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</select></label>
         <button className="cms-theme-trigger" type="button" onClick={() => setTheme(displayedTheme === 'dark' ? 'light' : 'dark')} aria-label={t(displayedTheme === 'dark' ? t("Switch to light mode") : t("Switch to dark mode"))} title={t(displayedTheme === 'dark' ? t("Switch to light mode") : t("Switch to dark mode"))}>
@@ -1082,7 +1081,19 @@ function App() {
             </div>
             <section className="cms-editor-field" aria-label={t("Content")}>
               <header className="cms-editor-field-header"><span>{t("Content")}</span></header>
-              <div className="cms-simple-editor"><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
+              <div className="cms-simple-editor"><PageLinksContext.Provider value={{
+                pages: treeItems.filter((item) => item.kind === 'document' && item.documentId).map((item): PageLinkOption => {
+                  const targetLocale = item.translationLocales.includes(locale) ? locale : defaultLocale;
+                  return { id: item.documentId!, title: item.name, path: navigationPath(item.id, treeItems), locale: targetLocale, draft: item.translationStates.find((state) => state.locale === targetLocale)?.state === 'draft' };
+                }),
+                loadPage: async (id) => {
+                  const item = treeItems.find((item) => item.documentId === id);
+                  if (!item) throw new Error('Missing page');
+                  const targetLocale = item.translationLocales.includes(locale) ? locale : defaultLocale;
+                  const page = id === current.id && targetLocale === locale ? { ...current, contentJson: editor?.getJSON() ?? current.contentJson } : await api<DocumentRecord>(`/documents/${id}`, {}, targetLocale);
+                  return { id, title: page.title, locale: targetLocale, path: navigationPath(item.id, treeItems), content: page.contentJson };
+                },
+              }}><SimpleEditor content={emptyContent} extensions={documentExtensions} onEditorReady={setEditor} onUpdate={(updatedEditor) => {
                 const contentJson = updatedEditor.getJSON();
                 editVersion.current += 1;
                 setHasPendingImages(hasPendingImageUpload(contentJson));
@@ -1098,7 +1109,7 @@ function App() {
                 const uploaded = await upload(file);
                 if (!uploaded) throw new Error('Image upload failed');
                 return uploaded.url;
-              }} /></div>
+              }} /></PageLinksContext.Provider></div>
             </section>
             {current.id && <section className="cms-danger-zone" aria-label={t("Danger zone")}><div><h2>{t("Delete page")}</h2><p>{t("Permanently remove this page and its translations.")}</p></div><button className="cms-button cms-button-danger cms-button-danger-quiet" type="button" disabled={isSaving} onClick={() => void remove()}>{t("Delete page")}</button></section>}
           </section>
@@ -1106,13 +1117,13 @@ function App() {
       </main>
     </div>
 
-    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">{t("Publication history")}</h2><p>{t("New versions are recorded when you publish. Existing history is kept. Restore updates the draft; publish it to change the site.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label={t("Close revision history")}>×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">{t("No publication history yet. Save draft, then publish to record a version.")}</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>{t("Revision {revision}", { revision: revision.revision })}</strong><time>{new Date(revision.createdAt).toLocaleString(language)}</time></span><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? t("Save or discard your edits before restoring") : t("Restore to draft only")} onClick={() => void restore(revision)}>{t("Restore to draft")}</button></div>)}</div>}</aside></div>}
+    {isRevisionOpen && <div className="cms-revision-backdrop" role="presentation" onMouseDown={() => setIsRevisionOpen(false)}><aside className="cms-revision-drawer" role="dialog" aria-modal="true" aria-labelledby="revision-history-title" onMouseDown={(event) => event.stopPropagation()}><header><div><h2 id="revision-history-title">{t("Publication history")}</h2><p>{t("New versions are recorded when you publish. Restore updates the draft. Published versions and versions used by builds cannot be deleted.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsRevisionOpen(false)} aria-label={t("Close revision history")}>×</button></header>{revisions.length === 0 ? <p className="cms-revisions-empty">{t("No publication history yet. Save draft, then publish to record a version.")}</p> : <div className="cms-revisions">{revisions.map((revision) => <div className="cms-revision" key={revision.id}><span><strong>{t("Revision {revision}", { revision: revision.revision })}</strong><time>{new Date(revision.createdAt).toLocaleString(language)}</time></span><div className="cms-revision-actions"><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict)} title={isDirty ? t("Save or discard your edits before restoring") : t("Restore to draft only")} onClick={() => void restore(revision)}>{t("Restore to draft")}</button><button type="button" disabled={isSaving || isDirty || hasVersionConflict || Boolean(localDraftConflict) || !revision.canDelete} title={!revision.canDelete ? t("This version is published or used by a build.") : undefined} onClick={() => void removeRevision(revision)}>{t("Delete")}</button></div></div>)}</div>}</aside></div>}
 
     {isMediaPickerOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsMediaPickerOpen(false)}>
       <section className="cms-media-dialog" role="dialog" aria-modal="true" aria-labelledby="media-library-title" onMouseDown={(event) => event.stopPropagation()}>
         <header><div><h1 id="media-library-title">{t("Media library")}</h1><p>{t("Select an image or video to add it at the cursor.")}</p></div><button type="button" className="cms-close-settings" onClick={() => setIsMediaPickerOpen(false)} aria-label={t("Close media library")}>×</button></header>
         <div className="cms-media-dialog-actions"><label className="cms-upload">{t("Upload media")}<input type="file" accept={mediaTypes} onChange={(event) => void upload(event.currentTarget.files?.[0])} /></label></div>
-        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">{t("No media uploaded yet.")}</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? t("Image") : t("Video")}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? t("Used") : t("Unused")}</span>{!item.isUsed && <button type="button" className="cms-media-delete" disabled={isSaving} onClick={() => void removeMedia(item)}>{t("Delete")}</button>}</footer></article>)}</div>
+        <div className="cms-media-grid">{media.length === 0 ? <p className="cms-media-empty">{t("No media uploaded yet.")}</p> : media.map((item) => <article key={item.id} className="cms-media-card"><button type="button" className="cms-media-insert" onClick={() => insertMedia(item)}><span className="cms-media-preview">{item.contentType.startsWith('image/') ? <img src={item.url} alt="" /> : <video src={item.url} muted preload="metadata" />}</span><strong>{item.fileName}</strong><span>{item.contentType.startsWith('image/') ? t("Image") : t("Video")}</span></button><footer><span className={item.isUsed ? 'cms-media-usage cms-media-usage-used' : 'cms-media-usage'}>{item.isUsed ? t("Used") : t("Unused")}</span></footer></article>)}</div>
       </section>
     </div>}
     {isYoutubeDialogOpen && <div className="cms-media-backdrop" role="presentation" onMouseDown={() => setIsYoutubeDialogOpen(false)}>

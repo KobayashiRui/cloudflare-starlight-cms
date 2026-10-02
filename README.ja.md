@@ -43,7 +43,9 @@ npm run dev
 
 ## Deploy to Cloudflare
 
-生成したrepositoryをCloudflare Workers Buildsへ接続します。本番domainをWorkerへ接続する前にCloudflare Accessを設定し、その後Media domainとDeploy Hookを設定します。初回Deploy時にD1/R2 bindingは自動provisionされます。
+生成したrepositoryをCloudflare Workers Buildsへ接続します。本番domainをWorkerへ接続する前にCloudflare Accessを設定し、その後Deploy Hookを設定します。初回Deploy時にD1/R2 bindingは自動provisionされます。
+
+R2のCustom Domain設定や`MEDIA_PUBLIC_URL`は不要です。R2は非公開の原本保存用として維持し、公開画像・動画はDocsと一緒にWorkers Static Assetsから配信します。既存のR2ドメインは、更新後のdeploy成功を確認してから外せます。移行前Versionへのrollbackや外部の旧画像直リンクを維持する場合は、旧ドメインと原本を残してください。
 
 詳細は[デプロイガイド](docs/DEPLOYMENT.ja.md)を参照してください。
 

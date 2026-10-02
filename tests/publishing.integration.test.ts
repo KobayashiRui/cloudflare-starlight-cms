@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
@@ -10,14 +11,16 @@ import { z } from 'zod';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { cmsSidebar } from '../src/starlight/sidebar.ts';
 import { supportedLocales } from '../src/locales.ts';
+import { tableDocument } from './fixtures/table';
 
 let mf: Miniflare;
 let output: string;
+let liveStaticMedia = false;
 const previewShell = `<!doctype html><html><head><title>Preview</title><meta name="description" content=""><meta property="og:title" content="Preview"><link rel="canonical" href="https://example.test/cms-preview-shell/"></head><body><starlight-lang-select>Language</starlight-lang-select><h1 id="_top">Preview</h1><mobile-starlight-toc data-min-h="2" data-max-h="3"><ul class="isMobile toc"><li>Overview</li></ul></mobile-starlight-toc><starlight-toc data-min-h="2" data-max-h="3"><ul class="toc"><li>Overview</li></ul></starlight-toc><div class="sl-markdown-content"><div id="cms-preview-content"></div></div></body></html>`;
 beforeAll(async () => {
   output = await mkdtemp(join(tmpdir(), 'cms-publish-test-'));
   const bundle = await build({ entryPoints: ['src/index.ts'], loader: { '.sql': 'text' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
-  mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'cms-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA'], serviceBindings: { ASSETS: () => new Response(previewShell, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }) } }] }));
+  mf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'cms-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA'], serviceBindings: { ASSETS: (request) => new URL(request.url).pathname === '/admin/cms-build.json' && liveStaticMedia ? Response.json({ media: 'static' }) : new Response(previewShell, { headers: { 'Content-Type': 'text/html; charset=utf-8' } }) } }] }));
   const db = await mf.getD1Database('DB');
   // An incompatible pre-existing table must fail closed, without recording
   // a completed migration. Repairing this disposable test DB permits retry.
@@ -27,7 +30,7 @@ beforeAll(async () => {
   await db.prepare('DROP TABLE folder').run();
   const responses = await Promise.all(Array.from({ length: 4 }, () => mf.dispatchFetch('http://localhost/admin/export/snapshot')));
   for (const response of responses) expect(response.status).toBe(200);
-  expect((await db.prepare('SELECT name FROM d1_migrations').all()).results).toHaveLength(2);
+  expect((await db.prepare('SELECT name FROM d1_migrations').all()).results).toHaveLength(3);
 }, 30000);
 afterAll(async () => { await mf?.dispose(); if (output) await rm(output, { recursive: true, force: true }); });
 
@@ -41,9 +44,12 @@ async function request(path: string, method = 'GET', body?: unknown) {
 }
 async function buildDocs() {
   const endpoint = new URL('/admin/export/snapshot', await mf.ready).href;
-  await promisify(execFile)(process.execPath, ['node_modules/astro/bin/astro.mjs', 'build', '--outDir', output], {
+  await promisify(execFile)(process.execPath, ['scripts/build.mjs', '--outDir', output], {
     env: { ...process.env, CMS_EXPORT_URL: endpoint }, maxBuffer: 4 * 1024 * 1024,
   });
+  expect(JSON.parse(await readFile(join(output, 'admin/cms-build.json'), 'utf8'))).toEqual({ media: 'static' });
+  const db = await mf.getD1Database('DB');
+  expect((await db.prepare('SELECT id FROM cms_build').all()).results).toHaveLength(0);
 }
 const identity = z.object({ id: z.string(), version: z.number() });
 const hasJapanese = (supportedLocales as readonly string[]).includes('ja');
@@ -160,7 +166,7 @@ it('keeps drafts private and exports folder labels/order; records public moves a
   expect(changes?.count).toBe(2);
   await buildDocs();
   await expect(access(join(output, 'install/index.html'))).rejects.toThrow();
-}, 30000);
+}, 60000);
 
 it('publishes all saved changes through one site delivery', async () => {
   const first = identity.parse(await request('api/documents', 'POST', {
@@ -181,7 +187,7 @@ it('publishes all saved changes through one site delivery', async () => {
   const after = await db.prepare("SELECT count(*) AS count FROM publish_delivery WHERE trigger_kind='site'").first<{ count: number }>();
   expect(after?.count).toBe((before?.count ?? 0) + 1);
 
-  expect(await request('api/publish/changes', 'POST')).toMatchObject({ publishedCount: 0, delivery: null });
+  expect(await request('api/publish/changes', 'POST')).toMatchObject({ publishedCount: 0, delivery: { triggerKind: 'site', status: 'skipped' } });
 });
 
 it('rejects the editor version left stale by bulk publishing until the translation is reloaded', async () => {
@@ -266,8 +272,11 @@ it('saves and reloads three uploaded images with a current translation version',
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
     body: JSON.stringify({ version: opened.version }),
   });
-  expect(rejectedPublish.status).toBe(400);
-  expect(await rejectedPublish.json()).toMatchObject({ error: expect.stringContaining('MEDIA_PUBLIC_URL') });
+  expect(rejectedPublish.status).toBe(200);
+  opened = identity.parse((await rejectedPublish.json() as { document: unknown }).document);
+  const published = publishedDocuments(await request('export/snapshot')).find((document) => document.id === page.id && document.locale === locale)!;
+  for (const image of images) expect(published.body.value).toContain(image.url.replace('/admin/api/media/object/media/', '/_cms-media/'));
+  expect(published.body.value).not.toContain('/admin/');
   await request(`api/documents/${page.id}?locale=${locale}`, 'DELETE', { version: opened.version });
   if (hasJapanese) await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
 });
@@ -359,3 +368,151 @@ it('deletes only media that is absent from drafts, published pages, and revision
   expect(rejected.status).toBe(409);
   expect(await rejected.json()).toMatchObject({ error: expect.stringContaining('still used') });
 });
+
+// Keep Astro builds in one suite: parallel builds share the Vite dependency cache.
+let linksMf: Miniflare;
+let linksOutput: string;
+beforeAll(async () => {
+  linksOutput = await mkdtemp(join(tmpdir(), 'cms-linkIdentity-links-'));
+  const bundle = await build({ entryPoints: ['src/index.ts'], loader: { '.sql': 'text' }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022' });
+  linksMf = new Miniflare(convertV4MiniflareOptions({ workers: [{ name: 'links-test', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-09-09', compatibilityFlags: ['nodejs_compat'], d1Databases: ['DB'], r2Buckets: ['MEDIA'], serviceBindings: { ASSETS: () => new Response('<html><head><title>Preview</title></head><body><div id="cms-preview-content"></div></body></html>', { headers: { 'Content-Type': 'text/html' } }) } }] }));
+});
+afterAll(async () => { await linksMf?.dispose(); if (linksOutput) await rm(linksOutput, { recursive: true, force: true }); });
+const linkIdentity = z.object({ id: z.string(), version: z.number() });
+async function fetchLinksAdmin(path: string, method = 'GET', body?: unknown) {
+  return linksMf.dispatchFetch(`http://localhost/admin/${path}`, { method, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+}
+const linkHeading = (text: string, level = 2) => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
+const linksTargetBody = { type: 'doc', content: [linkHeading('Introduction', 1), linkHeading('  Hello  '), linkHeading('Hello #'), linkHeading('[Title](https://example.com)'), linkHeading('インストール'), linkHeading('インストール'), { type: 'tabs', content: [{ type: 'tab', attrs: { label: 'Details' }, content: [linkHeading('Details')] }] }] };
+const linkFields = (title: string, slug: string, contentJson: unknown) => ({ title, slug, description: '', folderId: null, order: 0, contentJson });
+it('links saved drafts, publishes together, builds working anchors, follows moves and rejects broken publications/deletion', async () => {
+  const target = linkIdentity.parse(await (await fetchLinksAdmin('api/documents', 'POST', linkFields('Target', 'links-target', linksTargetBody))).json());
+  const sourceBody = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Read target', marks: [{ type: 'link', attrs: { href: '/stale/', documentId: target.id, anchor: 'インストール-1' } }] }, { type: 'text', text: 'Read details', marks: [{ type: 'link', attrs: { href: '/stale/', documentId: target.id, anchor: 'details-1' } }] }] }] };
+  const source = linkIdentity.parse(await (await fetchLinksAdmin('api/documents', 'POST', linkFields('Source', 'links-source', sourceBody))).json());
+  const preview = await fetchLinksAdmin(`preview/${source.id}?locale=en`);
+  expect(preview.status).toBe(200);
+  expect(await preview.text()).toContain(`/admin/preview/${target.id}?locale=en#`);
+  expect(preview.headers.get('cache-control')).toBe('private, no-store');
+  expect((await fetchLinksAdmin(`api/documents/${source.id}/publish`, 'POST', { version: source.version })).status).toBe(400);
+  const publication = await fetchLinksAdmin('api/publish/changes', 'POST', {});
+  expect(publication.status, await publication.text()).toBe(200);
+  const snapshot = await (await fetchLinksAdmin('export/snapshot')).json();
+  const docs = z.object({ documents: z.array(z.object({ id: z.string(), body: z.object({ value: z.string() }) })) }).parse(snapshot).documents;
+  expect(docs.find((doc) => doc.id === source.id)!.body.value).toContain('/links-target/#');
+  const endpoint = new URL('/admin/export/snapshot', await linksMf.ready).href;
+  await promisify(execFile)(process.execPath, ['node_modules/astro/bin/astro.mjs', 'build', '--outDir', join(linksOutput, 'site')], { env: { ...process.env, CMS_EXPORT_URL: endpoint, CMS_INITIAL_EMPTY: undefined }, maxBuffer: 4 * 1024 * 1024 });
+  const html = await readFile(join(linksOutput, 'site/links-target/index.html'), 'utf8');
+  expect(html).toContain('id="introduction"');
+  expect(html).toContain('id="--hello--"');
+  expect(html).toContain('id="hello-"');
+  expect(html).toContain('id="titlehttpsexamplecom"');
+  // The explicit text also survives Starlight TOC generation.
+  expect(html).toContain('href="#--hello--"');
+  expect(html).toContain('id="インストール-1"');
+  expect(html).toContain('id="details-1"');
+  const latestTarget = linkIdentity.parse(await (await fetchLinksAdmin(`api/documents/${target.id}`)).json());
+  const moved = await fetchLinksAdmin(`api/documents/${target.id}`, 'PUT', { ...linkFields('Target', 'links-moved', linksTargetBody), version: latestTarget.version });
+  expect(moved.status).toBe(200);
+  const movedPage = linkIdentity.parse(await moved.json());
+  expect(await (await fetchLinksAdmin('export/snapshot')).text()).toContain('/links-moved/#');
+  const edited = await fetchLinksAdmin(`api/documents/${target.id}`, 'PUT', { ...linkFields('Target', 'links-moved', { type: 'doc', content: [linkHeading('Renamed')] }), version: movedPage.version });
+  expect(edited.status).toBe(200);
+  // Saving drafts must leave public link targets and revision timestamps untouched.
+  expect(await (await fetchLinksAdmin('export/snapshot')).text()).toContain('/links-moved/#');
+  expect((await fetchLinksAdmin('api/publish/changes', 'POST', {})).status).toBe(400);
+  const editedPage = linkIdentity.parse(await edited.json());
+  expect((await fetchLinksAdmin(`api/documents/${target.id}`, 'DELETE', { version: editedPage.version })).status).toBe(400);
+  expect((await fetchLinksAdmin(`api/documents/${source.id}`, 'DELETE', { version: source.version + 1 })).status).toBe(204);
+  expect((await fetchLinksAdmin('api/publish/changes', 'POST', {})).status).toBe(200);
+}, 60000);
+
+ it('saves and reopens table designs, previews drafts and builds immutable published tables', async () => {
+  const input = { title: 'Tables', slug: 'table-design-test', folderId: null, order: 0, description: '', contentJson: tableDocument };
+  let page = identity.parse(await request('api/documents', 'POST', input));
+  const reopened = z.object({ contentJson: z.unknown() }).parse(await request(`api/documents/${page.id}`));
+  expect(reopened.contentJson).toEqual(tableDocument);
+  const preview = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=en`);
+  expect(await preview.text()).toContain('data-table-style="striped"');
+  const publication = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version }));
+  page = publication.document;
+  const snapshot = await request('export/snapshot');
+  const editedBody = structuredClone(tableDocument);
+  editedBody.content[0]!.attrs.tableStyle = 'minimal';
+  page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, contentJson: editedBody, version: page.version }));
+  expect(await request('export/snapshot')).toEqual(snapshot);
+  expect(await (await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=en`)).text()).toContain('data-table-style="minimal"');
+  await buildDocs();
+  const html = await readFile(join(output, 'table-design-test/index.html'), 'utf8');
+  for (const fragment of ['data-table-style="striped"', 'colspan="2"', 'rowspan="2"', 'width: 180px', 'text-align: center', '**literal**', 'Second paragraph', 'List item']) expect(html).toContain(fragment);
+  expect(html).not.toContain('data-table-style="minimal"');
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+}, 30000);
+
+
+it('upgrades through existing APIs on the first build, copies images/video and collects only after static media is live', async () => {
+  async function upload(type: string, bytes: Uint8Array) {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(bytes)], { type }), type === 'image/png' ? 'original.png' : 'original.mp4');
+    const multipart = new Request('http://localhost/admin/api/media', { method: 'POST', body: form });
+    const response = await mf.dispatchFetch('http://localhost/admin/api/media', {
+      method: 'POST', headers: { 'X-Requested-With': 'cloudflare-starlight-cms', 'Content-Type': multipart.headers.get('Content-Type')! }, body: await multipart.arrayBuffer(),
+    });
+    expect(response.status).toBe(201);
+    return z.object({ id: z.string(), objectKey: z.string(), url: z.string() }).parse(await response.json());
+  }
+  const png = new Uint8Array([137, 80, 78, 71]);
+  const mp4 = new Uint8Array([0, 0, 0, 16, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 0, 0]);
+  const image = await upload('image/png', png); const video = await upload('video/mp4', mp4);
+  const unused = await upload('image/png', png);
+  const db = await mf.getD1Database('DB');
+  await db.prepare('UPDATE media SET created_at=? WHERE id=?').bind(Date.now() - 48 * 60 * 60 * 1000, unused.id).run();
+  const page = identity.parse(await request('api/documents', 'POST', {
+    title: 'Static media upgrade', slug: 'static-media-upgrade', folderId: null, order: 0, description: '',
+    contentJson: { type: 'doc', content: [
+      { type: 'image', attrs: { src: `https://old-r2.example.com/${image.objectKey}`, alt: 'Original image' } },
+      { type: 'video', attrs: { src: video.url } },
+      { type: 'image', attrs: { src: 'https://external.example/media/photo.png' } },
+    ] },
+  }));
+  await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version });
+  const calls: string[] = [];
+  // Emulate the released Worker's old export without introducing a migration API.
+  const legacy = createServer(async (incoming, outgoing) => {
+    try {
+      calls.push(incoming.url!);
+      if (incoming.url === '/admin/api/publish/builds') { outgoing.writeHead(404); outgoing.end(); return; }
+      const response = await mf.dispatchFetch(`http://localhost${incoming.url}`, { method: incoming.method });
+      outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+      if (incoming.url === '/admin/export/snapshot') {
+        const text = await response.text();
+        outgoing.end(text.replaceAll('/_cms-media/', 'https://old-r2.example.com/media/'));
+      } else outgoing.end(Buffer.from(await response.arrayBuffer()));
+    } catch { outgoing.writeHead(500); outgoing.end(); }
+  });
+  await new Promise<void>((resolve) => legacy.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = legacy.address();
+    if (!address || typeof address === 'string') throw new Error('Missing legacy test address');
+    await promisify(execFile)(process.execPath, ['scripts/build.mjs', '--outDir', output], {
+      env: { ...process.env, CMS_EXPORT_URL: `http://127.0.0.1:${address.port}`, CMS_INITIAL_EMPTY: undefined }, maxBuffer: 4 * 1024 * 1024,
+    });
+  } finally { await new Promise<void>((resolve) => legacy.close(() => resolve())); }
+  expect(calls).toContain('/admin/export/snapshot');
+  expect(calls.some((path) => path.endsWith('/cleanup'))).toBe(false);
+  expect(await db.prepare('SELECT id FROM media WHERE id=?').bind(unused.id).first()).not.toBeNull();
+  for (const [record, bytes] of [[image, png], [video, mp4]] as const) {
+    expect(await readFile(join(output, '_cms-media', record.objectKey.slice('media/'.length)))).toEqual(Buffer.from(bytes));
+  }
+  const html = await readFile(join(output, 'static-media-upgrade/index.html'), 'utf8');
+  expect(html).toContain(`/_cms-media/${image.objectKey.slice('media/'.length)}`);
+  expect(html).toContain(`/_cms-media/${video.objectKey.slice('media/'.length)}`);
+  expect(html).not.toContain('old-r2.example.com');
+  expect(html).toContain('https://external.example/media/photo.png');
+  liveStaticMedia = true;
+  await buildDocs();
+  expect(await db.prepare('SELECT id FROM media WHERE id=?').bind(unused.id).first()).toBeNull();
+  expect((await mf.dispatchFetch(`http://localhost/admin/api/media/object/${unused.objectKey}`)).status).toBe(404);
+  expect((await mf.dispatchFetch(`http://localhost/admin/api/media/object/${image.objectKey}`)).status).toBe(200);
+  const stored = await db.prepare('SELECT content_json FROM document_translation WHERE document_id=?').bind(page.id).first<{content_json: string}>();
+  expect(stored!.content_json).toContain('old-r2.example.com');
+}, 30000);

@@ -1,7 +1,8 @@
+import { BuildCleanupConflictError, startBuild, cancelBuild, cleanupBuild } from '../publish/cleanup.ts';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { ensureSchema } from '../db/bootstrap.ts';
 import { z } from 'zod';
-import { DocumentConflictError, DocumentVersionConflictError, DocumentContentError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, restoreRevision, updateDocument } from '../documents/service.ts';
+import { DocumentConflictError, DocumentVersionConflictError, DocumentContentError, DocumentNotFoundError, createDocument, createDocumentTranslation, deleteDocument, getDocument, listDocuments, listRevisions, deleteRevision, restoreRevision, updateDocument } from '../documents/service.ts';
 import { InvalidMediaError, MediaInUseError, MediaNotFoundError, deleteUnusedMedia, listMedia, uploadMedia } from '../media/service.ts';
 import type { RuntimeEnv } from '../env.ts';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '../locales.ts';
@@ -36,6 +37,7 @@ const csrf: MiddlewareHandler<AdminEnv> = async (c, next) => {
 
 
 app.onError((error, c) => {
+  if (error instanceof BuildCleanupConflictError) return c.json({ error: error.message }, 409, jsonHeaders);
   if (error instanceof DocumentNotFoundError) return c.json({ error: 'Not found' }, 404, jsonHeaders);
   if (error instanceof DocumentContentError) return c.json({ error: error.message }, 400, jsonHeaders);
   if (error instanceof DocumentConflictError) return c.json({ error: error.message || 'The document changed. Reload it and try again.', code: error instanceof DocumentVersionConflictError ? 'version_conflict' : 'document_conflict' }, 409, jsonHeaders);
@@ -61,7 +63,11 @@ app.use('/admin/*', async (c, next) => {
   }
   await next();
 });
-app.get('/admin/export/snapshot', async (c) => c.json(await publishedSnapshot(c.env), 200, jsonHeaders));
+app.get('/admin/export/snapshot', async (c) => {
+  const snapshot = await publishedSnapshot(c.env);
+  const request = await c.env.DB.prepare('SELECT id FROM publish_delivery ORDER BY requested_at DESC,rowid DESC LIMIT 1').first<{ id: string }>();
+  return c.json(snapshot, 200, { ...jsonHeaders, 'X-CMS-Publish-Request': request?.id ?? '' });
+});
 const adminHome = (c: Context<AdminEnv>) => {
   return c.html(adminHtml(), 200, { 'Cache-Control': 'no-store' });
 };
@@ -73,7 +79,7 @@ app.get('/admin/app.js', (c) => c.env.ASSETS.fetch(c.req.raw));
 app.use('/admin/api/*', csrf);
 app.use('/admin/api/*', async (c, next) => {
   await next();
-  if (!c.req.path.startsWith('/admin/api/media') && ['POST', 'PUT', 'DELETE'].includes(c.req.method) && c.res.status < 400) {
+  if (!c.req.path.startsWith('/admin/api/media') && !c.req.path.startsWith('/admin/api/publish/builds') && ['POST', 'PUT', 'DELETE'].includes(c.req.method) && c.res.status < 400) {
     c.executionCtx.waitUntil(deliverPendingChanges(c.env));
   }
 });
@@ -103,6 +109,15 @@ app.post('/admin/api/documents/:id/publish', async (c) => {
 app.post('/admin/api/publish/changes', async (c) => c.json(await publishSavedChangesAndRequest(c.env), 200, jsonHeaders));
 app.get('/admin/api/publish/deliveries', async (c) => c.json(await listPublishDeliveries(c.env), 200, jsonHeaders));
 app.post('/admin/api/publish/deliveries/:id/retry', async (c) => c.json({ delivery: await retryPublish(c.env, c.req.param('id')) }, 200, jsonHeaders));
+app.post('/admin/api/publish/builds', async (c) => c.json(await startBuild(c.env), 201, jsonHeaders));
+app.post('/admin/api/publish/builds/:id/cleanup', async (c) => c.json(await cleanupBuild(c.env, c.req.param('id')), 200, jsonHeaders));
+app.delete('/admin/api/publish/builds/:id', async (c) => { await cancelBuild(c.env, c.req.param('id')); return new Response(null, { status: 204, headers: noStore }); });
+app.delete('/admin/api/documents/:id/revisions/:revisionId', async (c) => {
+  const { version } = await c.req.json<{ version?: number }>();
+  if (!Number.isInteger(version)) return c.json({ error: 'version is required' }, 400, jsonHeaders);
+  await deleteRevision(c.env, c.req.param('id'), c.req.param('revisionId'), version!, locale(c));
+  return new Response(null, { status: 204, headers: noStore });
+});
 app.get('/admin/api/documents/:id/revisions', async (c) => c.json(await listRevisions(c.env, c.req.param('id'), locale(c)), 200, jsonHeaders));
 app.post('/admin/api/documents/:id/revisions/:revisionId/restore', async (c) => {
   const { version } = await c.req.json<{ version?: number }>();

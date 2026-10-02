@@ -1,3 +1,5 @@
+@import './tables.css';
+
 /* Public Docs palette. Change these six values to match your own brand. */
 :root {
   --sl-color-accent-low: #ede9fe;

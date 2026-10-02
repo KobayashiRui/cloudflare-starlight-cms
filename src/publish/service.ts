@@ -111,7 +111,10 @@ export async function publishSavedChangesAndRequest(env: RuntimeEnv): Promise<{ 
   const pending = { id: crypto.randomUUID(), requestedAt: Date.now() };
   const documents = await publishSavedChanges(env, pending);
   const publishedCount = documents.length;
-  if (publishedCount === 0) return { publishedCount, documents, delivery: null };
+  if (publishedCount === 0) {
+    const delivery = await createPublishDelivery(env, 'site');
+    return { publishedCount, documents, delivery: await deliverPublish(env, delivery.id) };
+  }
   return { publishedCount, documents, delivery: await deliverPublish(env, pending.id) };
 }
 

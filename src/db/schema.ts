@@ -43,3 +43,13 @@ export const publishDelivery = sqliteTable('publish_delivery', {
   acceptedAt: integer('accepted_at'),
   nextRetryAt: integer('next_retry_at'),
 });
+
+/** Short-lived in-flight builds protect their source media. */
+export const cmsBuild = sqliteTable('cms_build', {
+  id: text('id').primaryKey(), revisionIds: text('revision_ids').notNull(),
+  contentJson: text('content_json').notNull(), createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+});
+export const mediaDeletion = sqliteTable('media_deletion', {
+  mediaId: text('media_id').primaryKey(),
+});

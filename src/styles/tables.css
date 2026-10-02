@@ -1,0 +1,77 @@
+/* Shared table design for the editor, protected Preview and public Docs. */
+:root {
+  --cms-table-border: #d1d5db;
+  --cms-table-header: #f3f4f6;
+  --cms-table-stripe: #f9fafb;
+}
+:root.dark, :root[data-theme='dark'] {
+  --cms-table-border: #4b5563;
+  --cms-table-header: #293241;
+  --cms-table-stripe: #202733;
+}
+.simple-editor .tableWrapper, .cms-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style] {
+  display: table;
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+  color: inherit;
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style] :is(td, th) {
+  border: 1px solid var(--cms-table-border);
+  padding: .65rem .8rem;
+  min-width: 25px;
+  vertical-align: top;
+  position: relative;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style] th {
+  background: var(--cms-table-header);
+  font-weight: 600;
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style='striped'] tr:nth-child(even) td {
+  background: var(--cms-table-stripe);
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style='minimal'] :is(td, th) {
+  border-left: 0;
+  border-right: 0;
+}
+:is(.simple-editor, .sl-markdown-content) table[data-table-style] :is(td, th) > :first-child { margin-top: 0; }
+:is(.simple-editor, .sl-markdown-content) table[data-table-style] :is(td, th) > :last-child { margin-bottom: 0; }
+.simple-editor table .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(124 58 237 / .16);
+  pointer-events: none;
+  z-index: 2;
+}
+.simple-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #a78bfa;
+  pointer-events: none;
+}
+.simple-editor.resize-cursor { cursor: col-resize; }
+.cms-table-menu-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem .65rem;
+  border-radius: .3rem;
+  font-size: .875rem;
+  cursor: pointer;
+  outline: none;
+}
+.cms-table-menu-item[data-highlighted] { background: var(--cms-table-header); }
+.cms-table-menu-item[data-disabled] { opacity: .4; cursor: default; }

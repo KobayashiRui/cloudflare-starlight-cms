@@ -58,6 +58,8 @@ npx create-starlight-cms@latest upgrade . --apply
 
 Review the plan first. `--apply` updates only files unchanged from the recorded template and stops when it finds a conflict. Run `npm install` afterwards if dependencies changed.
 
+Upgrading to v1.1.0 may report a `wrangler.jsonc` conflict when an old `MEDIA_PUBLIC_URL` is configured. Follow the [conflict resolution steps](docs/TROUBLESHOOTING.md#upgrade-conflict-in-wranglerjsonc), preserving your existing Cloudflare resource settings.
+
 ## Documentation
 
 - [Deployment](docs/DEPLOYMENT.md)

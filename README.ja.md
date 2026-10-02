@@ -58,6 +58,8 @@ npx create-starlight-cms@latest upgrade . --apply
 
 最初に更新計画を確認します。`--apply`は作成時templateから未変更のfileだけを更新し、競合があれば停止します。dependencyが変わった場合は続けて`npm install`を実行してください。
 
+1.1.0への更新では、旧`MEDIA_PUBLIC_URL`の設定により`wrangler.jsonc`が競合する場合があります。[競合の解消手順](docs/TROUBLESHOOTING.ja.md#wranglerjsoncのupgrade競合)に沿って、既存のCloudflareリソース設定を保持したまま更新してください。
+
 ## Documentation
 
 - [デプロイ](docs/DEPLOYMENT.ja.md)

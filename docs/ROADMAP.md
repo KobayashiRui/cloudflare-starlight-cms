@@ -2,6 +2,16 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## v1.1.1 — Initial upgrade build fix
+
+Prepared patch for the reported v1.1.0 migration failure:
+
+- Accept HTTP 405 as well as 404 only for the initial optional build API POST probe, allowing legacy Workers to supply the existing snapshot/media APIs without cleanup.
+- Keep authentication, redirect and cleanup failures fatal; include the failed method/path in safe build error messages.
+- Cover both legacy responses with real published Astro builds and document `wrangler.jsonc` conflict resolution in English/Japanese.
+- `npm run release:check` passed: type checks, all 82 tests including actual published Astro builds, an empty-site build, Worker dry run, `create-starlight-cms-1.1.1.tgz` packing and project generation from the packed CLI.
+- Set the CLI version to 1.1.1. npm publication and production deployment have not been performed for this patch.
+
 ## v1.1.0 — Page links, tables and storage cleanup
 
 Prepared changes:
@@ -9,7 +19,7 @@ Prepared changes:
 - Link to saved pages and optional headings from the editor, retaining destinations through saving and reopening and resolving URLs in Preview and published Docs.
 - Add official Tiptap table controls for rows, columns, headings, merged cells and resizing, with standard, striped and minimal designs and cell alignment.
 - Keep table colors in shared CSS rather than adding color selection. Use result-oriented header labels and the same transparent toolbar button style as other controls.
-- Add older-history deletion, configurable retention (unlimited by default), and unused-media collection after a verified successful deployment.
+- Add older-history deletion, configurable retention (unlimited by default), and unused-media collection after a complete build once live Static Assets confirms migration.
 - Include the tree UX and development startup improvements prepared for v1.0.4 below.
 
 Verification:
@@ -18,7 +28,7 @@ Verification:
 - Packed `create-starlight-cms-1.1.0.tgz` and verified new project generation from the actual package, including the Linux native binding lockfile check.
 - The table toolbar's normal background was verified transparent in dark mode while editing a table.
 
-Migration `0003_build_cleanup.sql` adds build-reference protection and media deletion claims; bundled bootstrap applies its idempotent CREATE statements. No dependency addition is required. Existing Workers Builds projects must use `npm run deploy`. npm publication and production deployment have not been performed.
+Migration `0003_build_cleanup.sql` adds build-reference protection and media deletion claims; bundled bootstrap applies its idempotent CREATE statements. Markdown/HTML parsing uses pinned OSS dependencies. Workers Builds projects retain `npm run build` and `npx wrangler deploy`. Production deployment has not been verified in this repository.
 
 ## v1.0.4 — Tree UX and development startup
 
@@ -96,7 +106,8 @@ No npm publication or production deployment was performed.
 
 | Version | Changes |
 | --- | --- |
-| 1.1.0 (prepared) | Page/heading links, table designs, revision deletion/retention and unused-media cleanup |
+| 1.1.1 (prepared) | Fix legacy build API 405 fallback and document upgrade conflicts |
+| 1.1.0 | Page/heading links, table designs, revision deletion/retention and unused-media cleanup |
 | 1.0.4 (prepared) | Tree interaction improvements and reliable local Admin assets |
 | 1.0.3 | English/Japanese Admin UI, separate display-language settings, simpler save/publication controls, and save-conflict/upload fixes |
 | 1.0.2 | Recovery for legacy HTTP/private-network media without allowing new unsafe media URLs |
@@ -129,16 +140,24 @@ Keep the CMS focused on documentation and use existing React, Tiptap, Headless T
 - After Astro/Admin build and media copies succeed, build-time bounded collection prunes unprotected history and deletes unreferenced R2/D1 media. Builds release their lease on success/failure; abandoned leases expire after 24 hours. Deleted-page originals stay protected while another build is reading them.
 - Removed the custom deploy script, post-deploy confirmation/renewal endpoints and standalone cleanup command. `npm run deploy` is a plain Wrangler alias; Workers Builds can keep `npx wrangler deploy`. No Cron, Queue, media-management page or Admin-open requirement was added.
 - Removed `MEDIA_PUBLIC_URL` from new configuration and regenerated binding types. Existing variables may remain unused. Both deployment/troubleshooting guides describe private originals and static delivery, retention, file limits and migration.
-- Upgrade needs no additional Publish or migration command: the first build uses existing export/list/object APIs when the build lease endpoint is absent (404 only), copies media, and skips collection. Collection remains disabled until the live site carries the static-media marker, so failed migration deployments cannot break legacy production images. Pre-migration rollback/external direct links require the old R2 domain and originals; static version rollback restores assets, not D1/R2 state.
+- Upgrade needs no additional Publish or migration command: the first build uses existing export/list/object APIs when the build lease endpoint is absent (404, or 405 for the initial POST probe), copies media, and skips collection. Collection remains disabled until the live site carries the static-media marker, so failed migration deployments cannot break legacy production images. Pre-migration rollback/external direct links require the old R2 domain and originals; static version rollback restores assets, not D1/R2 state.
 - Uploads remain limited to 10 MiB. Future larger-video support must account for Static Assets' 25 MiB per-file limit; no speculative hybrid delivery was introduced. Total file limits include Docs/Admin/Pagefind, and repeated build-time downloads still incur R2 reads.
 - Documentation follow-up: README and both deployment guides explicitly state that R2 Custom Domain setup is unnecessary and explain when existing users may detach it, while retaining the original bucket/binding and documenting legacy rollback/direct-link requirements.
 - Validation includes an actual Astro build through emulated old APIs, image/video byte copies, unchanged legacy stored JSON, protected Editor/Preview URLs, later build-time GC, concurrent-build protection, retention/deletion retries, and strict redirect/authentication failure handling. All 81 tests and type checks passed, including real published Astro builds; empty-site build, Worker dry run and `git diff --check` passed. Packed CLI generation and a generated project’s clean `npm ci` plus empty build passed. Lockfile metadata was regenerated for reproducible clean installation.
 
 ### Behavior-preserving refactoring — 2026-10-02
 
+- Documented the v1.0.4 → v1.1.0 `wrangler.jsonc` upgrade conflict in both troubleshooting guides, with links from README and deployment guides. Explain removal of the obsolete media-origin block, preservation of user resource settings, retry commands and delayed R2-domain detachment. Documentation-only change; `git diff --check` passed.
+
 - Consolidated registered-media key queries and Admin/public media URL generation across document reads, publication validation, export, upload responses and build downloads. Document views now require the registered-key set explicitly. No schema, stored-data, retention or cleanup-condition changes.
 - Reviewed the 81 test cases. They cover distinct behavior and failures, including parameterized format/slug validation, immutable publication, legacy migration, concurrent builds and deletion safety. Retained these regressions rather than reducing the count or adding tests for helper implementation details.
 - Type checks and all 81 tests passed, including local D1/R2 integration and actual published Astro builds. Empty-site build, Worker dry run and `git diff --check` passed. Production deployment was not performed.
+
+### Legacy build API probe fix — 2026-10-02
+
+- Addressed the reported first-upgrade build failure with HTTP 405. Legacy Workers forward unknown Admin routes to Static Assets; the initial POST probe now treats 405 as an unavailable build API, alongside 404. This exception is limited to the explicitly optional initial build probe. Authentication errors, redirects, other methods and cleanup failures remain fatal.
+- Build errors now include the method/path without exposing Access secrets or the origin. Added 405 migration coverage alongside 404, including real Astro image/video copies and later cleanup; request tests ensure the 405 exception does not apply to unrelated requests or cleanup.
+- All 82 tests, type checks, published/empty-site builds and `git diff --check` passed. Updated migration/troubleshooting documentation in English and Japanese. No production deploy or npm publication was performed.
 
 References: [Version contents](https://developers.cloudflare.com/workers/versions-and-deployments/), [Static Assets limits](https://developers.cloudflare.com/workers/platform/limits/), [Static Assets billing](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/), [Upload reuse](https://developers.cloudflare.com/workers/static-assets/direct-upload/).
 

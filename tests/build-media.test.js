@@ -52,19 +52,24 @@ it('copies a shared original once and rejects incomplete or missing files', asyn
   expect(() => staticMediaMarkdown('![gone](/admin/api/media/object/media/gone.png)', media, new Set())).toThrow('missing');
 });
 
-it('keeps credentials on the CMS origin and treats only 404 as a missing legacy endpoint', async () => {
+it('keeps credentials on the CMS origin and permits legacy fallback only for a missing build API', async () => {
   const { createServer } = await import('node:http');
-  const { cmsRequest } = await import('../scripts/build-client.mjs');
+  const { cmsRequest, buildRequest } = await import('../scripts/build-client.mjs');
   const calls = [];
   const server = createServer((request, response) => {
     calls.push(request.url);
     if (request.url === '/redirect') { response.writeHead(302, { location: '/stolen' }); response.end(); }
-    else { response.writeHead(Number(request.url.slice(1))); response.end(); }
+    else { response.writeHead(request.url.startsWith('/admin/api/publish/builds') ? 405 : Number(request.url.slice(1))); response.end(); }
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   try {
     expect(await cmsRequest(origin, '/404', 'POST', true)).toBeNull();
+    expect(await buildRequest(origin, '', 'POST', true)).toBeNull();
+    await expect(cmsRequest(origin, '/405', 'POST', true)).rejects.toThrow('405');
+    await expect(buildRequest(origin, '', 'GET', true)).rejects.toThrow('405');
+    await expect(buildRequest(origin, '/lease/cleanup', 'POST', true)).rejects.toThrow('405');
+    await expect(buildRequest(origin)).rejects.toThrow('405');
     await expect(cmsRequest(origin, '/401', 'POST', true)).rejects.toThrow('401');
     await expect(cmsRequest(origin, '/500', 'POST', true)).rejects.toThrow('500');
     await expect(cmsRequest(origin, '/redirect')).rejects.toThrow();

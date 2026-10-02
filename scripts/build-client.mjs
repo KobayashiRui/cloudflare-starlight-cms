@@ -18,8 +18,10 @@ export async function cmsRequest(origin, path, method = 'GET', allowMissing = fa
   const url = new URL(path, origin);
   if (url.origin !== origin) throw new Error('CMS requests must use the configured origin');
   const response = await fetch(url, { method, headers, redirect: 'error', signal: AbortSignal.timeout(30_000) });
-  if (allowMissing && response.status === 404) return null;
-  if (!response.ok) throw new Error(`CMS build operation failed (${response.status})`);
+  // Legacy Workers forward unknown Admin routes to ASSETS, which rejects POST with 405.
+  const legacyBuildProbe = method === 'POST' && path === '/admin/api/publish/builds';
+  if (allowMissing && (response.status === 404 || (legacyBuildProbe && response.status === 405))) return null;
+  if (!response.ok) throw new Error(`CMS build operation failed (${response.status}: ${method} ${url.pathname})`);
   return response;
 }
 

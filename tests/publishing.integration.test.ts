@@ -449,7 +449,8 @@ it('links saved drafts, publishes together, builds working anchors, follows move
 }, 30000);
 
 
-it('upgrades through existing APIs on the first build, copies images/video and collects only after static media is live', async () => {
+it.each([404, 405])('upgrades through existing APIs when the build API returns %i, copies images/video and collects only after static media is live', async (legacyStatus) => {
+  liveStaticMedia = false;
   async function upload(type: string, bytes: Uint8Array) {
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(bytes)], { type }), type === 'image/png' ? 'original.png' : 'original.mp4');
@@ -467,7 +468,7 @@ it('upgrades through existing APIs on the first build, copies images/video and c
   const db = await mf.getD1Database('DB');
   await db.prepare('UPDATE media SET created_at=? WHERE id=?').bind(Date.now() - 48 * 60 * 60 * 1000, unused.id).run();
   const page = identity.parse(await request('api/documents', 'POST', {
-    title: 'Static media upgrade', slug: 'static-media-upgrade', folderId: null, order: 0, description: '',
+    title: 'Static media upgrade', slug: `static-media-upgrade-${legacyStatus}`, folderId: null, order: 0, description: '',
     contentJson: { type: 'doc', content: [
       { type: 'image', attrs: { src: `https://old-r2.example.com/${image.objectKey}`, alt: 'Original image' } },
       { type: 'video', attrs: { src: video.url } },
@@ -480,7 +481,7 @@ it('upgrades through existing APIs on the first build, copies images/video and c
   const legacy = createServer(async (incoming, outgoing) => {
     try {
       calls.push(incoming.url!);
-      if (incoming.url === '/admin/api/publish/builds') { outgoing.writeHead(404); outgoing.end(); return; }
+      if (incoming.url === '/admin/api/publish/builds') { outgoing.writeHead(legacyStatus); outgoing.end(); return; }
       const response = await mf.dispatchFetch(`http://localhost${incoming.url}`, { method: incoming.method });
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       if (incoming.url === '/admin/export/snapshot') {
@@ -503,7 +504,7 @@ it('upgrades through existing APIs on the first build, copies images/video and c
   for (const [record, bytes] of [[image, png], [video, mp4]] as const) {
     expect(await readFile(join(output, '_cms-media', record.objectKey.slice('media/'.length)))).toEqual(Buffer.from(bytes));
   }
-  const html = await readFile(join(output, 'static-media-upgrade/index.html'), 'utf8');
+  const html = await readFile(join(output, `static-media-upgrade-${legacyStatus}/index.html`), 'utf8');
   expect(html).toContain(`/_cms-media/${image.objectKey.slice('media/'.length)}`);
   expect(html).toContain(`/_cms-media/${video.objectKey.slice('media/'.length)}`);
   expect(html).not.toContain('old-r2.example.com');

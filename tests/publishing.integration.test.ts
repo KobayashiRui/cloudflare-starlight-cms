@@ -12,6 +12,8 @@ import { publishedDocuments } from '../src/starlight/schema.ts';
 import { cmsSidebar } from '../src/starlight/sidebar.ts';
 import { supportedLocales } from '../src/locales.ts';
 import { tableDocument } from './fixtures/table';
+import { reviewImagePng } from './fixtures/review-image';
+import { publicPageUrl } from '../src/documents/links';
 
 let mf: Miniflare;
 let output: string;
@@ -226,9 +228,9 @@ it('rejects the editor version left stale by bulk publishing until the translati
   }
 });
 
-it('saves and reloads three uploaded images with a current translation version', async () => {
+it('saves and reloads real images and serves them in Preview and a published static build', async () => {
   const images = [];
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+  const png = reviewImagePng;
   for (let index = 0; index < 3; index++) {
     const form = new FormData();
     form.set('file', new File([png], `image-${index}.png`, { type: 'image/png' }));
@@ -267,7 +269,12 @@ it('saves and reloads three uploaded images with a current translation version',
   const preview = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=${locale}`);
   expect(preview.status).toBe(200);
   const html = await preview.text();
-  for (const image of images) expect(html).toContain(image.url);
+  for (const image of images) {
+    expect(html).toContain(image.url);
+    const original = await mf.dispatchFetch(`http://localhost${image.url}`);
+    expect(original.headers.get('content-type')).toBe('image/png');
+    expect(new Uint8Array(await original.arrayBuffer())).toEqual(png);
+  }
   const rejectedPublish = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}/publish?locale=${locale}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
     body: JSON.stringify({ version: opened.version }),
@@ -277,9 +284,23 @@ it('saves and reloads three uploaded images with a current translation version',
   const published = publishedDocuments(await request('export/snapshot')).find((document) => document.id === page.id && document.locale === locale)!;
   for (const image of images) expect(published.body.value).toContain(image.url.replace('/admin/api/media/object/media/', '/_cms-media/'));
   expect(published.body.value).not.toContain('/admin/');
+  // The Admin publishes saved translations together, including the default
+  // language used by Starlight's sidebar/fallback routes.
+  await request('api/publish/changes', 'POST');
+  await buildDocs();
+  const staticHtml = await readFile(join(output, publicPageUrl('three-images', locale).slice(1), 'index.html'), 'utf8');
+  for (const [index, image] of images.entries()) {
+    const publicUrl = image.url.replace('/admin/api/media/object/media/', '/_cms-media/');
+    expect(staticHtml).toContain(publicUrl);
+    expect(staticHtml).toContain(`alt="Image ${index}"`);
+    expect(new Uint8Array(await readFile(join(output, publicUrl.slice(1))))).toEqual(png);
+  }
   await request(`api/documents/${page.id}?locale=${locale}`, 'DELETE', { version: opened.version });
-  if (hasJapanese) await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
-});
+  if (hasJapanese) {
+    const english = identity.parse(await request(`api/documents/${page.id}`));
+    await request(`api/documents/${page.id}`, 'DELETE', { version: english.version });
+  }
+}, 30000);
 
 it('keeps only publication snapshots for new saves and restores, and returns bulk versions', async () => {
   const input = { title: 'History', slug: 'publication-history', description: '', folderId: null, order: 0,

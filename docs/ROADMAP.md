@@ -2,6 +2,23 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## Workspace-wide AI editing through WebMCP — 2026-10-22
+
+- Add native `document.modelContext` tools to the open Admin for localized page/folder lists, reads across pages and languages, selecting pages, switching document languages, creating pages/translations, editing title/description/navigation/content, saving drafts, getting saved Preview URLs and listing existing media.
+- Share the existing Tiptap editor and browser drafts with the human. Reads identify live editor/browser/D1 sources and conflicts; mutations require the selected document/language and latest editor token. Exact-text range checks and schema/URL/table validation run before applying a transaction. Content changes use ordinary Undo.
+- Reuse existing Access-protected Admin APIs, CSRF checks and D1 save-version checks. Preserve browser drafts when moving across articles; block navigation away from changed new pages, pending uploads or changed folder settings. Return navigation results only once the requested editor is ready.
+- Register tools only while Admin is mounted. Unsupported or policy-blocked browsers retain ordinary editing. Use official MIT `webmcp-types` 0.1.10 as a pinned development-only dependency; no runtime server, authentication system, database migration or Cloudflare configuration change is added.
+- Document setup, supported tools and review/edit examples in [WebMCP usage](WEBMCP.md). Publication, deletion, history, folder creation/renaming and uploads remain existing UI actions. Saving shared navigation changes retains existing rebuild behavior.
+
+Verification:
+
+- Type checks and all 90 tests passed, including eight WebMCP regressions for native registration/lifecycle, validated inputs, concurrent-call rejection, rich-content/image transactions, atomic rejection of invalid edits, Undo and isolated page/language history; existing integration tests include actual published Astro builds.
+- Native browser WebMCP discovery and calls verified new English articles, Japanese translation creation and selection, localized lists, partial/full edits, saved reopening, cross-page browser-draft preservation, stale editor-token rejection, Preview and ordinary Undo. A two-tab test verified that conflicting AI saves are rejected and the existing conflict UI keeps the current edits visible.
+- Published the isolated local test DB through the existing API and built real English/Japanese Static Assets; verified the edited text and bold formatting in generated HTML. This used local APIs after browser automation stopped responding at the native publication confirmation dialog; browser publication completion is not claimed.
+- Reviewed the actual discovery/invocation path again with a real 640 × 240 PNG: uploaded through the existing file chooser, read media and edited alt text through WebMCP, saved, followed returned Preview/public URLs, checked browser image decode completion and captured the rendered public page. Preview loaded the protected media proxy; the published page loaded the copied `/_cms-media/` file. `get_preview` now distinguishes saved Preview from the last deployed public site without claiming deployment completion.
+- Fixed the discovered Undo history leak across page/language loads using existing ProseMirror state initialization. Browser verification confirms Undo starts disabled after a page load, remains available after saving edits in the same page, and cannot bring another page's content into the editor.
+- Empty-site build, Worker dry run and `git diff --check` passed. Production Access, deployment and npm publication were not performed.
+
 ## v1.1.1 — Initial upgrade build fix
 
 Prepared patch for the reported v1.1.0 migration failure:
@@ -117,6 +134,7 @@ No npm publication or production deployment was performed.
 ## Remaining work
 
 - Support videos larger than 10 MiB through R2 multipart uploads.
+- Investigate an existing low-level API edge case: publishing only a non-default translation before a default-language publication can fail Starlight's shared-sidebar route lookup. The normal Admin Publish action publishes saved translations together and passed the image/public-build review; per-translation publication is not exposed by the WebMCP tools.
 - Verify production-specific integration in a real Cloudflare environment: Access protection and bypass prevention, resource provisioning, Workers Builds, Deploy Hook delivery, and token rotation. Local checks and dry runs do not establish production success.
 - Investigate the reported D1 provisioning response after resource deletion; see [Troubleshooting](TROUBLESHOOTING.md#automatic-d1-provisioning-reports-an-existing-database).
 

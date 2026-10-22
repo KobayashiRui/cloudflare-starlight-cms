@@ -11,8 +11,10 @@ import Youtube from '@tiptap/extension-youtube';
 import type { Editor, Extensions } from '@tiptap/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { documentEditTransaction, documentTextBlocks, loadDocumentState, registerAdminTools, type AdminToolActions, type EditorTarget } from './webmcp';
 import { PageLinksContext, type PageLinkOption } from './page-links';
-import { navigationPath } from '../documents/links';
+import { navigationPath, publicPageUrl } from '../documents/links';
 import { SimpleEditor } from './components/tiptap-templates/simple/simple-editor';
 import { NavigationTree, type NavigationItem } from './navigation-tree';
 import { listLocalDocumentDrafts, localDocumentKey, readLocalDocumentDraft, removeLocalDocumentDraft, writeLocalDocumentDraft, type LocalDocumentDraft } from './local-drafts';
@@ -162,14 +164,21 @@ async function api<T>(path: string, init: RequestInit = {}, locale?: SupportedLo
   return payload;
 }
 
-function documentFields(document: DocumentRecord): DocumentFields {
+function documentFields(document: DocumentFields): DocumentFields {
   const { title, slug, description, folderId, order } = document;
   return { title, slug, description, folderId, order };
 }
 
-function setEditorDocument(editor: Editor | null, content: JSONContent) {
+function setEditorDocument(editor: Editor | null, content: JSONContent, resetHistory = false) {
   if (!editor || editor.isDestroyed) return;
-  editor.commands.setContent(content || emptyContent, { emitUpdate: false });
+  const next = content || emptyContent;
+  if (resetHistory) {
+    editor.view.updateState(loadDocumentState(editor.state, next));
+    // Notify Tiptap's reactive toolbar without introducing a history step.
+    editor.view.dispatch(editor.state.tr.setMeta('addToHistory', false));
+  } else if (!editor.state.doc.eq(editor.schema.nodeFromJSON(next))) {
+    editor.commands.setContent(next, { emitUpdate: false });
+  }
 }
 
 function hasDocumentChanges(document: DocumentRecord, fields: DocumentFields, contentJson: JSONContent) {
@@ -191,6 +200,7 @@ function App() {
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
   const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [folderDraft, setFolderDraft] = useState({ name: '', slug: '' });
+  const savedFolderFields = useRef({ name: '', slug: '' });
   const [fields, setFields] = useState<DocumentFields>(documentFields(emptyDocument));
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [notice, setNotice] = useState<AdminMessage>('Loading documents…');
@@ -234,9 +244,25 @@ function App() {
   const localDraftTimer = useRef<number | null>(null);
   const localWrite = useRef(Promise.resolve());
   const selectionVersion = useRef(0);
+  const loadedEditorDocument = useRef<{ editor: Editor; selection: number } | null>(null);
   const savedDocument = useRef<DocumentRecord | null>(null);
   const fieldsRef = useRef(fields);
   const editVersion = useRef(0);
+  const toolActions = useRef<AdminToolActions | null>(null);
+  const toolRenderWaiters = useRef(new Set<() => void>());
+  useEffect(() => {
+    if (!document.modelContext) return;
+    const controller = new AbortController();
+    void registerAdminTools(document.modelContext, () => {
+      if (!toolActions.current) throw new Error('Admin is not ready.');
+      return toolActions.current;
+    }, controller.signal).catch(() => {
+      // Registration can be denied by the browser's Permissions Policy.
+      // Remove a partial registration without affecting ordinary Admin use.
+      controller.abort();
+    });
+    return () => controller.abort();
+  }, []);
 
   const noticeText = typeof notice === 'string' ? t(notice) : t(notice.text, Object.fromEntries(Object.entries(notice.values).map(([key, value]) => [key, key === 'delivery' || key === 'error' ? t(String(value)) : value])));
 
@@ -369,7 +395,9 @@ function App() {
 
   useEffect(() => {
     if (!current || !editor) return;
-    setEditorDocument(editor, current.contentJson);
+    const previous = loadedEditorDocument.current;
+    setEditorDocument(editor, current.contentJson, previous?.editor !== editor || previous.selection !== selectionVersion.current);
+    loadedEditorDocument.current = { editor, selection: selectionVersion.current };
     setHasPendingImages(hasPendingImageUpload(current.contentJson));
   }, [current, editor]);
 
@@ -382,9 +410,10 @@ function App() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isRevisionOpen]);
 
-  const selectDocument = async (document: DocumentRecord, targetLocale: SupportedLocale = document.locale) => {
+  const selectDocument = async (document: DocumentRecord, targetLocale: SupportedLocale = document.locale, options: { throwOnError?: boolean; expectedEditVersion?: number } = {}) => {
     const selection = ++selectionVersion.current;
     if (!await flushLocalDraft()) return;
+    if (selection !== selectionVersion.current || options.expectedEditVersion !== undefined && options.expectedEditVersion !== editVersion.current) return;
     if (!document.id) {
       savedDocument.current = null;
       setCurrent(document);
@@ -398,7 +427,7 @@ function App() {
       setLocalSaveState('idle');
       setLocalDraftConflict(null);
       showNotice('New page. Save draft to keep it.');
-      return;
+      return document;
     }
     try {
       const loaded = await api<DocumentRecord>(`/documents/${encodeURIComponent(document.id)}`, {}, targetLocale);
@@ -410,6 +439,9 @@ function App() {
         showNotice(message('Browser storage is unavailable: {error}', { error: error instanceof Error ? error.message : String(error) }), true);
       }
       if (selection !== selectionVersion.current) return;
+      if (options.expectedEditVersion !== undefined && options.expectedEditVersion !== editVersion.current) {
+        throw new Error('The editor changed while opening this page. Read the workspace and try again.');
+      }
       savedDocument.current = loaded;
       setVersionConflictKey(null);
       const canRestore = localDraft?.baseVersion === loaded.version;
@@ -428,8 +460,10 @@ function App() {
       setIsDirty(Boolean(canRestore));
       setLocalSaveState(canRestore ? 'saved' : 'idle');
       showNotice(canRestore ? 'Your unsaved edits were restored.' : 'Saved draft loaded.');
+      return displayed;
     } catch (error) {
       showNotice(error instanceof Error ? error.message : String(error), true);
+      if (options.throwOnError) throw error;
     }
   };
 
@@ -447,6 +481,7 @@ function App() {
     setSelectedFolderId(folderId);
     setFolderName(folder.name);
     setFolderSlug(folder.slug);
+    savedFolderFields.current = { name: folder.name, slug: folder.slug };
     setIsDirty(false);
     setLocalSaveState('idle');
     setLocalDraftConflict(null);
@@ -459,7 +494,10 @@ function App() {
         const localizedTree = await api<NavigationItem[]>('/tree', {}, locale);
         if (selection !== selectionVersion.current) return;
         const localizedFolder = localizedTree.find((item) => item.id === `folder:${folderId}`);
-        if (localizedFolder) setFolderName(localizedFolder.name);
+        if (localizedFolder) {
+          setFolderName(localizedFolder.name);
+          savedFolderFields.current = { name: localizedFolder.name, slug: localizedFolder.slug };
+        }
       } catch (error) {
         showNotice(error instanceof Error ? error.message : String(error), true);
       }
@@ -551,6 +589,7 @@ function App() {
       setSelectedFolderId(created.id);
       setFolderName(created.name);
       setFolderSlug(created.slug);
+      savedFolderFields.current = { name: created.name, slug: created.slug };
       setFolderLocale(defaultLocale);
       setMissingFolderTranslationSource(null);
       showNotice('Folder created.');
@@ -564,6 +603,7 @@ function App() {
     setIsSaving(true);
     try {
       await api<Folder>(`/folders/${encodeURIComponent(selectedFolderId!)}`, { method: 'PUT', body: JSON.stringify({ name, slug, parentId: selectedFolder.parentId ? selectedFolder.parentId.slice('folder:'.length) : null, order: selectedFolder.order }) }, folderLocale);
+      savedFolderFields.current = { name: folderName, slug: folderSlug };
       await refreshTree(); showNotice('Folder saved.');
     } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
   };
@@ -574,6 +614,7 @@ function App() {
       setFolderLocale(targetLocale);
       setFolderName(selectedFolder.name);
       setFolderSlug(selectedFolder.slug);
+      savedFolderFields.current = { name: selectedFolder.name, slug: selectedFolder.slug };
       setMissingFolderTranslationSource(null);
       return;
     }
@@ -582,6 +623,7 @@ function App() {
       setFolderLocale(targetLocale);
       setFolderName('');
       setFolderSlug(selectedFolder.slug);
+      savedFolderFields.current = { name: '', slug: selectedFolder.slug };
       setMissingFolderTranslationSource(selectedFolder.translationLocales.includes(defaultLocale) ? defaultLocale : source ?? null);
       return;
     }
@@ -592,6 +634,7 @@ function App() {
       setFolderLocale(targetLocale);
       setFolderName(translatedFolder.name);
       setFolderSlug(translatedFolder.slug);
+      savedFolderFields.current = { name: translatedFolder.name, slug: translatedFolder.slug };
       setMissingFolderTranslationSource(null);
     } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); }
   };
@@ -602,6 +645,7 @@ function App() {
       const created = await api<FolderTranslation>(`/folders/${encodeURIComponent(selectedFolderId)}/translations`, { method: 'POST', body: JSON.stringify({ sourceLocale: missingFolderTranslationSource }) }, folderLocale);
       await refreshTree();
       setFolderName(created.name);
+      savedFolderFields.current = { name: created.name, slug: folderSlug };
       setMissingFolderTranslationSource(null);
       showNotice(message('{locale} folder translation created from {source}.', { locale: localeLabel(folderLocale), source: missingFolderTranslationSource ?? '' }));
     } catch (error) { showNotice(error instanceof Error ? error.message : String(error), true); } finally { setIsSaving(false); }
@@ -661,7 +705,7 @@ function App() {
     updateField('slug', normalizeSlugInput(slug));
   };
 
-  const save = async (): Promise<DocumentRecord | undefined> => {
+  const save = async (options: { throwOnError?: boolean; expectedEditVersion?: number } = {}): Promise<DocumentRecord | undefined> => {
     if (!editor || !current || mutationInFlight.current || localDraftConflict || hasVersionConflict) return undefined;
     if (!validSlug.test(fieldsRef.current.slug)) {
       showNotice('URL segment must use lowercase letters, numbers, and single hyphens.', true);
@@ -679,6 +723,9 @@ function App() {
       const saveSelection = selectionVersion.current;
       await flushLocalDraft();
       if (selectionVersion.current !== saveSelection) return undefined;
+      if (options.expectedEditVersion !== undefined && options.expectedEditVersion !== editVersion.current) {
+        throw new Error('The editor changed before saving. Read the document and try again.');
+      }
       const saveVersion = editVersion.current;
       const body = { ...fieldsRef.current, contentJson: editor.getJSON(), version: current.version };
       const saved = current.id
@@ -714,6 +761,7 @@ function App() {
       return saved;
     } catch (error) {
       showDocumentError(error, current);
+      if (options.throwOnError) throw error;
     } finally {
       mutationInFlight.current = false;
       setIsSaving(false);
@@ -965,6 +1013,234 @@ function App() {
     }
     setIsYoutubeDialogOpen(false);
     showNotice('YouTube video inserted.');
+  };
+
+  const toolLocale = (value: string): SupportedLocale => {
+    if (!isSupportedLocale(value)) throw new Error('Unsupported document language.');
+    return value;
+  };
+  const editToken = () => `${selectionVersion.current}:${editVersion.current}:${current?.version ?? 0}`;
+  const describeEditor = () => current ? {
+    document: { ...current, ...fieldsRef.current, contentJson: editor?.getJSON() ?? current.contentJson },
+    source: 'editor', editToken: editToken(), ready: Boolean(editor && !editor.isDestroyed),
+    unsaved: isDirty || !current.id, versionConflict: hasVersionConflict,
+    browserDraftConflict: Boolean(localDraftConflict), pendingImages: hasPendingImages,
+    textBlocks: editor ? documentTextBlocks(editor.state) : [],
+    selection: editor ? { from: editor.state.selection.from, to: editor.state.selection.to } : null,
+  } : null;
+  const describeEditorRef = useRef(describeEditor);
+  describeEditorRef.current = describeEditor;
+  useEffect(() => { for (const notify of toolRenderWaiters.current) notify(); });
+  const waitForToolRender = (ready: () => boolean) => new Promise<void>((resolve, reject) => {
+    if (ready()) { resolve(); return; }
+    const timeout = window.setTimeout(() => {
+      toolRenderWaiters.current.delete(notify);
+      reject(new Error('The editor has not become ready. Read the workspace and try again.'));
+    }, 5000);
+    const notify = () => {
+      if (!ready()) return;
+      window.clearTimeout(timeout);
+      toolRenderWaiters.current.delete(notify);
+      resolve();
+    };
+    toolRenderWaiters.current.add(notify);
+  });
+  const waitForToolEditor = (id: string, targetLocale: SupportedLocale) => waitForToolRender(() => {
+    const live = describeEditorRef.current();
+    return Boolean(live?.ready && live.document.id === id && live.document.locale === targetLocale);
+  });
+  const latestWorkspace = () => {
+    if (!toolActions.current) throw new Error('Admin is not ready.');
+    return toolActions.current.workspace();
+  };
+  const assertToolEditor = (input: EditorTarget) => {
+    if (!current || !editor || editor.isDestroyed) throw new Error('Open a document before editing.');
+    if (current.id !== input.documentId || current.locale !== input.locale || editToken() !== input.editToken) {
+      throw new Error('The editor changed. Read the open document again for its current editToken.');
+    }
+    if (mutationInFlight.current || isSaving) throw new Error('An Admin operation is in progress. Wait for it to finish.');
+    if (localDraftConflict || hasVersionConflict) throw new Error('Resolve the saved/browser draft conflict in Admin before editing or saving.');
+    if (hasPendingImageUpload(editor.getJSON())) throw new Error('Finish uploading images before editing or saving.');
+    return editor;
+  };
+  const assertToolNavigation = () => {
+    if (mutationInFlight.current || isSaving) throw new Error('An Admin operation is in progress. Wait for it to finish.');
+    if (current && !current.id && isDirty) throw new Error('Save the new page before leaving it.');
+    if (editor && hasPendingImageUpload(editor.getJSON())) throw new Error('Finish uploading images before leaving this page.');
+    if (selectedFolder && (folderSlug !== savedFolderFields.current.slug || folderName !== savedFolderFields.current.name)) {
+      throw new Error('Save the folder settings before navigating to a page.');
+    }
+  };
+  const openToolDocument = async (input: { documentId: string; locale: string }) => {
+    const targetLocale = toolLocale(input.locale);
+    if (current?.id === input.documentId && current.locale === targetLocale) return latestWorkspace();
+    assertToolNavigation();
+    const expectedEditVersion = editVersion.current;
+    const selection = selectionVersion.current;
+    const items = await api<NavigationItem[]>('/tree', {}, targetLocale);
+    if (selection !== selectionVersion.current || expectedEditVersion !== editVersion.current) throw new Error('The workspace changed. Read it again before navigating.');
+    const item = items.find((entry) => entry.documentId === input.documentId);
+    if (!item) throw new Error('Document not found. Refresh the document list.');
+    if (item.hasTranslation) {
+      const opened = await selectDocument({ ...emptyDocument, id: input.documentId, locale: targetLocale }, targetLocale, { throwOnError: true, expectedEditVersion });
+      if (!opened) throw new Error('The page could not be opened. Check Admin for a storage error or changed selection.');
+      flushSync(() => { setEditingLocale(targetLocale); setSearch(''); });
+      await waitForToolEditor(input.documentId, targetLocale);
+    } else {
+      if (!await flushLocalDraft()) throw new Error('The browser draft could not be preserved. Save it before navigating.');
+      if (selection !== selectionVersion.current || expectedEditVersion !== editVersion.current) throw new Error('The workspace changed. Read it again before navigating.');
+      flushSync(() => {
+        selectionVersion.current += 1;
+        setEditor(null); setCurrent(null); savedDocument.current = null; setSelectedFolderId(null);
+        setEditingLocale(targetLocale); setMissingDocumentId(input.documentId);
+        const source = item.translationLocales.includes(defaultLocale) ? defaultLocale : item.translationLocales.find(isSupportedLocale);
+        setMissingTranslationSource(source ?? null); setIsDirty(false); setLocalDraftConflict(null); setSearch('');
+      });
+    }
+    return latestWorkspace();
+  };
+  toolActions.current = {
+    workspace: () => ({
+      siteTitle: siteConfig.title, siteUrl: siteConfig.url || window.location.origin, defaultLocale, locales: siteConfig.locales, locale, adminLanguage: language,
+      editor: describeEditor(), selectedFolderId,
+      missingTranslation: missingDocumentId ? { documentId: missingDocumentId, locale, sourceLocale: missingTranslationSource } : null,
+      contentFormat: 'Tiptap JSON. Text offsets are ProseMirror positions within the open editor, not character offsets into plain text.',
+      schema: editor ? {
+        nodes: Object.values(editor.schema.nodes).map((node) => ({ name: node.name, content: node.spec.content ?? '', attributes: Object.keys(node.spec.attrs ?? {}) })),
+        marks: Object.values(editor.schema.marks).map((mark) => ({ name: mark.name, attributes: Object.keys(mark.spec.attrs ?? {}) })),
+      } : null,
+    }),
+    listDocuments: async (input) => {
+      const targetLocale = toolLocale(input.locale ?? locale);
+      const [items, drafts] = await Promise.all([api<NavigationItem[]>('/tree', {}, targetLocale), listLocalDocumentDrafts()]);
+      const query = input.query?.trim().toLowerCase() ?? '';
+      return { locale: targetLocale, locales: siteConfig.locales, items: items.map((item) => ({
+        ...item, path: navigationPath(item.id, items),
+        browserDraftLocales: [...new Set([
+          ...drafts.filter((draft) => draft.documentId === item.documentId).map((draft) => draft.locale),
+          ...(item.documentId && current?.id === item.documentId && isDirty ? [current.locale] : []),
+        ])],
+      })).filter((item) => !query || `${item.name} ${item.path}`.toLowerCase().includes(query)) };
+    },
+    readDocument: async (input) => {
+      const targetLocale = toolLocale(input.locale);
+      if (current?.id === input.documentId && current.locale === targetLocale) return describeEditor();
+      const [saved, draft] = await Promise.all([
+        api<DocumentRecord>(`/documents/${encodeURIComponent(input.documentId)}`, {}, targetLocale),
+        readLocalDocumentDraft(input.documentId, targetLocale),
+      ]);
+      // A human may have opened this page while the network request was pending.
+      const live = describeEditorRef.current();
+      if (live?.document.id === input.documentId && live.document.locale === targetLocale) return live;
+      if (!draft) return { document: saved, source: 'saved-draft', unsaved: false };
+      if (draft.baseVersion !== saved.version) return { document: saved, source: 'saved-draft', unsaved: true, browserDraftConflict: true, conflictingBrowserDraft: draft };
+      const keys = new Set((await api<Media[]>('/media')).map((item) => item.objectKey));
+      return { document: { ...saved, ...documentFields(draft), contentJson: resolveContentMedia(draft.contentJson, keys, 'admin') }, source: 'browser-draft', unsaved: true };
+    },
+    openDocument: openToolDocument,
+    setLocale: async (input) => {
+      const targetLocale = toolLocale(input.locale);
+      const id = current?.id || missingDocumentId;
+      if (id) return openToolDocument({ documentId: id, locale: targetLocale });
+      if (current) throw new Error('Save the new page in the default language before switching its document language.');
+      assertToolNavigation();
+      if (selectedFolder) throw new Error('Select a page before switching its document language.');
+      flushSync(() => setEditingLocale(targetLocale));
+      return latestWorkspace();
+    },
+    newDocument: async (input) => {
+      assertToolNavigation();
+      const expectedEditVersion = editVersion.current;
+      const folderId = input.folderId ?? null;
+      if (folderId && !treeItems.some((item) => item.id === `folder:${folderId}`)) throw new Error('Folder not found. Refresh the document list.');
+      const opened = await selectDocument({ ...emptyDocument, folderId, order: nextOrder(folderId) }, defaultLocale, { expectedEditVersion });
+      if (!opened) throw new Error('The browser draft could not be preserved. Save it before creating a page.');
+      flushSync(() => { setEditingLocale(defaultLocale); setSearch(''); });
+      await waitForToolEditor('', defaultLocale);
+      return latestWorkspace();
+    },
+    createTranslation: async (input) => {
+      const targetLocale = toolLocale(input.locale);
+      const sourceLocale = toolLocale(input.sourceLocale);
+      assertToolNavigation();
+      const selection = selectionVersion.current;
+      const expectedEditVersion = editVersion.current;
+      if ((current?.id === input.documentId && current.locale === sourceLocale && isDirty) || await readLocalDocumentDraft(input.documentId, sourceLocale)) {
+        throw new Error('Save the source language browser draft before copying it.');
+      }
+      if (selection !== selectionVersion.current || expectedEditVersion !== editVersion.current) throw new Error('The workspace changed. Read it again before creating a translation.');
+      mutationInFlight.current = true;
+      setIsSaving(true);
+      try {
+        const created = await api<DocumentRecord>(`/documents/${encodeURIComponent(input.documentId)}/translations`, { method: 'POST', body: JSON.stringify({ sourceLocale }) }, targetLocale);
+        await Promise.all([refreshDocuments(), refreshTree()]);
+        if (selection !== selectionVersion.current || expectedEditVersion !== editVersion.current) {
+          return { created, opened: false, message: 'Translation created; the human changed the editor, so it was kept open.' };
+        }
+        await selectDocument(created, targetLocale, { throwOnError: true, expectedEditVersion });
+        flushSync(() => setEditingLocale(targetLocale));
+        await waitForToolEditor(created.id, targetLocale);
+        return { created, workspace: latestWorkspace() };
+      } finally {
+        mutationInFlight.current = false;
+        flushSync(() => setIsSaving(false));
+      }
+    },
+    editDocument: (input) => {
+      const openEditor = assertToolEditor(input);
+      const tr = documentEditTransaction(openEditor.state, input);
+      const nextFields = { ...fieldsRef.current };
+      for (const key of ['title', 'description', 'slug', 'folderId', 'order'] as const) {
+        const value = input[key];
+        if (value !== undefined) Object.assign(nextFields, { [key]: value });
+      }
+      if (nextFields.folderId && !treeItems.some((item) => item.id === `folder:${nextFields.folderId}`)) throw new Error('Folder not found. Refresh the document list.');
+      flushSync(() => {
+        if (tr.docChanged) openEditor.view.dispatch(tr);
+        editVersion.current += 1;
+        applyFields(nextFields);
+        const content = openEditor.getJSON();
+        const baseline = savedDocument.current;
+        setIsDirty(baseline ? hasDocumentChanges(baseline, nextFields, content) : true);
+        if (baseline) queueLocalDraft(baseline, nextFields, content);
+      });
+      return latestWorkspace();
+    },
+    saveDraft: async (input) => {
+      assertToolEditor(input);
+      const selection = selectionVersion.current;
+      const saved = await save({ throwOnError: true, expectedEditVersion: editVersion.current });
+      if (!saved) throw new Error('The draft was not saved. Check the current editor fields and Admin message.');
+      await waitForToolRender(() => {
+        const live = describeEditorRef.current();
+        return selection !== selectionVersion.current || Boolean(live?.document.id === saved.id && live.document.locale === saved.locale && live.document.version >= saved.version);
+      });
+      return { saved, workspace: latestWorkspace() };
+    },
+    preview: async (input) => {
+      const targetLocale = toolLocale(input.locale);
+      if (current?.id === input.documentId && current.locale === targetLocale && (isDirty || localDraftConflict || hasVersionConflict)) {
+        throw new Error('Save or resolve the open draft before previewing it.');
+      }
+      if (await readLocalDocumentDraft(input.documentId, targetLocale)) throw new Error('Open and save this page browser draft before previewing it.');
+      const [saved, items] = await Promise.all([
+        api<DocumentRecord>(`/documents/${encodeURIComponent(input.documentId)}`, {}, targetLocale),
+        api<NavigationItem[]>('/tree', {}, targetLocale),
+      ]);
+      const live = describeEditorRef.current();
+      if (live?.document.id === input.documentId && live.document.locale === targetLocale && (live.unsaved || live.browserDraftConflict || live.versionConflict)) {
+        throw new Error('The draft changed while preparing Preview. Save or resolve it before previewing.');
+      }
+      return {
+        url: new URL(`/admin/preview/${encodeURIComponent(input.documentId)}?locale=${encodeURIComponent(targetLocale)}`, window.location.origin).href,
+        source: 'saved-draft', publicationState: saved.publicationState,
+        publicPage: saved.status === 'published' ? {
+          url: new URL(publicPageUrl(navigationPath(`document:${saved.id}`, items), targetLocale), siteConfig.url || window.location.origin).href,
+          source: 'last-deployed-site', deploymentStatus: 'unknown',
+        } : null,
+      };
+    },
+    listMedia: () => api<Media[]>('/media'),
   };
 
   const breadcrumbItems = (folderId: string | null, leaf?: string) => {

@@ -43,6 +43,14 @@ Folder rows select folder settings; arrow buttons expand/collapse. Keyboard sele
 
 For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
 
+### AI editing through WebMCP
+
+When `document.modelContext` is available, the open Admin registers native WebMCP tools for the whole documentation workspace: localized tree/page lists, reads across pages and languages, page selection, document-language switching, new pages, translation creation, editor changes, draft saving, saved Preview URLs and existing media. Registration ends with the Admin mount. Unsupported browsers retain the ordinary Admin; there is no polyfill, additional server or authentication system.
+
+Reads identify whether content comes from the live editor, a matching browser draft or D1. Conflicting browser drafts are explicit. Changes target the selected page/language and require the latest editor token, so intervening human edits or navigation invalidate old edits. Text replacements validate their expected text and use ProseMirror transactions; full JSON updates validate the existing node schema, attributes, URLs and table data before dispatch. Content edits use normal Undo; page/language loads reset ProseMirror plugin state to isolate history, while saves of the same editor preserve it. Async navigation returns after the selected editor is ready, preserves existing browser drafts, and refuses to leave a changed new page or pending upload.
+
+Draft saves reuse the existing Admin API, CSRF header and D1 version checks. Preview returns the existing protected saved-draft URL and, for published pages, a separate public URL explicitly marked as the last deployed site with unknown deployment status. Visual review uses the browser to open these URLs and inspect rendered content/images. Publication and deletion remain existing UI actions; saving shared URL/navigation changes retains the existing rebuild behavior. No tools are registered on public Docs or Preview. See [WebMCP usage](WEBMCP.md).
+
 ## Tables
 
 The official Tiptap Table, TableRow, TableHeader and TableCell extensions provide insertion, row/column operations, header toggles, cell merge/split and column resizing. The toolbar adds a 3 × 3 table with a header row. `tableStyle` selects standard, striped or minimal borders. Cell alignment uses the official `align` attribute.

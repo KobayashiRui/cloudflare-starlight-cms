@@ -22,6 +22,7 @@ Manage documentation from a web-based Admin and publish it as a fast, fully stat
 ## Features
 
 - Tiptap editor with drafts, revisions, previews, media, and locale-aware documents
+- Native WebMCP tools for AI review and editing across pages and document languages in the open Admin
 - Folder and Page navigation tree that becomes the Starlight sidebar and URL structure
 - Static Astro Starlight site with Pagefind search
 - Cloudflare Access protection for `/admin/*`, without CMS accounts or passwords
@@ -64,6 +65,7 @@ Upgrading to v1.1.0 may report a `wrangler.jsonc` conflict when an old `MEDIA_PU
 
 - [Deployment](docs/DEPLOYMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [AI editing with WebMCP](docs/WEBMCP.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Roadmap](docs/ROADMAP.md)
 

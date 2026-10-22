@@ -78,6 +78,7 @@
     "sass-embedded": "1.104.0",
     "typescript": "5.9.3",
     "vitest": "5.0.0",
+    "webmcp-types": "0.1.10",
     "wrangler": "4.130.0"
   },
   "optionalDependencies": {

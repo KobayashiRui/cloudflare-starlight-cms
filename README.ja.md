@@ -22,6 +22,7 @@ Astro Starlight向けのCloudflareネイティブCMSです。
 ## Features
 
 - Tiptap Editor、Draft、Revision、Preview、Media、多言語Page
+- Adminを開いた状態で、WebMCP対応AIからページ・言語を横断して記事を確認・編集
 - StarlightのsidebarとURL構造になるFolder / Page Navigation Tree
 - Pagefind検索を含むStatic Astro Starlightサイト
 - CMSのアカウントやパスワードを持たない、`/admin/*`へのCloudflare Access保護
@@ -64,6 +65,7 @@ npx create-starlight-cms@latest upgrade . --apply
 
 - [デプロイ](docs/DEPLOYMENT.ja.md)
 - [アーキテクチャ](docs/ARCHITECTURE.md)
+- [WebMCPでAIから編集](docs/WEBMCP.md)
 - [トラブルシューティング](docs/TROUBLESHOOTING.ja.md)
 - [ロードマップ](docs/ROADMAP.md)
 

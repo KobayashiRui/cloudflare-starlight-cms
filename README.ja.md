@@ -15,13 +15,22 @@
 </p>
 <!-- badges:end -->
 
-Astro Starlight向けのCloudflareネイティブCMSです。
+自分のドキュメントサイトをブラウザから更新。Astro Starlight向けのOSSビジュアルCMSです。
 
-ブラウザのAdminでドキュメントを編集し、高速な完全Static Starlightサイトとして公開します。Cloudflare Workers、D1、R2、Accessで動作します。
+自分のCloudflareで、完全静的なStarlightのドキュメントサイトを運用。一度セットアップすれば、個人でもチームでも、編集・公開はブラウザから。Accessで許可した人なら、コードやGitの知識がなくても更新できます。MITライセンスで自由にカスタマイズでき、WebMCPによるAI編集にも対応しています。
+
+Cloudflareの無料枠内で運用できます。利用量には上限があり、ドメイン費用は別途かかります。
+
+[公式サイト・基本ガイド](https://kobayashirui.github.io/cloudflare-starlight-cms/ja/) · [English website](https://kobayashirui.github.io/cloudflare-starlight-cms/) · [デプロイ](docs/DEPLOYMENT.ja.md)
+
+[![注釈付きの編集・公開デモ](https://raw.githubusercontent.com/KobayashiRui/cloudflare-starlight-cms/main/website/assets/workflow-ja.gif)](https://kobayashirui.github.io/cloudflare-starlight-cms/ja/#demo)
+
+[編集から公開までを見る](https://kobayashirui.github.io/cloudflare-starlight-cms/ja/#demo) · [WebMCPによるAI編集を見る](https://kobayashirui.github.io/cloudflare-starlight-cms/ja/#ai)
 
 ## Features
 
 - Tiptap Editor、Draft、Revision、Preview、Media、多言語Page
+- Adminを開いた状態で、WebMCP対応AIからページ・言語を横断して記事を確認・編集
 - StarlightのsidebarとURL構造になるFolder / Page Navigation Tree
 - Pagefind検索を含むStatic Astro Starlightサイト
 - CMSのアカウントやパスワードを持たない、`/admin/*`へのCloudflare Access保護
@@ -64,6 +73,7 @@ npx create-starlight-cms@latest upgrade . --apply
 
 - [デプロイ](docs/DEPLOYMENT.ja.md)
 - [アーキテクチャ](docs/ARCHITECTURE.md)
+- [WebMCPでAIから編集](docs/WEBMCP.md)
 - [トラブルシューティング](docs/TROUBLESHOOTING.ja.md)
 - [ロードマップ](docs/ROADMAP.md)
 

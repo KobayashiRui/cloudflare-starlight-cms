@@ -11,7 +11,7 @@ export function cmsSidebar(snapshot: unknown): Entry[] {
   const pages = new Map<string, typeof documents>();
   for (const doc of documents) pages.set(doc.id, [...(pages.get(doc.id) ?? []), doc]);
   for (const translations of pages.values()) {
-    const page = translations.find((doc) => doc.locale === defaultLocale) ?? translations[0]!;
+    const page = translations.find((doc) => doc.locale === defaultLocale)!;
     let items = roots;
     for (const folder of page.navigation) {
       let group = items.find((entry) => entry.key === folder.slug && entry.items);
@@ -22,7 +22,7 @@ export function cmsSidebar(snapshot: unknown): Entry[] {
       items = group.items!;
     }
     items.push({ key: page.slug, label: page.title, order: page.order,
-      slug: page.locale === defaultLocale ? page.slug : `${page.locale}/${page.slug}`,
+      slug: page.slug,
       translations: Object.fromEntries(translations.map((doc) => [doc.locale, doc.title])),
     });
   }

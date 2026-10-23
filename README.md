@@ -15,13 +15,22 @@
 </p>
 <!-- badges:end -->
 
-A self-hosted, Cloudflare-native CMS for Astro Starlight.
+Your own docs site, edited in the browser. An open-source visual CMS for Astro Starlight.
 
-Manage documentation from a web-based Admin and publish it as a fast, fully static Starlight site. Powered by Cloudflare Workers, D1, R2, and Access.
+Run a fully static Starlight site on your own Cloudflare account. After setup, write and publish from the browser, on your own or with a team. Editors you authorize through Access can update content without coding or Git. MIT licensed and freely customizable, with native WebMCP tools for AI editing.
+
+Designed to run within Cloudflare’s free allowances. Usage limits apply; domain costs are separate.
+
+[Website & basic guide](https://kobayashirui.github.io/cloudflare-starlight-cms/) · [日本語サイト](https://kobayashirui.github.io/cloudflare-starlight-cms/ja/) · [Deployment](docs/DEPLOYMENT.md)
+
+[![Annotated editing and publishing walkthrough](https://raw.githubusercontent.com/KobayashiRui/cloudflare-starlight-cms/main/website/assets/workflow-en.gif)](https://kobayashirui.github.io/cloudflare-starlight-cms/#demo)
+
+[Watch the editing workflow](https://kobayashirui.github.io/cloudflare-starlight-cms/#demo) · [See WebMCP AI editing](https://kobayashirui.github.io/cloudflare-starlight-cms/#ai)
 
 ## Features
 
 - Tiptap editor with drafts, revisions, previews, media, and locale-aware documents
+- Native WebMCP tools for AI review and editing across pages and document languages in the open Admin
 - Folder and Page navigation tree that becomes the Starlight sidebar and URL structure
 - Static Astro Starlight site with Pagefind search
 - Cloudflare Access protection for `/admin/*`, without CMS accounts or passwords
@@ -64,6 +73,7 @@ Upgrading to v1.1.0 may report a `wrangler.jsonc` conflict when an old `MEDIA_PU
 
 - [Deployment](docs/DEPLOYMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [AI editing with WebMCP](docs/WEBMCP.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Roadmap](docs/ROADMAP.md)
 

@@ -30,5 +30,8 @@ export function publishedDocuments(input: unknown): Document[] {
     if (ids.has(id) || routes.has(route)) throw new Error('Duplicate published id or route');
     ids.add(id); routes.add(route);
   }
+  for (const doc of documents) {
+    if (!ids.has(`${defaultLocale}:${doc.id}`)) throw new Error(`Published page ${doc.id} is missing its ${defaultLocale} translation`);
+  }
   return documents.sort((a, b) => a.locale.localeCompare(b.locale) || a.order - b.order || a.slug.localeCompare(b.slug));
 }

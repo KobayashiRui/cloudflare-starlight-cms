@@ -12,6 +12,8 @@ import { publishedDocuments } from '../src/starlight/schema.ts';
 import { cmsSidebar } from '../src/starlight/sidebar.ts';
 import { supportedLocales } from '../src/locales.ts';
 import { tableDocument } from './fixtures/table';
+import { reviewImagePng } from './fixtures/review-image';
+import { publicPageUrl } from '../src/documents/links';
 
 let mf: Miniflare;
 let output: string;
@@ -226,9 +228,61 @@ it('rejects the editor version left stale by bulk publishing until the translati
   }
 });
 
-it('saves and reloads three uploaded images with a current translation version', async () => {
+it.skipIf(!hasJapanese)('publishes bases with translations in one batch and rejects an orphaned draft without changes', async () => {
+  const input = { title: 'Base publication', slug: 'base-publication', folderId: null, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph' }] } };
+  let page = identity.parse(await request('api/documents', 'POST', input));
+  const translation = identity.parse(await request(`api/documents/${page.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' }));
+  // Ensure the base is saved after its translation; SQL timestamp order alone
+  // must not cause the translated pointer to be rejected during bulk publish.
+  page = identity.parse(await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'Later base', version: page.version }));
+  const db = await mf.getD1Database('DB');
+  await db.prepare('UPDATE document_translation SET updated_at=updated_at+1000 WHERE document_id=? AND locale=?').bind(page.id, 'en').run();
+  const result = z.object({ documents: z.array(identity) }).parse(await request('api/publish/changes', 'POST'));
+  expect(result.documents.filter((document) => document.id === page.id)).toHaveLength(2);
+  expect(publishedDocuments(await request('export/snapshot')).filter((document) => document.id === page.id).map((document) => document.locale)).toEqual(['en', 'ja']);
+  await request(`api/documents/${page.id}?locale=ja`, 'DELETE', { version: translation.version + 1 });
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version + 1 });
+
+  // Deleting an unpublished base remains possible. Its remaining draft
+  // translation must be rejected before a site-wide publication writes anything.
+  page = identity.parse(await request('api/documents', 'POST', input));
+  const orphan = identity.parse(await request(`api/documents/${page.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' }));
+  await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+  const before = await request('export/snapshot');
+  const deliveries = await db.prepare('SELECT count(*) AS count FROM publish_delivery').first();
+  const rejected = await mf.dispatchFetch('http://localhost/admin/api/publish/changes', {
+    method: 'POST', headers: { 'X-Requested-With': 'cloudflare-starlight-cms' },
+  });
+  expect(rejected.status).toBe(409);
+  expect(await rejected.json()).toMatchObject({ error: 'Publish the en translation before publishing other languages.' });
+  expect(await request('export/snapshot')).toEqual(before);
+  expect(await request(`api/documents/${page.id}/revisions?locale=ja`)).toEqual([]);
+  expect(await request(`api/documents/${page.id}?locale=ja`)).toMatchObject({ version: orphan.version, status: 'draft' });
+  expect(await db.prepare('SELECT count(*) AS count FROM publish_delivery').first()).toEqual(deliveries);
+  await request(`api/documents/${page.id}?locale=ja`, 'DELETE', { version: orphan.version });
+});
+
+it.skipIf(!hasJapanese)('keeps a public base when translation publication races with base deletion', async () => {
+  const input = { title: 'Publication race', slug: 'publication-race', folderId: null, order: 0, description: '', contentJson: { type: 'doc', content: [{ type: 'paragraph' }] } };
+  let page = identity.parse(await request('api/documents', 'POST', input));
+  const translation = identity.parse(await request(`api/documents/${page.id}/translations?locale=ja`, 'POST', { sourceLocale: 'en' }));
+  page = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version })).document;
+  const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' };
+  const [publication, deletion] = await Promise.all([
+    mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}/publish?locale=ja`, { method: 'POST', headers, body: JSON.stringify({ version: translation.version }) }),
+    mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}`, { method: 'DELETE', headers, body: JSON.stringify({ version: page.version }) }),
+  ]);
+  expect([publication.status, deletion.status].sort()).toEqual(publication.ok ? [200, 409] : [204, 409]);
+  const documents = publishedDocuments(await request('export/snapshot')).filter((document) => document.id === page.id);
+  expect(documents.map((document) => document.locale)).toEqual(publication.ok ? ['en', 'ja'] : []);
+  const latestTranslation = identity.parse(await request(`api/documents/${page.id}?locale=ja`));
+  await request(`api/documents/${page.id}?locale=ja`, 'DELETE', { version: latestTranslation.version });
+  if (publication.ok) await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
+});
+
+it('saves and reloads real images and serves them in Preview and a published static build', async () => {
   const images = [];
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+  const png = reviewImagePng;
   for (let index = 0; index < 3; index++) {
     const form = new FormData();
     form.set('file', new File([png], `image-${index}.png`, { type: 'image/png' }));
@@ -267,19 +321,63 @@ it('saves and reloads three uploaded images with a current translation version',
   const preview = await mf.dispatchFetch(`http://localhost/admin/preview/${page.id}?locale=${locale}`);
   expect(preview.status).toBe(200);
   const html = await preview.text();
-  for (const image of images) expect(html).toContain(image.url);
-  const rejectedPublish = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}/publish?locale=${locale}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
-    body: JSON.stringify({ version: opened.version }),
-  });
-  expect(rejectedPublish.status).toBe(200);
-  opened = identity.parse((await rejectedPublish.json() as { document: unknown }).document);
+  for (const image of images) {
+    expect(html).toContain(image.url);
+    const original = await mf.dispatchFetch(`http://localhost${image.url}`);
+    expect(original.headers.get('content-type')).toBe('image/png');
+    expect(new Uint8Array(await original.arrayBuffer())).toEqual(png);
+  }
+  if (hasJapanese) {
+    const db = await mf.getD1Database('DB');
+    const revisionsBefore = await request(`api/documents/${page.id}/revisions?locale=ja`);
+    const deliveriesBefore = await db.prepare('SELECT count(*) AS count FROM publish_delivery').first();
+    const rejectedPublish = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}/publish?locale=ja`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+      body: JSON.stringify({ version: opened.version }),
+    });
+    expect(rejectedPublish.status).toBe(409);
+    expect(await rejectedPublish.json()).toMatchObject({ error: 'Publish the en translation before publishing other languages.' });
+    expect(await request(`api/documents/${page.id}?locale=ja`)).toMatchObject({ version: opened.version, status: 'draft' });
+    expect(await request(`api/documents/${page.id}/revisions?locale=ja`)).toEqual(revisionsBefore);
+    expect(await db.prepare('SELECT count(*) AS count FROM publish_delivery').first()).toEqual(deliveriesBefore);
+    expect(publishedDocuments(await request('export/snapshot')).some((document) => document.id === page.id)).toBe(false);
+    const base = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish`, 'POST', { version: page.version })).document;
+    await request(`api/documents/${page.id}`, 'PUT', { ...input, title: 'Unpublished base draft', version: base.version });
+  }
+  opened = z.object({ document: identity }).parse(await request(`api/documents/${page.id}/publish?locale=${locale}`, 'POST', { version: opened.version })).document;
   const published = publishedDocuments(await request('export/snapshot')).find((document) => document.id === page.id && document.locale === locale)!;
   for (const image of images) expect(published.body.value).toContain(image.url.replace('/admin/api/media/object/media/', '/_cms-media/'));
   expect(published.body.value).not.toContain('/admin/');
+  if (hasJapanese) {
+    expect(publishedDocuments(await request('export/snapshot')).find((document) => document.id === page.id && document.locale === 'en')?.title).toBe(input.title);
+    expect(await request(`api/documents/${page.id}`)).toMatchObject({ title: 'Unpublished base draft', publicationState: 'changes' });
+    const english = identity.parse(await request(`api/documents/${page.id}`));
+    const beforeDelete = await request('export/snapshot');
+    const rejectedDelete = await mf.dispatchFetch(`http://localhost/admin/api/documents/${page.id}`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cloudflare-starlight-cms' },
+      body: JSON.stringify({ version: english.version }),
+    });
+    expect(rejectedDelete.status).toBe(409);
+    expect(await rejectedDelete.json()).toMatchObject({ error: 'Delete published translations before deleting the en translation.' });
+    expect(await request('export/snapshot')).toEqual(beforeDelete);
+    expect(await request(`api/documents/${page.id}`)).toMatchObject({ version: english.version });
+  }
+  // Build immediately after individual translation publication, without a
+  // bulk publication that could conceal an invalid shared-sidebar state.
+  await buildDocs();
+  const staticHtml = await readFile(join(output, publicPageUrl('three-images', locale).slice(1), 'index.html'), 'utf8');
+  for (const [index, image] of images.entries()) {
+    const publicUrl = image.url.replace('/admin/api/media/object/media/', '/_cms-media/');
+    expect(staticHtml).toContain(publicUrl);
+    expect(staticHtml).toContain(`alt="Image ${index}"`);
+    expect(new Uint8Array(await readFile(join(output, publicUrl.slice(1))))).toEqual(png);
+  }
   await request(`api/documents/${page.id}?locale=${locale}`, 'DELETE', { version: opened.version });
-  if (hasJapanese) await request(`api/documents/${page.id}`, 'DELETE', { version: page.version });
-});
+  if (hasJapanese) {
+    const english = identity.parse(await request(`api/documents/${page.id}`));
+    await request(`api/documents/${page.id}`, 'DELETE', { version: english.version });
+  }
+}, 30000);
 
 it('keeps only publication snapshots for new saves and restores, and returns bulk versions', async () => {
   const input = { title: 'History', slug: 'publication-history', description: '', folderId: null, order: 0,

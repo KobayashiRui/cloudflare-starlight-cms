@@ -43,6 +43,14 @@ Folder rows select folder settings; arrow buttons expand/collapse. Keyboard sele
 
 For existing pages, Dexie stores unsaved browser edits in IndexedDB with their D1 baseline version. Navigation, locale changes, and reload restore them when versions match; a mismatch offers saved-content reload or local-edit recovery. New pages become eligible after their first save. This is a per-browser recovery buffer, not synchronization or collaborative editing.
 
+### AI editing through WebMCP
+
+When `document.modelContext` is available, the open Admin registers native WebMCP tools for the whole documentation workspace: localized tree/page lists, reads across pages and languages, page selection, document-language switching, new pages, translation creation, editor changes, draft saving, saved Preview URLs and existing media. Registration ends with the Admin mount. Unsupported browsers retain the ordinary Admin; there is no polyfill, additional server or authentication system.
+
+Reads identify whether content comes from the live editor, a matching browser draft or D1. Conflicting browser drafts are explicit. Changes target the selected page/language and require the latest editor token, so intervening human edits or navigation invalidate old edits. Text replacements validate their expected text and use ProseMirror transactions; full JSON updates validate the existing node schema, attributes, URLs and table data before dispatch. Content edits use normal Undo; page/language loads reset ProseMirror plugin state to isolate history, while saves of the same editor preserve it. Async navigation returns after the selected editor is ready, preserves existing browser drafts, and refuses to leave a changed new page or pending upload.
+
+Draft saves reuse the existing Admin API, CSRF header and D1 version checks. Preview returns the existing protected saved-draft URL and, for published pages, a separate public URL explicitly marked as the last deployed site with unknown deployment status. Visual review uses the browser to open these URLs and inspect rendered content/images. Publication and deletion remain existing UI actions; saving shared URL/navigation changes retains the existing rebuild behavior. No tools are registered on public Docs or Preview. See [WebMCP usage](WEBMCP.md).
+
 ## Tables
 
 The official Tiptap Table, TableRow, TableHeader and TableCell extensions provide insertion, row/column operations, header toggles, cell merge/split and column resizing. The toolbar adds a 3 × 3 table with a header row. `tableStyle` selects standard, striped or minimal borders. Cell alignment uses the official `align` attribute.
@@ -70,6 +78,8 @@ Heading text is rendered as escaped inline HTML inside Markdown headings, preser
 Document languages, site title, and public URL are configured in `src/site.config.ts`. Navigation uses the default locale; document/folder translations are edited separately. Default-locale public paths are unprefixed, other locales use prefixes, and untranslated routes use Starlight's default-language fallback. The Admin remembers the last editing locale.
 
 Create content in the default locale, then copy existing content to add translations. Changing the default locale after content exists requires a data-migration plan; configuration changes do not translate or convert existing data automatically.
+
+Publish the default-language translation before individually publishing other languages, or publish them together with the Admin Publish action. A published translation requires its default-language publication for Starlight's [shared sidebar](https://starlight.astro.build/guides/sidebar/#internationalization) and [fallback content](https://starlight.astro.build/reference/configuration/#defaultlocale). Delete published translations before deleting the default-language translation. These checks run before writes and inside the D1 mutation batch; builds also reject snapshots missing a default-language publication. Publishing a translation does not publish newer drafts of its already published default language.
 
 Admin display language is independent of document language. `src/admin.config.ts` defines available languages and the fallback; `src/admin/i18n/` holds typed dictionaries. Selection precedence is saved preference, supported browser language, then configured fallback. React Context changes text without losing edits or recreating the editor. Configuration and translation changes require rebuilding Admin assets.
 

@@ -2,6 +2,13 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## v1.2.0 — WebMCP editing — 2026-10-24
+
+- Set `create-starlight-cms` to 1.2.0 for native WebMCP review and editing across pages and document languages. AI changes share the existing editor, draft saving, conflict detection, Preview and Undo; publication remains an existing Admin UI action. See [WebMCP usage](WEBMCP.md) for browser requirements and supported tools.
+- Include the default-language publication consistency fix and the repository-only English/Japanese website. The website and its GitHub Pages workflow are excluded from generated CMS projects.
+- No database migration or Cloudflare configuration change is required. Updating the CLI package manifest on `main` triggers the existing npm publication workflow; website publication runs separately.
+- `npm run release:check` passed: type checks, all 93 tests including published Astro builds, an empty-site build, Worker dry run, `create-starlight-cms-1.2.0.tgz` packing and project generation from the packed CLI. Confirmed template version 1.2.0 and exclusion of the website/workflow. No npm publication, remote push or production deployment has been performed for this release.
+
 ## OSS website — 2026-10-23
 
 - Add repository-only `website/` with English and Japanese landing pages and basic usage guides. Lead with visual browser editing and fully static Starlight publication, with native WebMCP AI review/editing examples and browser-support requirements.
@@ -225,6 +232,7 @@ No npm publication or production deployment was performed.
 
 | Version | Changes |
 | --- | --- |
+| 1.2.0 (prepared) | Native WebMCP review/editing and default-language publication consistency; repository website |
 | 1.1.1 (prepared) | Fix legacy build API 405 fallback and document upgrade conflicts |
 | 1.1.0 | Page/heading links, table designs, revision deletion/retention and unused-media cleanup |
 | 1.0.4 (prepared) | Tree interaction improvements and reliable local Admin assets |

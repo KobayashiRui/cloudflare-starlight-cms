@@ -2,6 +2,100 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## OSS website — 2026-10-23
+
+- Add repository-only `website/` with English and Japanese landing pages and basic usage guides. Lead with visual browser editing and fully static Starlight publication, with native WebMCP AI review/editing examples and browser-support requirements.
+- Keep detailed deployment, configuration, troubleshooting, WebMCP and development documents in the existing `docs/`; the website links to these sources rather than migrating or duplicating them. Update both README introductions and add website links.
+- Use shared HTML generation, CSS and a small command-copy script, without adding dependencies, another CMS, workspaces or a runtime package. The CLI template allowlist excludes the website and its workflow.
+- Include real English/Japanese Admin screenshots captured with sample pages in a separate temporary local D1 database. No production content or existing local database was used.
+- Prepare the GitHub Pages workflow with pinned official Actions, PR build/link checks, and publication from `main`. Resolve the base URL through `configure-pages`, including repository subpaths and custom domains. Add canonical/hreflang/social metadata, a sitemap and a 404 page.
+- Verification: type checks and all 93 existing tests passed, including published Astro builds; empty-site build passed. All four website pages passed 90 internal link/asset checks plus repository-document and metadata checks, using both a project subpath and a custom-domain root. Browser checks verified image loading, command copying, guide-preserving language switching, and English/Japanese home and guide layouts at 390px without horizontal overflow.
+- GitHub Pages has not been enabled or deployed, and changes have not been pushed. Select **GitHub Actions** in repository Settings → Pages before the first deployment. A proposed GitHub Description, including WebMCP, is recorded in `website/README.md`; repository metadata has not been changed.
+
+Website design follow-up:
+
+- Keep the centered introduction and Admin screenshot, with single-color headings and purple limited to primary buttons. Remove the stack endorsement strip, uppercase section slogans, numbered feature decorations and repeated colored promotional panels. Rewrite both languages with shorter product descriptions.
+- Replace the language icon/link with a native English/日本語 dropdown that retains the home/guide route and section fragment. Add a System/Light/Dark dropdown; an explicit preference persists across reloads and navigation, and System follows the OS preference. Initialize before CSS to apply the saved theme before rendering; CSS also supports the OS theme without JavaScript.
+- Capture matching real light/dark English/Japanese Admin images at 1280 × 720 in the same isolated local database, and switch them with the website theme.
+- Website builds and all four localized pages passed 102 internal link/asset and language-route checks with both project-subpath and root URLs. Browser checks verified dropdown navigation, retained section fragments, theme persistence across reload/language/guide navigation, the default OS theme, and 320px/390px layouts without horizontal overflow. CMS runtime and Cloudflare configuration are unchanged.
+- Remove the extra label above the hero and sentence-ending punctuation from English/Japanese headings. Keep sentence punctuation in explanatory body text. Rebuild and website link checks passed.
+
+Website adoption follow-up:
+
+- Lead with documentation that the whole team can update after initial setup. Rewrite English/Japanese copy around browser editing, Cloudflare's free allowances, static publication, customization, Access and WebMCP. Keep setup responsibilities and free-tier limits explicit.
+- Pair real Admin captures with the same articles in a built Starlight site. Localized article text is included in Japanese captures. Use consistent light Admin imagery and theme-aware public-site captures; replace the feature grid with editing, publishing/cost, AI, ownership/Access and local-start sections.
+- Add 18-second English/Japanese workflow excerpts and a 12-second native WebMCP translation/draft excerpt, assembled from actual local browser captures. Native video controls, posters and no autoplay/preload avoid competing with the page. The workflow excerpts omit waiting and are not uninterrupted recordings or evidence of production deployment; publication/building between captures used the local API/CLI.
+- Add localized 1200 × 630 JPEG social cards, with temporary SVG composition generation in `website/social.mjs`. Update README introductions and demo links, and keep image URLs absolute so generated CLI project READMEs do not reference the excluded `website/` folder. Prepare repository Description and English/Japanese launch copy in `website/README.md`.
+- Verification: type checks and all 93 tests passed; empty-site and actual published English/Japanese Starlight builds passed. Website builds passed 122 link/asset, repository-doc and metadata checks with project-subpath, custom-domain and localhost URLs. Browser checks covered 320px/390px layouts, language/guide navigation, light/dark persistence, anchor links, FAQ/AI disclosures and command copying. All three MP4s decoded and played to their 18/18/12-second ends in the browser.
+- No CMS runtime, dependencies, Cloudflare configuration, repository About settings, npm publication or production deployment changed. Existing GitHub Pages publication setup remains prepared for release.
+
+Website GIF and layout follow-up:
+
+- Replace the MP4 excerpts with localized annotated GIFs: four editing/Preview/static-site steps and three WebMCP translation/draft steps. Use real sample screenshots with numbered explanations, target outlines and arrows. Retain capture sources and an optional manual SVG/Pillow authoring pipeline; CI and CMS runtime need no additional dependencies.
+- Start with static posters and provide Play/Stop and full-size links. Stop playback when the AI disclosure closes or the tab is hidden. Update both README introductions to show the localized workflow GIF.
+- Align the CMS and published-site screenshots horizontally at the same size, with a connecting arrow. Stack them vertically on narrow screens without offsets.
+- Verification: all four website pages passed 130 internal link/asset checks, repository-document and metadata checks. Browser checks verified Japanese and English playback/stop, AI-disclosure stop, equal desktop alignment and 320px/390px layouts without horizontal overflow. CMS runtime and dependencies are unchanged; no deployment was performed.
+
+Website theme control follow-up:
+
+- Replace the three-option theme dropdown with a sun/moon icon button matching the CMS interaction. Follow the device preference until the first explicit light/dark selection, then persist that choice. Keep pre-render theme initialization and localized accessible names/tooltips.
+- Website build and all 130 link/asset checks passed. Browser verification covered device-matching initial display, both icons/modes, reload and page/language persistence, and keyboard activation. No CMS runtime or dependencies changed.
+- Use the exact SunIcon/MoonIcon SVG paths and stroke settings from `src/admin/client.tsx`, with the same 16px icons and 32px button sizing as Admin.
+
+Website scroll and automatic demos follow-up:
+
+- Remove repeated section separators and decorative dividers; use spacing and restrained surfaces for grouping. Keep structural separators inside the terminal/file listing and footer.
+- Show both annotated GIFs directly as native looping images, without playback controls or an AI disclosure. Preserve native lazy loading and use static posters for the device's reduced-motion preference. Remove the unused playback script and copy.
+- Enlarge the browser-editing and Astro Starlight delivery labels. On desktop, pin the horizontally aligned screens briefly and shift their widths/emphasis with scroll progress. Mobile, short windows, reduced-motion preferences and JavaScript-free views retain a static layout; no animation dependency or scroll interception was added.
+- Verification: four localized pages passed 118 link/asset, repository-document and metadata checks. Browser checks verified scroll progress and changing pane widths, visible decoded AI GIF without controls, Japanese 390px and English 320px layouts without overflow. No CMS runtime, dependency or deployment changes.
+
+Sequential introduction and corrected workflow follow-up:
+
+- Replace the side-by-side showcase with a single sticky stage: headline → browser editing → Astro Starlight static delivery. Fade/zoom scenes with scroll and retain readable pauses, including on phones. Short windows, reduced-motion preferences and JavaScript-free views retain vertical content. Inactive scenes cannot take keyboard focus.
+- Correct the workflow GIF to six steps: edit, save, open Preview, inspect the draft, choose Publish, then read the deployed static site. Target the enabled Save/Preview/Publish buttons in actual screenshots. Remove the misplaced title outlines/arrows from rendered Preview/public results; identify those scenes in the caption band instead. Keep successful build/deployment distinct from choosing Publish.
+- Remove the AI section's GIF and its unused assets/capture sources; keep the explanation, example prompt and WebMCP guide link. Re-encode both localized workflow GIFs as six-frame, 18-second infinite loops.
+- Verification: four localized pages passed 114 link/asset, repository-document and metadata checks. Browser checks verified all three desktop scene states, Japanese 390px and English 320px layouts without overflow, mobile scene changes and the short-window fallback. Actual annotation renders were visually checked for Save, Preview and Publish targets and unobscured result pages. No CMS runtime, dependencies or deployment changed.
+
+Individual and team positioning follow-up:
+
+- Broaden English/Japanese hero, metadata and editing copy around running your own docs site and updating it in the browser. Present personal use and team manuals together; nontechnical authorized editors remain a benefit after initial setup. Retain free-tier limits and technical setup requirements.
+- Update ownership copy, both README introductions, proposed GitHub Description and launch copy. Regenerate localized social cards and derive their headline from the shared website content.
+- Website builds and all 114 link/asset checks passed; visual checks cover the revised hero and localized social cards. CMS runtime and dependencies are unchanged.
+
+Workflow diagram follow-up:
+
+- Group editing/publication, building and static delivery into one flow with aligned icons and connectors. Move infrastructure labels below each action and shorten descriptions. Stack steps with downward arrows on mobile.
+- Website build and all 114 link/asset checks passed. Browser verification covered desktop alignment at 1020px, Japanese 390px and English 320px layouts without overflow. CMS runtime and dependencies are unchanged.
+
+Scroll-controlled editing walkthrough follow-up:
+
+- Replace the landing page's looping GIF with six scroll-selected scenes using real editing, Preview and public-site captures. Present descriptions beside the screen (above it on mobile), with inline target outlines/arrows for the editing and publication controls. Remove step counters, numbered chapters and playback imagery from the landing page.
+- Keep screens static after a short scene change so readers can stop and inspect them; scrolling backward revisits earlier steps. Short windows, reduced-motion preferences and JavaScript-free views expose all scenes as ordinary content. Retain standalone GIFs for README/sharing and use the existing sample captures for website assets.
+- Website builds and all 122 link/asset checks passed. Browser verification covered forward/reverse scene changes, correct publication and Preview screens, absence of embedded GIFs/counters, Japanese 390px and English 320px layouts without overflow, and the short-window static fallback. No CMS runtime, dependencies or deployment changes.
+
+Walkthrough spacing and progress follow-up:
+
+- Add a small, unpadded `1 / 6` counter beside the section heading, updating with the selected scene. Hide it when the static fallback displays all scenes.
+- Size the sticky stage from its content and overlap scenes in one grid cell, keeping a 24px heading/content gap across window heights. Fit screens within shorter viewports while preserving annotation alignment.
+- Website build and all 122 link/asset checks passed. Browser checks covered tall-window spacing, counter changes and mobile layout. No CMS runtime or dependencies changed.
+
+Full-width walkthrough images follow-up:
+
+- Move step explanations above the screenshots and use the full content width for each image. Keep the heading, explanation, image and note together in the viewport to reduce the large unused lower region. Preserve the small step counter.
+- Place captures and annotations in one proportional canvas, with a height-limited viewing window on wide screens. Use ordinary static content below 700px window height. Website build/link checks passed; browser verification covered desktop, tall-window and narrow-screen layout. No CMS runtime or dependencies changed.
+
+Search visibility review:
+
+- Confirmed generated HTML content, per-page titles/descriptions/canonicals, reciprocal localized alternates, social metadata, JSON-LD, public sitemap entries and no `noindex` on the four public pages. All 122 website checks passed with project and localhost URLs.
+- Documented the GitHub project-path robots limitation: crawlers read the host-root robots file, not the project's generated subdirectory file. Record direct Search Console sitemap submission and live URL/canonical checks as launch work. Published HTTP behavior, Google indexing and AI-search inclusion remain unverified.
+- Reviewed current Google and OpenAI crawler guidance. No special AI-search file or speculative structured data was added; CMS runtime and dependencies are unchanged.
+
+GitHub Actions publication follow-up:
+
+- Confirmed `main` as the repository default branch and kept website deployment restricted to it. PRs and manual runs on other branches only build/check; production runs upload `website/dist/` and use the GitHub Pages deployment environment.
+- Keep active production deployments running when another commit arrives, cancel superseded PR checks, set ten-minute job timeouts and disable checkout credential persistence. Document first-publication setup, changed-path triggers and manual redeployment.
+- Rebuilt and checked all four localized pages and 122 internal links/assets for the production project URL. GitHub Pages configuration, remote push and live deployment have not been performed; `dev` still contains CMS/documentation changes absent from `main`.
+
 ## Translation publication consistency — 2026-10-23
 
 - Reject individual translation publication until the default-language page is published, before creating revisions or build deliveries. Individual publication still works after the base is public, without publishing newer default-language drafts.

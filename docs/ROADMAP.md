@@ -2,6 +2,14 @@
 
 Current release preparation and remaining work. The implemented design is documented in [Architecture](ARCHITECTURE.md); publishing instructions are in [Releasing](RELEASING.md). Detailed development history is available in Git.
 
+## Translation publication consistency — 2026-10-23
+
+- Reject individual translation publication until the default-language page is published, before creating revisions or build deliveries. Individual publication still works after the base is public, without publishing newer default-language drafts.
+- Keep Admin bulk publication working by publishing default-language candidates first in the same D1 batch; reject orphaned translation drafts before any writes.
+- Reject deletion of the default-language translation while other published translations remain. SQL guards also enforce publication/deletion conditions inside each D1 batch when concurrent requests race.
+- Validate the default-language publication at the build snapshot boundary and keep Starlight sidebar slugs free of language prefixes. Existing translation-only publication states must be repaired by publishing their default-language translation before rebuilding.
+- Verification: all 93 tests and type checks passed, including rejected operations with unchanged versions/history/deliveries, bulk ordering, concurrent publication/deletion, and a real static build immediately after individual translation publication with actual PNG files. Empty-site build, Worker dry run and `git diff --check` passed. No database migration, dependencies or Cloudflare configuration changes are required. Production deployment was not performed.
+
 ## Workspace-wide AI editing through WebMCP — 2026-10-22
 
 - Add native `document.modelContext` tools to the open Admin for localized page/folder lists, reads across pages and languages, selecting pages, switching document languages, creating pages/translations, editing title/description/navigation/content, saving drafts, getting saved Preview URLs and listing existing media.
@@ -134,7 +142,6 @@ No npm publication or production deployment was performed.
 ## Remaining work
 
 - Support videos larger than 10 MiB through R2 multipart uploads.
-- Investigate an existing low-level API edge case: publishing only a non-default translation before a default-language publication can fail Starlight's shared-sidebar route lookup. The normal Admin Publish action publishes saved translations together and passed the image/public-build review; per-translation publication is not exposed by the WebMCP tools.
 - Verify production-specific integration in a real Cloudflare environment: Access protection and bypass prevention, resource provisioning, Workers Builds, Deploy Hook delivery, and token rotation. Local checks and dry runs do not establish production success.
 - Investigate the reported D1 provisioning response after resource deletion; see [Troubleshooting](TROUBLESHOOTING.md#automatic-d1-provisioning-reports-an-existing-database).
 

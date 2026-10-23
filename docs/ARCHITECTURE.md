@@ -79,6 +79,8 @@ Document languages, site title, and public URL are configured in `src/site.confi
 
 Create content in the default locale, then copy existing content to add translations. Changing the default locale after content exists requires a data-migration plan; configuration changes do not translate or convert existing data automatically.
 
+Publish the default-language translation before individually publishing other languages, or publish them together with the Admin Publish action. A published translation requires its default-language publication for Starlight's [shared sidebar](https://starlight.astro.build/guides/sidebar/#internationalization) and [fallback content](https://starlight.astro.build/reference/configuration/#defaultlocale). Delete published translations before deleting the default-language translation. These checks run before writes and inside the D1 mutation batch; builds also reject snapshots missing a default-language publication. Publishing a translation does not publish newer drafts of its already published default language.
+
 Admin display language is independent of document language. `src/admin.config.ts` defines available languages and the fallback; `src/admin/i18n/` holds typed dictionaries. Selection precedence is saved preference, supported browser language, then configured fallback. React Context changes text without losing edits or recreating the editor. Configuration and translation changes require rebuilding Admin assets.
 
 ## Preview and public builds

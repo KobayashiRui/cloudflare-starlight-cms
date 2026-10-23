@@ -50,6 +50,27 @@ const translationSelect = `
   FROM document_translation t JOIN document d ON d.id=t.document_id
   LEFT JOIN document_revision r ON r.id=t.published_revision_id`;
 
+// Starlight's shared sidebar and translation fallback require a public
+// default-language page. Recheck inside the D1 batch, not only before it.
+const defaultPublicationGuard = `(locale=? OR EXISTS (
+  SELECT 1 FROM document_translation base WHERE base.document_id=document_translation.document_id
+    AND base.locale=? AND base.published_revision_id IS NOT NULL))`;
+const defaultDeletionGuard = `(locale<>? OR NOT EXISTS (
+  SELECT 1 FROM document_translation translated WHERE translated.document_id=document_translation.document_id
+    AND translated.locale<>? AND translated.published_revision_id IS NOT NULL))`;
+
+async function assertDefaultPublications(env: RuntimeEnv, candidates: TranslationRow[]) {
+  const defaults = new Set(candidates.filter((row) => row.locale === defaultLocale).map((row) => row.document_id));
+  const translations = candidates.filter((row) => row.locale !== defaultLocale && !defaults.has(row.document_id));
+  if (translations.length === 0) return;
+  const published = await env.DB.prepare('SELECT document_id FROM document_translation WHERE locale=? AND published_revision_id IS NOT NULL')
+    .bind(defaultLocale).all<{ document_id: string }>();
+  for (const row of published.results) defaults.add(row.document_id);
+  if (translations.some((row) => !defaults.has(row.document_id))) {
+    throw new DocumentConflictError(`Publish the ${defaultLocale} translation before publishing other languages.`);
+  }
+}
+
 function toView(row: TranslationRow, keys: ReadonlySet<string>): DocumentView {
   return {
     id: row.document_id, translationId: row.id, locale: row.locale, folderId: row.folder_id,
@@ -133,6 +154,7 @@ export async function updateDocument(env: RuntimeEnv, id: string, raw: unknown, 
 export async function publishDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale, delivery?: PendingPublishDelivery) {
   const current = await getTranslation(env, id, locale);
   if (current.version !== version) throw new DocumentVersionConflictError();
+  await assertDefaultPublications(env, [current]);
   assertPublishable(current.content_json);
   try { await assertPublishedLinks(env, [current]); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid page link'); }
   const now = Date.now();
@@ -140,9 +162,9 @@ export async function publishDocument(env: RuntimeEnv, id: string, version: numb
   const results = await env.DB.batch([
     env.DB.prepare(`INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
       SELECT ?,id,COALESCE((SELECT MAX(revision)+1 FROM document_revision WHERE document_translation_id=?),1),title,sidebar_label,description,content_json,?
-      FROM document_translation WHERE id=? AND version=?`).bind(revisionId,current.id,now,current.id,version),
-    env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
-      .bind(revisionId, now, now, current.id, version),
+      FROM document_translation WHERE id=? AND version=? AND ${defaultPublicationGuard}`).bind(revisionId,current.id,now,current.id,version,defaultLocale,defaultLocale),
+    env.DB.prepare(`UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND ${defaultPublicationGuard}`)
+      .bind(revisionId, now, now, current.id, version, defaultLocale, defaultLocale),
     ...(delivery ? [env.DB.prepare(`
       INSERT INTO publish_delivery (id,trigger_kind,document_translation_id,status,attempts,already_exists,requested_at)
       SELECT ?,'document',id,'pending',0,0,? FROM document_translation WHERE id=? AND published_revision_id=?`).bind(delivery.id, delivery.requestedAt, current.id, revisionId)] : []),
@@ -167,6 +189,10 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
       OR r.content_json IS NOT t.content_json
     ORDER BY t.updated_at,t.id`).all<TranslationRow>();
   if (candidates.results.length === 0) return [];
+  await assertDefaultPublications(env, candidates.results);
+  // Publish bases first, so each translated pointer can check its base in the
+  // same atomic batch even when the translation was saved earlier.
+  candidates.results.sort((a, b) => Number(b.locale === defaultLocale) - Number(a.locale === defaultLocale));
   for (const candidate of candidates.results) assertPublishable(candidate.content_json);
   try { await assertPublishedLinks(env, candidates.results); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Invalid page link'); }
 
@@ -177,10 +203,10 @@ export async function publishSavedChanges(env: RuntimeEnv, delivery: PendingPubl
     return [
       env.DB.prepare(`INSERT INTO document_revision (id,document_translation_id,revision,title,sidebar_label,description,content_json,created_at)
         SELECT ?,id,COALESCE((SELECT MAX(revision)+1 FROM document_revision WHERE document_translation_id=?),1),title,sidebar_label,description,content_json,?
-        FROM document_translation WHERE id=? AND version=?`)
-        .bind(revisionId, candidate.id, now, candidate.id, candidate.version),
-      env.DB.prepare('UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=?')
-        .bind(revisionId, now, now, candidate.id, candidate.version),
+        FROM document_translation WHERE id=? AND version=? AND ${defaultPublicationGuard}`)
+        .bind(revisionId, candidate.id, now, candidate.id, candidate.version, defaultLocale, defaultLocale),
+      env.DB.prepare(`UPDATE document_translation SET published_revision_id=?,published_at=?,updated_at=?,version=version+1 WHERE id=? AND version=? AND ${defaultPublicationGuard}`)
+        .bind(revisionId, now, now, candidate.id, candidate.version, defaultLocale, defaultLocale),
     ];
   });
   statements.push(env.DB.prepare(`INSERT INTO publish_delivery
@@ -232,10 +258,14 @@ export async function restoreRevision(env: RuntimeEnv, id: string, revisionId: s
 export async function deleteDocument(env: RuntimeEnv, id: string, version: number, locale: SupportedLocale = defaultLocale) {
   const current = await getTranslation(env, id, locale);
   if (current.version !== version) throw new DocumentVersionConflictError();
+  if (locale === defaultLocale && await env.DB.prepare('SELECT 1 FROM document_translation WHERE document_id=? AND locale<>? AND published_revision_id IS NOT NULL LIMIT 1')
+    .bind(id, defaultLocale).first()) {
+    throw new DocumentConflictError(`Delete published translations before deleting the ${defaultLocale} translation.`);
+  }
   try { await assertPublishedLinks(env, [], { id, locale }); } catch (error) { throw new DocumentContentError(error instanceof Error ? error.message : 'Page is linked from published content'); }
   const results = await env.DB.batch([
-    siteDeliveryStatement(env, 'EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=? AND published_revision_id IS NOT NULL)', [current.id, version]),
-    env.DB.prepare('DELETE FROM document_translation WHERE id=? AND version=? RETURNING id').bind(current.id, version),
+    siteDeliveryStatement(env, `EXISTS (SELECT 1 FROM document_translation WHERE id=? AND version=? AND published_revision_id IS NOT NULL AND ${defaultDeletionGuard})`, [current.id, version, defaultLocale, defaultLocale]),
+    env.DB.prepare(`DELETE FROM document_translation WHERE id=? AND version=? AND ${defaultDeletionGuard} RETURNING id`).bind(current.id, version, defaultLocale, defaultLocale),
     env.DB.prepare('DELETE FROM document WHERE id=? AND NOT EXISTS (SELECT 1 FROM document_translation WHERE document_id=?)').bind(id, id),
   ]);
   if (results[1]?.results.length !== 1) throw new DocumentConflictError();

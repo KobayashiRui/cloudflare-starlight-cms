@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { publishedDocuments } from '../src/starlight/schema.ts';
 import { renderDocumentContent } from '../src/starlight/render.ts';
 import { renderPreviewContent, renderPreviewDocument, renderPreviewTocItems } from '../src/starlight/preview-render.ts';
-import { supportedLocales } from '../src/locales.ts';
+import { defaultLocale, supportedLocales } from '../src/locales.ts';
 
 const published = {
   version: 2,
@@ -22,6 +22,12 @@ describe('published build boundary', () => {
   });
   it.each(['../secret', '/absolute', 'admin', 'admin/users', 'a//b', 'a?b'])('rejects reserved or invalid slug %s', (slug) => {
     expect(() => publishedDocuments({ ...published, documents: [{ ...published.documents[0], slug }] })).toThrow();
+  });
+  it('rejects translation-only snapshots before Starlight resolves sidebar routes', () => {
+    const locale = supportedLocales.find((value) => value !== defaultLocale);
+    if (!locale) return;
+    expect(() => publishedDocuments({ ...published, documents: [{ ...published.documents[0], locale }] }))
+      .toThrow(`Published page one is missing its ${defaultLocale} translation`);
   });
 });
 

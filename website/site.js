@@ -54,40 +54,39 @@ if (story) {
 
 const walkthrough = document.querySelector('[data-walkthrough]');
 if (walkthrough) {
-  const motion = window.matchMedia('(min-height: 700px) and (prefers-reduced-motion: no-preference)');
-  const stage = walkthrough.querySelector('.walkthrough-stage');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const track = walkthrough.querySelector('.walkthrough-scenes');
   const scenes = [...walkthrough.querySelectorAll('[data-walkthrough-scene]')];
   const current = walkthrough.querySelector('[data-walkthrough-current]');
+  const previous = walkthrough.querySelector('[data-walkthrough-previous]');
+  const next = walkthrough.querySelector('[data-walkthrough-next]');
+  const position = (index) => scenes[index].offsetLeft - scenes[0].offsetLeft;
+  const activeIndex = () => scenes.reduce((closest, scene, index) =>
+    Math.abs(position(index) - track.scrollLeft) < Math.abs(position(closest) - track.scrollLeft) ? index : closest, 0);
   let frame = 0;
   const update = () => {
     frame = 0;
-    walkthrough.classList.toggle('walkthrough-motion', motion.matches);
-    if (!motion.matches) {
-      for (const scene of scenes) {
-        scene.removeAttribute('style');
-        scene.querySelector('.walkthrough-copy').style.removeProperty('visibility');
-        scene.inert = false;
-      }
-      return;
-    }
-    const bounds = walkthrough.getBoundingClientRect();
-    const top = parseFloat(getComputedStyle(stage).top);
-    const progress = Math.min(1,Math.max(0,(top-bounds.top)/Math.max(1,bounds.height-stage.offsetHeight)));
-    const position = progress * (scenes.length-1);
-    const active = Math.round(position);
+    const active = activeIndex();
     current.textContent = String(active+1);
-    scenes.forEach((scene,index) => {
-      scene.style.opacity = index === active ? '1' : '0';
-      scene.style.transform = `translateY(${index === active ? 0 : 12}px)`;
-      scene.style.visibility = 'visible';
-      scene.querySelector('.walkthrough-copy').style.visibility = index === active ? 'visible' : 'hidden';
-      scene.inert = index !== active;
-    });
+    previous.disabled = active === 0;
+    next.disabled = active === scenes.length - 1;
   };
+  const goTo = (index) => track.scrollTo({
+    left: position(Math.max(0, Math.min(scenes.length - 1, index))),
+    behavior: reducedMotion.matches ? 'instant' : 'smooth',
+  });
+  previous.addEventListener('click', () => goTo(activeIndex() - 1));
+  next.addEventListener('click', () => goTo(activeIndex() + 1));
+  track.addEventListener('keydown', (event) => {
+    if (event.target !== track) return;
+    const targets = { ArrowLeft: activeIndex() - 1, ArrowRight: activeIndex() + 1, Home: 0, End: scenes.length - 1 };
+    if (!(event.key in targets)) return;
+    event.preventDefault();
+    goTo(targets[event.key]);
+  });
   const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
-  window.addEventListener('scroll',schedule,{passive:true});
+  track.addEventListener('scroll',schedule,{passive:true});
   window.addEventListener('resize',schedule);
-  motion.addEventListener('change',schedule);
   update();
 }
 

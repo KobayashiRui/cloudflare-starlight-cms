@@ -11,6 +11,24 @@ Current release preparation and remaining work. The implemented design is docume
 
 ## OSS website — 2026-10-23
 
+Horizontal editing walkthrough — 2026-10-24:
+
+- Replace the vertically pinned editing-to-publication scenes with a native horizontal gallery on phones and desktops, following the card interaction in Apple's "Set to stunning." section. Keep the six real captures and annotations, with part of the next card visible.
+- Remove the 700px viewport-height cutoff. Add localized previous/next buttons, a current-step counter, Left/Right and Home/End navigation, and CSS scroll snapping. Native horizontal scrolling remains available without JavaScript; reduced-motion preferences disable smooth navigation. No dependency or CMS runtime changes.
+- Verification: website builds and all 122 link/asset checks passed with production-project and localhost URLs; JavaScript syntax and diff checks passed. Browser checks covered English/Japanese, 1280px desktop and 320px/390px mobile layouts (including heights below 700px), button and keyboard navigation, first/last button states, step-counter updates and absence of page-wide horizontal overflow. No deployment was performed.
+
+Walkthrough image quality — 2026-10-24:
+
+- Recapture eight real English/Japanese editing, saved Preview and static public views at 2560 × 1440, rendering the UI at twice its original scale. Use a copy of the existing isolated screenshot database; no production data, publication or deployment is involved. Unsaved sample edits are discarded; saved-state captures use existing saved content.
+- Serve losslessly encoded WebP captures directly in the horizontal gallery, preserving the decoded screenshot pixels without further lossy compression. Retain the original JPEG/GIF authoring sources separately. Match the image and SVG annotation aspect ratios at 16:9 and update the control targets from the recaptured UI. No new dependency or CMS runtime source change.
+- Verification: decoded WebP pixels match each new capture exactly; all eight assets are 2560 × 1440. Website build and all 122 link/asset checks pass; browser checks confirm full-resolution image loading and updated annotations. The browser capture source uses JPEG compression; this change increases source resolution and avoids additional lossy encoding rather than claiming an uncompressed source.
+
+Search Console ownership verification — 2026-10-24:
+
+- Add the supplied Google site-verification meta tag to the shared website HTML head. It appears on the four English/Japanese public pages; the repository-only website remains excluded from generated CMS projects.
+- Document URL-prefix verification, keeping the tag for Google's periodic checks, and replacing it for forks with a different owner.
+- Verification: website build and all 122 existing link/asset checks passed. Parsed all four generated HTML documents to confirm exactly one verification tag with the supplied value inside each head; confirmed the website is absent from the CLI template allowlist. Deployment and Search Console ownership confirmation have not been performed.
+
 - Add repository-only `website/` with English and Japanese landing pages and basic usage guides. Lead with visual browser editing and fully static Starlight publication, with native WebMCP AI review/editing examples and browser-support requirements.
 - Keep detailed deployment, configuration, troubleshooting, WebMCP and development documents in the existing `docs/`; the website links to these sources rather than migrating or duplicating them. Update both README introductions and add website links.
 - Use shared HTML generation, CSS and a small command-copy script, without adding dependencies, another CMS, workspaces or a runtime package. The CLI template allowlist excludes the website and its workflow.

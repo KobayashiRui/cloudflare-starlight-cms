@@ -44,6 +44,7 @@ function shell(locale, guide, body) {
 <html lang="${locale}">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="google-site-verification" content="h3hGngqyHsmfiJwfsihxvW8ifQlZqnufHfGCmbKKZ8s">
   <title>${escape(title)}</title><meta name="description" content="${escape(description)}">
   <meta name="theme-color" content="#fafafa"><link rel="canonical" href="${escape(canonical)}">
   ${['en', 'ja', 'x-default'].map((language) => `<link rel="alternate" hreflang="${language}" href="${escape(new URL(path(language === 'ja' ? 'ja' : 'en', guide), site).href)}">`).join('\n  ')}

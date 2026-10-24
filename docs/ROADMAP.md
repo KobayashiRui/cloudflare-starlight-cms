@@ -11,6 +11,12 @@ Current release preparation and remaining work. The implemented design is docume
 
 ## OSS website — 2026-10-23
 
+Search Console ownership verification — 2026-10-24:
+
+- Add the supplied Google site-verification meta tag to the shared website HTML head. It appears on the four English/Japanese public pages; the repository-only website remains excluded from generated CMS projects.
+- Document URL-prefix verification, keeping the tag for Google's periodic checks, and replacing it for forks with a different owner.
+- Verification: website build and all 122 existing link/asset checks passed. Parsed all four generated HTML documents to confirm exactly one verification tag with the supplied value inside each head; confirmed the website is absent from the CLI template allowlist. Deployment and Search Console ownership confirmation have not been performed.
+
 - Add repository-only `website/` with English and Japanese landing pages and basic usage guides. Lead with visual browser editing and fully static Starlight publication, with native WebMCP AI review/editing examples and browser-support requirements.
 - Keep detailed deployment, configuration, troubleshooting, WebMCP and development documents in the existing `docs/`; the website links to these sources rather than migrating or duplicating them. Update both README introductions and add website links.
 - Use shared HTML generation, CSS and a small command-copy script, without adding dependencies, another CMS, workspaces or a runtime package. The CLI template allowlist excludes the website and its workflow.

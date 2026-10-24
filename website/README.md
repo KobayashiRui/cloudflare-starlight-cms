@@ -44,7 +44,9 @@ The default URL is `https://kobayashirui.github.io/cloudflare-starlight-cms/`. A
 
 All four pages contain their headings and content in the generated HTML, including every walkthrough explanation. Page titles, descriptions, self-referencing canonical URLs, reciprocal English/Japanese/x-default alternates, social metadata and JSON-LD are generated together. Only the 404 document has `noindex`; the sitemap lists the four public routes.
 
-After deployment, verify the live site in Google Search Console, submit the absolute `sitemap.xml` URL and inspect the English/Japanese home and guide URLs. Check the deployed canonical URLs and HTTP responses; successful local checks do not establish indexing.
+The shared HTML head includes the maintainer's Google Search Console verification meta tag. This public verification value belongs only to this repository's website, which is excluded from generated CMS projects. Keep the tag after verification so Google can recheck ownership; replace or remove it when publishing a fork under a different owner.
+
+After deployment, verify the live site in Google Search Console using the URL-prefix property `https://kobayashirui.github.io/cloudflare-starlight-cms/` and the HTML tag method, submit the absolute `sitemap.xml` URL and inspect the English/Japanese home and guide URLs. Check the deployed canonical URLs and HTTP responses; successful local checks do not establish ownership verification or indexing. Use the actual site URL instead if a custom domain is configured.
 
 For the default project URL, the generated `robots.txt` is served under `/cloudflare-starlight-cms/robots.txt`. Crawlers use the host-root `https://kobayashirui.github.io/robots.txt`, so the project file does not control crawling or advertise its sitemap there. Submit the project sitemap directly in Search Console, or reference it from a host-root robots file if that site is managed separately. With a custom domain served at `/`, the generated robots file is at the correct location. Missing robots rules do not by themselves block crawling; check the actual host-root policy.
 

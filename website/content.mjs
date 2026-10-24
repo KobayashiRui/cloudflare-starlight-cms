@@ -220,6 +220,8 @@ export const content = {
       "alt": "Published Starlight documentation with a sidebar, table of contents and search.",
       "builtWith": "Your docs, built with Astro Starlight",
       "watch": "From editing to publishing",
+      "previousStep": "Previous step",
+      "nextStep": "Next step",
       "demoNote": "Annotations point to the controls in real screens. The public site updates after a successful build and deployment.",
       "walkthrough": [
         {
@@ -518,6 +520,8 @@ export const content = {
       "alt": "サイドバー、目次、検索が揃ったStarlightの公開ドキュメント。",
       "builtWith": "公開サイトはAstro Starlight",
       "watch": "編集から公開まで",
+      "previousStep": "前の手順",
+      "nextStep": "次の手順",
       "demoNote": "実際の画面に操作箇所を示しています。公開サイトへの反映にはビルドとデプロイが必要です。",
       "walkthrough": [
         {

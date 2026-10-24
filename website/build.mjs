@@ -105,8 +105,8 @@ function home(locale) {
   const image = (name, alt, lazy = true) => (name === 'editor' ? ['light'] : ['light', 'dark']).map((theme) => `<img${name === 'public' ? ` class="screenshot-${theme}"` : ''} src="${asset(`${name}-${locale}${theme === 'dark' ? '-dark' : ''}.jpg`)}" width="${screenshotSize.width}" height="${name === 'editor' ? 640 : screenshotSize.height}" alt="${escape(alt)}"${lazy ? ' loading="lazy"' : ' fetchpriority="high"'} decoding="async">`).join('');
   const demoSources = [`edit-${locale}-1`, `edit-${locale}-1`, `edit-${locale}-2`, `preview-${locale}`, `edit-${locale}-2`, `public-${locale}`];
   const targets = locale === 'ja'
-    ? [[286,325,958,70],[908,84,90,36],[896,84,152,36],null,[1057,14,70,36],null]
-    : [[286,350,958,70],[866,117,90,36],[922,117,107,36],null,[1034,14,92,36],null];
+    ? [[306,364,918,68],[890,120,89,36],[878,120,153,36],null,[1076,14,51,36],null]
+    : [[306,352,918,68],[850,117,89,34],[904,117,108,34],null,[1055,15,71,34],null];
   const demoAnnotation = (index) => {
     const target = targets[index];
     if (!target) return '';
@@ -114,7 +114,7 @@ function home(locale) {
     const tx = x + w/2;
     const ty = y + h + 5;
     const marker = `demo-arrow-${locale}-${index}`;
-    return `<svg class="walkthrough-annotation" viewBox="0 0 1280 800" fill="none" aria-hidden="true"><defs><marker id="${marker}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 11 6 1 11" stroke="#dc5a31" stroke-width="2" stroke-linejoin="round"/></marker></defs><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" stroke="#fff" stroke-width="9"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" stroke="#dc5a31" stroke-width="3"/><path d="M${tx-85} ${ty+95} Q${tx-85} ${ty+55} ${tx} ${ty}" stroke="#dc5a31" stroke-width="3" marker-end="url(#${marker})"/></svg>`;
+    return `<svg class="walkthrough-annotation" viewBox="0 0 1280 720" fill="none" aria-hidden="true"><defs><marker id="${marker}" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto"><path d="M1 1 11 6 1 11" stroke="#dc5a31" stroke-width="2" stroke-linejoin="round"/></marker></defs><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" stroke="#fff" stroke-width="9"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" stroke="#dc5a31" stroke-width="3"/><path d="M${tx-85} ${ty+95} Q${tx-85} ${ty+55} ${tx} ${ty}" stroke="#dc5a31" stroke-width="3" marker-end="url(#${marker})"/></svg>`;
   };
   return shell(locale, false, `
     <div class="intro-story" data-story><div class="story-stage">
@@ -128,11 +128,10 @@ function home(locale) {
     <figure class="story-scene story-screen container" data-story-scene><figcaption class="screen-label"><span class="screen-kind">Astro Starlight</span><h2>${escape(t.product.published)}</h2></figcaption><div class="product-frame">${image('public',t.product.alt,false)}</div></figure>
     </div></div>
     <section class="editing section container" id="features"><div class="section-heading"><h2>${lines(t.editing.title)}</h2><p>${escape(t.editing.text)}</p><span class="included-note">${escape(t.editing.note)}</span></div><div class="editing-details">${t.editing.details.map(([title,text])=>`<article><h3>${escape(title)}</h3><p>${escape(text)}</p></article>`).join('')}</div></section>
-    <section class="walkthrough container" id="demo" data-walkthrough><div class="walkthrough-stage"><div class="walkthrough-header"><h2 class="walkthrough-heading">${escape(t.product.watch)}</h2><span class="walkthrough-progress"><span class="sr-only">${locale === 'ja' ? '手順' : 'Step'} </span><span data-walkthrough-current>1</span><span class="walkthrough-total"> / ${t.product.walkthrough.length}</span></span></div><div class="walkthrough-scenes">${t.product.walkthrough.map((step,index)=>{
+    <section class="walkthrough" id="demo" aria-labelledby="walkthrough-heading" data-walkthrough><div class="walkthrough-header container"><h2 class="walkthrough-heading" id="walkthrough-heading">${escape(t.product.watch)}</h2></div><div class="walkthrough-scenes" id="walkthrough-scenes" role="region" aria-labelledby="walkthrough-heading" tabindex="0">${t.product.walkthrough.map((step,index)=>{
       const source = demoSources[index];
-      const height = source.startsWith('edit-ja') || source.startsWith('preview') ? 720 : 800;
-      return `<article class="walkthrough-scene" data-walkthrough-scene><div class="walkthrough-copy"><h3>${escape(step.title)}</h3><p>${escape(step.text)}</p></div><div class="walkthrough-screen"><div class="walkthrough-canvas"><img src="${asset(`${index === 5 ? '' : 'capture-'}${source}.jpg`)}" width="1280" height="${height}" loading="lazy" decoding="async" alt="${escape(step.title)}">${demoAnnotation(index)}</div></div></article>`;
-    }).join('')}</div><p class="section-note">${escape(t.product.demoNote)}</p></div></section>
+      return `<article class="walkthrough-scene" data-walkthrough-scene><div class="walkthrough-copy"><h3>${escape(step.title)}</h3><p>${escape(step.text)}</p></div><div class="walkthrough-screen"><div class="walkthrough-canvas"><img src="${asset(`capture-${source}@2x.webp`)}" width="2560" height="1440" loading="lazy" decoding="async" alt="${escape(step.title)}">${demoAnnotation(index)}</div></div></article>`;
+    }).join('')}</div><div class="walkthrough-footer container"><p class="section-note">${escape(t.product.demoNote)}</p><div class="walkthrough-controls js-only"><span class="walkthrough-progress"><span class="sr-only">${locale === 'ja' ? '手順' : 'Step'} </span><span data-walkthrough-current>1</span><span class="walkthrough-total"> / ${t.product.walkthrough.length}</span></span><button type="button" data-walkthrough-previous aria-label="${escape(t.product.previousStep)}" aria-controls="walkthrough-scenes" disabled><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button type="button" data-walkthrough-next aria-label="${escape(t.product.nextStep)}" aria-controls="walkthrough-scenes"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div></section>
     <section class="workflow section container" id="workflow"><div class="section-heading"><h2>${lines(t.workflow.title)}</h2><p>${escape(t.workflow.intro)}</p></div>
       <div><ol class="workflow-grid">${t.workflow.steps.map((step,index) => `<li>${workflowIcon(index)}<div class="workflow-step-body"><h3>${escape(step.title)}</h3><span class="step-meta">${escape(step.meta)}</span><p>${escape(step.text)}</p></div>${index < t.workflow.steps.length-1 ? '<svg class="workflow-connector" width="24" height="16" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h19m-6-5 6 5-6 5"/></svg>' : ''}</li>`).join('')}</ol><p class="section-note">${escape(t.workflow.note)}</p></div>
       <div class="cost-row"><h3>${escape(t.workflow.costTitle)}</h3><div><p>${escape(t.workflow.costText)}</p><a class="text-link" href="https://developers.cloudflare.com/workers/platform/pricing/">${escape(t.workflow.costLink)} ${arrow}</a></div></div>
@@ -161,8 +160,8 @@ await cp(join(root, 'assets'), join(output, 'assets'), { recursive: true });
 await cp(join(root, '..', 'src/assets/favicon.svg'), join(output, 'assets/favicon.svg'));
 for (const name of ['style.css', 'site.js', 'theme.js']) await cp(join(root, name), join(output, 'assets', name));
 for (const locale of ['en','ja']) {
-  for (const name of [`edit-${locale}-1`,`edit-${locale}-2`,`preview-${locale}`]) {
-    await cp(join(root,'captures',`${name}.jpg`),join(output,'assets',`capture-${name}.jpg`));
+  for (const name of [`edit-${locale}-1`,`edit-${locale}-2`,`preview-${locale}`,`public-${locale}`]) {
+    await cp(join(root,'captures',`${name}@2x.webp`),join(output,'assets',`capture-${name}@2x.webp`));
   }
 }
 for (const locale of ['en', 'ja']) {
